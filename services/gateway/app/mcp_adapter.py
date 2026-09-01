@@ -20,6 +20,10 @@ EXPECTED_TOOLS = {
     "execute_notebook_code",
 }
 
+# mcp-jupyter 2.0.2 rejects empty add/edit content. Keep its invisible transport
+# sentinel private to this adapter and decode it during response normalization.
+EMPTY_CELL_SENTINEL = "\u200b"
+
 
 class AdapterError(Exception):
     def __init__(self, code: str, message: str, retryable: bool = False):
@@ -161,7 +165,7 @@ class McpNotebookTransport:
                     {
                         "notebook_path": path,
                         "operation": f"edit_{target_type}",
-                        "cell_content": source,
+                        "cell_content": _mcp_cell_content(source),
                         "position_index": index,
                         "execute": False,
                     },
@@ -205,7 +209,7 @@ class McpNotebookTransport:
             {
                 "notebook_path": path,
                 "operation": f"add_{cell_type}",
-                "cell_content": source,
+                "cell_content": _mcp_cell_content(source),
                 "position_index": index,
                 "execute": False,
             },
@@ -277,10 +281,10 @@ class McpNotebookTransport:
                 "execute": False,
             }
             if operation == "insert":
-                args["cell_content"] = change["cell"]["source"]
+                args["cell_content"] = _mcp_cell_content(change["cell"]["source"])
                 args["position_index"] = change["index"]
             elif operation == "update":
-                args["cell_content"] = change.get("source", "")
+                args["cell_content"] = _mcp_cell_content(change.get("source", ""))
                 args["position_index"] = _cell_index(change.get("cell_id"))
             else:
                 args["position_index"] = _cell_index(change.get("cell_id"))
@@ -329,3 +333,8 @@ def _source(value: Any) -> str:
     if isinstance(value, list):
         return "".join(str(part) for part in value)
     return str(value)
+
+
+def _mcp_cell_content(value: Any) -> str:
+    source = _source(value)
+    return source if source else EMPTY_CELL_SENTINEL

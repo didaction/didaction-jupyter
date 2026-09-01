@@ -127,4 +127,31 @@ assert [cell["source"] for cell in deleted["snapshot"]["cells"]] == [
     "value = 40 + 2",
     "value",
 ], deleted
-print("real Jupyter/ipykernel/MCP/gateway smoke: PASS (observed 42; add/edit/move/delete)")
+revision = deleted["snapshot"]["revision"]
+
+blank = call(
+    command(
+        "modify_cells",
+        revision,
+        changes=[
+            {
+                "operation": "insert",
+                "index": 1,
+                "cell": {
+                    "id": str(uuid.uuid4()),
+                    "cell_type": "code",
+                    "source": "",
+                    "metadata": {},
+                    "execution_count": None,
+                    "outputs": [],
+                },
+            }
+        ],
+    )
+)
+assert not blank.get("error"), blank
+assert blank["snapshot"]["cells"][1]["source"] == "", blank
+print(
+    "real Jupyter/ipykernel/MCP/gateway smoke: PASS "
+    "(observed 42; add/edit/move/delete; blank insert)"
+)

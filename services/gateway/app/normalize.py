@@ -1,5 +1,7 @@
 from typing import Any
 
+from .mcp_adapter import EMPTY_CELL_SENTINEL
+
 
 def normalize_cells(raw: Any) -> list[dict[str, Any]]:
     if isinstance(raw, dict) and "result" in raw:
@@ -51,5 +53,7 @@ def normalize_cells(raw: Any) -> list[dict[str, Any]]:
 
 def _text(value: Any) -> str:
     if isinstance(value, list):
-        return "".join(str(part) for part in value)
-    return str(value)
+        text = "".join(str(part) for part in value)
+    else:
+        text = str(value)
+    return "" if text == EMPTY_CELL_SENTINEL else text

@@ -10,7 +10,12 @@ from uuid import UUID
 import pytest
 
 from services.gateway.app.config import Settings
-from services.gateway.app.mcp_adapter import AdapterError, McpNotebookTransport, compact_profile
+from services.gateway.app.mcp_adapter import (
+    EMPTY_CELL_SENTINEL,
+    AdapterError,
+    McpNotebookTransport,
+    compact_profile,
+)
 from services.gateway.app.models import Command
 from services.gateway.app.normalize import normalize_cells
 from services.gateway.app.redaction import REDACTED, RedactingFilter, redact
@@ -76,6 +81,22 @@ def test_every_mapping_and_rejections(tmp_path: Path) -> None:
     )
     with pytest.raises(AdapterError, match="Direct code execution"):
         adapter.map_command(make_command("execute_code", code="!pip install bad"), "demo.ipynb")
+
+
+def test_blank_cell_is_encoded_only_at_mcp_boundary(tmp_path: Path) -> None:
+    adapter = McpNotebookTransport(Settings(workspace=tmp_path))
+    change = {
+        "operation": "insert",
+        "index": 0,
+        "cell": {"cell_type": "code", "source": ""},
+    }
+
+    _, args = adapter.map_command(make_command("modify_cells", changes=[change]), "demo.ipynb")
+
+    assert args["cell_content"] == EMPTY_CELL_SENTINEL
+    assert (
+        normalize_cells([{"cell_type": "code", "source": EMPTY_CELL_SENTINEL}])[0]["source"] == ""
+    )
 
 
 async def test_move_maps_to_bounded_delete_and_reinsert(tmp_path: Path) -> None:
