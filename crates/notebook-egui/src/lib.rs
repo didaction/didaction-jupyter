@@ -10,6 +10,7 @@ use notebook_protocol::{
 };
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -79,6 +80,7 @@ pub struct NotebookEguiApp {
     rename_path: String,
     restart_confirmation: bool,
     markdown_cache: CommonMarkCache,
+    math_cache: Arc<Mutex<MathRenderCache>>,
 }
 
 impl NotebookEguiApp {
@@ -130,6 +132,7 @@ impl NotebookEguiApp {
             rename_path: String::new(),
             restart_confirmation: false,
             markdown_cache: CommonMarkCache::default(),
+            math_cache: Arc::new(Mutex::new(MathRenderCache::default())),
         }
     }
     pub fn apply_completion(&mut self, command_id: Uuid, completion: CompletionReply) {
@@ -1102,7 +1105,7 @@ impl NotebookEguiApp {
     }
     fn cell(&mut self, ui: &mut egui::Ui, index: usize, cell: Cell) {
         let selected = self.selected_cells.contains(&cell.id)
-            || self.state.snapshot.selected_cell_id.as_deref() == Some(&cell.id);
+            || self.state.snapshot.selected_cell_id.as_deref() == Some(cell.id.as_str());
         let collapsed = self.collapsed_cells.contains(&cell.id);
         let output_collapsed = self.collapsed_outputs.contains(&cell.id);
         let frame = egui::Frame::new()
@@ -1207,6 +1210,7 @@ impl NotebookEguiApp {
                             &cell.id,
                             &source,
                             &mut self.markdown_cache,
+                            &self.math_cache,
                         )
                         .on_hover_text("Double-click to edit Markdown");
                         self.apply_rendered_markdown_interaction(
@@ -1279,7 +1283,7 @@ impl NotebookEguiApp {
                                 ui.ctx().request_repaint_after(Duration::from_millis(300));
                             }
                         }
-                        if self.pending_editor_focus.as_deref() == Some(&cell.id) {
+                        if self.pending_editor_focus.as_deref() == Some(cell.id.as_str()) {
                             response.request_focus();
                             self.pending_editor_focus = None;
                         }
@@ -1876,16 +1880,14 @@ fn rendered_markdown_response(
     cell_id: &str,
     source: &str,
     cache: &mut CommonMarkCache,
+    math_cache: &Arc<Mutex<MathRenderCache>>,
 ) -> egui::Response {
-    let render_math = |ui: &mut egui::Ui, math: &str, inline: bool| {
-        let notation = RichText::new(math).monospace().italics();
-        if inline {
-            ui.label(notation);
-        } else {
-            ui.vertical_centered(|ui| {
-                ui.label(notation);
-            });
-        }
+    let math_cache = Arc::clone(math_cache);
+    let render_math = move |ui: &mut egui::Ui, math: &str, inline: bool| {
+        math_cache
+            .lock()
+            .expect("markdown math cache mutex poisoned")
+            .show(ui, math, inline);
     };
     let rendered = ui.scope(|ui| {
         CommonMarkViewer::new()
@@ -1899,6 +1901,150 @@ fn rendered_markdown_response(
         ui.make_persistent_id(("rendered-markdown", cell_id)),
         egui::Sense::click(),
     )
+}
+
+#[derive(Default)]
+struct MathRenderCache {
+    textures: HashMap<u64, Result<(egui::TextureHandle, egui::Vec2), String>>,
+}
+
+impl MathRenderCache {
+    fn show(&mut self, ui: &mut egui::Ui, latex: &str, inline: bool) {
+        let mut hasher = DefaultHasher::new();
+        latex.hash(&mut hasher);
+        inline.hash(&mut hasher);
+        let key = hasher.finish();
+        self.textures.entry(key).or_insert_with(|| {
+            render_math_formula(latex, inline).map(|image| {
+                let size = egui::vec2(
+                    image.width() as f32 / MATH_PIXELS_PER_POINT,
+                    image.height() as f32 / MATH_PIXELS_PER_POINT,
+                );
+                let texture = ui.ctx().load_texture(
+                    format!("markdown-math-{key:016x}"),
+                    image,
+                    egui::TextureOptions::LINEAR,
+                );
+                (texture, size)
+            })
+        });
+        match self.textures.get(&key) {
+            Some(Ok((texture, size))) if inline => {
+                ui.add(egui::Image::new((texture.id(), *size)));
+            }
+            Some(Ok((texture, size))) => {
+                ui.vertical_centered(|ui| {
+                    ui.add(egui::Image::new((texture.id(), *size)));
+                });
+            }
+            Some(Err(message)) => {
+                ui.colored_label(
+                    Color32::from_rgb(198, 40, 40),
+                    format!("Math could not be rendered: {message}"),
+                );
+            }
+            None => {}
+        }
+    }
+}
+
+const MATH_PIXELS_PER_POINT: f32 = 2.0;
+
+const MATH_PREAMBLE: &str = r#"
+#let mitexmathbf(it) = math.bold(math.upright(it))
+#let mitexsqrt(..args) = {
+  if args.pos().len() == 1 { $sqrt(#args.pos().at(0))$ }
+  else if args.pos().len() == 2 { $root(#args.pos().at(0), #args.pos().at(1))$ }
+}
+#let mitexdisplay(it) = math.display(it)
+#let mitexinline(it) = math.inline(it)
+#let mitexscript(it) = math.script(it)
+#let mitexsscript(it) = math.sscript(it)
+#let mitexbold(it) = math.bold(math.upright(it))
+#let mitexupright(it) = math.upright(it)
+#let mitexitalic(it) = math.italic(it)
+#let mitexsans(it) = math.sans(it)
+#let mitexnot(it) = math.cancel(angle: 20deg, it)
+#let mitexlabel(it) = none
+#let mitexcaption(it) = none
+#let pmatrix = math.mat.with(delim: "(")
+#let bmatrix = math.mat.with(delim: "[")
+#let Bmatrix = math.mat.with(delim: "{")
+#let vmatrix = math.mat.with(delim: "|")
+#let Vmatrix = math.mat.with(delim: "||")
+#let aligned(..args) = args.pos().first()
+#let gathered(..args) = args.pos().first()
+#let mitexunderbrace(it) = math.underbrace(it)
+#let mitexoverbrace(it) = math.overbrace(it)
+#let stackrel(top, base) = math.attach(base, t: top)
+#let overset(top, base) = math.attach(base, t: top)
+#let textmath(it) = text(it)
+#let textbf(it) = text(weight: "bold", it)
+#let textit(it) = text(style: "italic", it)
+#let textrm(it) = text(it)
+#let tfrac(num, denom) = math.inline(math.frac(num, denom))
+#let dfrac(num, denom) = math.display(math.frac(num, denom))
+#let boxed(it) = box(stroke: 0.6pt, inset: (x: 4pt, y: 3pt), $it$)
+#let negthinspace = h(-0.16667em)
+#let xrightarrow(label) = $attach(arrow.r.long, t: #label)$
+#let xleftarrow(label) = $attach(arrow.l.long, t: #label)$
+#let ket(it) = $bar.v #it angle.r$
+#let bra(it) = $angle.l #it bar.v$
+#let braket(left, right) = $angle.l #left bar.v #right angle.r$
+"#;
+
+static MATH_FONTS: LazyLock<Vec<typst::text::Font>> = LazyLock::new(|| {
+    let mut searcher = typst_kit::fonts::Fonts::searcher();
+    searcher
+        .include_system_fonts(false)
+        .include_embedded_fonts(true);
+    searcher
+        .search()
+        .fonts
+        .iter()
+        .filter_map(|slot| slot.get())
+        .collect()
+});
+
+fn render_math_formula(latex: &str, inline: bool) -> Result<egui::ColorImage, String> {
+    let typst_math = mitex::convert_math(latex, None).map_err(|error| error.to_string())?;
+    let equation = if inline {
+        format!("${typst_math}$")
+    } else {
+        format!("$ {typst_math} $")
+    };
+    let margin = if inline { "(x: 0pt, y: 2pt)" } else { "8pt" };
+    let source = format!(
+        "{MATH_PREAMBLE}\n#set page(width: auto, height: auto, margin: {margin}, fill: none)\n#set text(size: 16pt, fill: black)\n{equation}"
+    );
+    let engine = typst_as_lib::TypstEngine::builder()
+        .main_file(source)
+        .fonts(MATH_FONTS.iter().cloned())
+        .build();
+    let compiled = engine.compile::<typst::layout::PagedDocument>();
+    let document = compiled
+        .output
+        .map_err(|diagnostics| format!("{diagnostics}"))?;
+    let page = document
+        .pages
+        .first()
+        .ok_or_else(|| "typesetter returned no page".to_owned())?;
+    let pixmap = typst_render::render(page, MATH_PIXELS_PER_POINT);
+    let width = pixmap.width() as usize;
+    let height = pixmap.height() as usize;
+    if width == 0 || height == 0 {
+        return Err("typesetter returned an empty image".into());
+    }
+    let pixels = pixmap
+        .data()
+        .chunks_exact(4)
+        .map(|rgba| Color32::from_rgba_premultiplied(rgba[0], rgba[1], rgba[2], rgba[3]))
+        .collect();
+    Ok(egui::ColorImage {
+        size: [width, height],
+        pixels,
+        source_size: egui::vec2(width as f32, height as f32),
+    })
 }
 
 fn completion_row(ui: &mut egui::Ui, value: &str, selected: bool) -> egui::Response {
@@ -2331,13 +2477,30 @@ mod tests {
         let _ = context.run(egui::RawInput::default(), |context| {
             egui::CentralPanel::default().show(context, |ui| {
                 let mut cache = CommonMarkCache::default();
-                senses_click = rendered_markdown_response(ui, "markdown", "# Hello", &mut cache)
-                    .sense
-                    .senses_click();
+                let math_cache = Arc::new(Mutex::new(MathRenderCache::default()));
+                senses_click =
+                    rendered_markdown_response(ui, "markdown", "# Hello", &mut cache, &math_cache)
+                        .sense
+                        .senses_click();
             });
         });
 
         assert!(senses_click);
+    }
+
+    #[test]
+    fn markdown_math_is_typeset_into_an_image() {
+        for formula in [
+            r"\frac{1}{2}x^2",
+            r"U_f\ket{x} = (-1)^{s \cdot x}\ket{x}",
+            r"\ket{\psi}=\sum_x a_x \ket{x}",
+        ] {
+            let image = render_math_formula(formula, false).unwrap();
+
+            assert!(image.width() > 1);
+            assert!(image.height() > 1);
+            assert!(image.pixels.iter().any(|pixel| pixel.a() > 0));
+        }
     }
 
     #[test]
