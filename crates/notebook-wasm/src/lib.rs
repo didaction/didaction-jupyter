@@ -91,6 +91,7 @@ impl eframe::App for MountedApp {
             app.drain_commands()
         };
         for command in commands {
+            let command_id = command.command_id;
             {
                 let mut locked = self.app.lock().expect("notebook app mutex poisoned");
                 locked.state.sync_state = match &command.kind {
@@ -107,6 +108,9 @@ impl eframe::App for MountedApp {
             let repaint = ctx.clone();
             spawn_local(async move {
                 let Ok(serialized) = serde_json::to_string(&command) else {
+                    app.lock()
+                        .expect("notebook app mutex poisoned")
+                        .finish_command(command_id);
                     set_visible_error(
                         &app,
                         ErrorCode::InvalidInput,
@@ -118,6 +122,9 @@ impl eframe::App for MountedApp {
                 };
                 let Ok(promise) = dispatch.call1(&JsValue::NULL, &JsValue::from_str(&serialized))
                 else {
+                    app.lock()
+                        .expect("notebook app mutex poisoned")
+                        .finish_command(command_id);
                     set_visible_error(
                         &app,
                         ErrorCode::Disconnected,
@@ -128,6 +135,9 @@ impl eframe::App for MountedApp {
                     return;
                 };
                 let Ok(result) = JsFuture::from(js_sys::Promise::from(promise)).await else {
+                    app.lock()
+                        .expect("notebook app mutex poisoned")
+                        .finish_command(command_id);
                     set_visible_error(
                         &app,
                         ErrorCode::Disconnected,
@@ -138,6 +148,9 @@ impl eframe::App for MountedApp {
                     return;
                 };
                 let Some(result) = result.as_string() else {
+                    app.lock()
+                        .expect("notebook app mutex poisoned")
+                        .finish_command(command_id);
                     set_visible_error(
                         &app,
                         ErrorCode::MalformedResponse,
@@ -148,6 +161,9 @@ impl eframe::App for MountedApp {
                     return;
                 };
                 let Ok(result) = serde_json::from_str::<CommandResult>(&result) else {
+                    app.lock()
+                        .expect("notebook app mutex poisoned")
+                        .finish_command(command_id);
                     set_visible_error(
                         &app,
                         ErrorCode::MalformedResponse,
@@ -157,6 +173,9 @@ impl eframe::App for MountedApp {
                     );
                     return;
                 };
+                app.lock()
+                    .expect("notebook app mutex poisoned")
+                    .finish_command(result.command_id);
                 if let Some(completion) = result.completion.clone() {
                     app.lock()
                         .expect("notebook app mutex poisoned")

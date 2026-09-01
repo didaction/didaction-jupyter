@@ -55,6 +55,7 @@ pub struct NotebookEguiApp {
     pending_caret_positions: HashMap<String, usize>,
     pending_completions: BTreeMap<Uuid, String>,
     pending_inspections: BTreeMap<Uuid, String>,
+    pending_execution_cells: BTreeMap<Uuid, String>,
     inspections: HashMap<String, String>,
     caret_byte_positions: HashMap<String, usize>,
     completion_due: HashMap<String, f64>,
@@ -105,6 +106,7 @@ impl NotebookEguiApp {
             pending_caret_positions: HashMap::new(),
             pending_completions: BTreeMap::new(),
             pending_inspections: BTreeMap::new(),
+            pending_execution_cells: BTreeMap::new(),
             inspections: HashMap::new(),
             caret_byte_positions: HashMap::new(),
             completion_due: HashMap::new(),
@@ -147,6 +149,9 @@ impl NotebookEguiApp {
     }
     pub fn drain_commands(&mut self) -> Vec<NotebookCommand> {
         self.outbound.drain(..).collect()
+    }
+    pub fn finish_command(&mut self, command_id: Uuid) {
+        self.pending_execution_cells.remove(&command_id);
     }
     pub fn replace_state(&mut self, state: NotebookState) {
         let previous_markdown: HashSet<_> = self
@@ -207,9 +212,14 @@ impl NotebookEguiApp {
             self.undo_stack.push(inverse);
             self.redo_stack.clear();
         }
+        let command_id = Uuid::new_v4();
+        if let NotebookCommandKind::ExecuteCell { cell_id } = &kind {
+            self.pending_execution_cells
+                .insert(command_id, cell_id.clone());
+        }
         self.outbound.push_back(NotebookCommand {
             protocol_version: PROTOCOL_VERSION,
-            command_id: Uuid::new_v4(),
+            command_id,
             idempotency_key: Uuid::new_v4().to_string(),
             expected_revision: Some(self.state.snapshot.revision),
             timeout_ms: 30_000,
@@ -324,6 +334,16 @@ impl NotebookEguiApp {
             self.flush_editor(&cell);
             self.emit(NotebookCommandKind::ExecuteCell { cell_id: cell.id });
         }
+    }
+    fn execute_cell(&mut self, index: usize, cell: &Cell) {
+        if cell.cell_type != CellType::Code {
+            return;
+        }
+        self.select_cell(index, false);
+        self.flush_editor(cell);
+        self.emit(NotebookCommandKind::ExecuteCell {
+            cell_id: cell.id.clone(),
+        });
     }
     fn execute_selected_and_advance(&mut self, always_insert: bool) {
         let Some((index, cell)) = self.selected_cell() else {
@@ -1108,7 +1128,16 @@ impl NotebookEguiApp {
                     self.state.sync_state,
                     SyncState::Dirty | SyncState::Executing
                 );
-                execution_status_icon(ui, cell_has_completed_execution(&cell));
+                let running = self
+                    .pending_execution_cells
+                    .values()
+                    .any(|cell_id| cell_id == &cell.id);
+                if cell.cell_type == CellType::Code
+                    && cell_run_button(ui, idle && !running, running).clicked()
+                {
+                    self.execute_cell(index, &cell);
+                }
+                execution_status_icon(ui, cell_has_completed_execution(&cell), running);
                 let drag = ui
                     .add_enabled(idle, drag_handle())
                     .on_hover_text("Drag to reorder cell");
@@ -2067,9 +2096,70 @@ fn drag_handle() -> egui::Button<'static> {
         .min_size(egui::vec2(52.0, 28.0))
 }
 
-fn execution_status_icon(ui: &mut egui::Ui, completed: bool) {
+fn cell_run_button(ui: &mut egui::Ui, enabled: bool, running: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(28.0, 28.0),
+        if enabled {
+            egui::Sense::click()
+        } else {
+            egui::Sense::hover()
+        },
+    );
+    let visuals = ui.style().interact(&response);
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(2), visuals.weak_bg_fill);
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(2),
+        visuals.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
+    let center = rect.center();
+    if running {
+        ui.ctx().request_repaint_after(Duration::from_millis(80));
+        let start = ui.input(|input| input.time as f32) * 4.0;
+        let radius = 6.0;
+        let points = (0..=12)
+            .map(|step| {
+                let angle = start + std::f32::consts::TAU * step as f32 / 18.0;
+                center + egui::vec2(angle.cos(), angle.sin()) * radius
+            })
+            .collect::<Vec<_>>();
+        ui.painter().add(egui::Shape::line(
+            points,
+            Stroke::new(2.0, Color32::from_rgb(2, 119, 189)),
+        ));
+        response.on_hover_text("This cell is running")
+    } else {
+        let color = if enabled {
+            Color32::from_rgb(38, 50, 56)
+        } else {
+            Color32::from_gray(150)
+        };
+        ui.painter().add(egui::Shape::convex_polygon(
+            vec![
+                center + egui::vec2(-4.0, -6.0),
+                center + egui::vec2(6.0, 0.0),
+                center + egui::vec2(-4.0, 6.0),
+            ],
+            color,
+            Stroke::NONE,
+        ));
+        response.on_hover_text(if enabled {
+            "Run this cell"
+        } else {
+            "Wait for the current notebook operation to finish"
+        })
+    }
+}
+
+fn execution_status_icon(ui: &mut egui::Ui, completed: bool, running: bool) {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(14.0, 28.0), egui::Sense::hover());
-    if completed {
+    if running {
+        ui.painter()
+            .circle_filled(rect.center(), 3.5, Color32::from_rgb(2, 119, 189));
+        response.on_hover_text("Cell execution in progress");
+    } else if completed {
         let center = rect.center();
         let stroke = Stroke::new(1.8, Color32::from_rgb(46, 125, 50));
         ui.painter().line_segment(
@@ -2349,6 +2439,27 @@ mod tests {
         cell.execution_count = Some(1);
 
         assert!(cell_has_completed_execution(&cell));
+    }
+
+    #[test]
+    fn single_cell_execution_tracks_progress_until_result_arrives() {
+        let mut app = app();
+        let cell = app.state.snapshot.cells[0].clone();
+
+        app.execute_cell(0, &cell);
+        let command = app.drain_commands().pop().unwrap();
+
+        assert_eq!(
+            app.pending_execution_cells.get(&command.command_id),
+            Some(&"code".to_owned())
+        );
+        assert!(matches!(
+            command.kind,
+            NotebookCommandKind::ExecuteCell { cell_id } if cell_id == "code"
+        ));
+
+        app.finish_command(command.command_id);
+        assert!(app.pending_execution_cells.is_empty());
     }
 
     #[test]

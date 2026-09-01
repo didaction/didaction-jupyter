@@ -17,7 +17,7 @@ behavior. See the [primary-source parity reference](jupyter-frontend-parity-refe
 |     4 | Add above/below                      | Visual parity    | Familiar Insert menu and top-toolbar insert-below control; empty cells supported.                                                         |
 |     5 | Delete, duplicate, move              | Visual parity    | Edit menu, top-toolbar move controls, and optional drag-handle reordering with a visible drop line.                                       |
 |     6 | Code/Markdown/raw conversion         | Visual parity    | Familiar selected-cell type dropdown; conversion preserves stable identity and source.                                                    |
-|     7 | Run cell and run all                 | Visual parity    | Familiar Run menu and play control; real kernel-channel execution with bounded persisted outputs.                                         |
+|     7 | Run cell and run all                 | Visual parity    | Familiar Run menu and toolbar control plus a per-cell play button with in-progress and completed states; real kernel execution.           |
 |     8 | Text, stream, error outputs          | Supported        | Execution count and bounded traceback rendering.                                                                                          |
 |     9 | Basic graphs                         | Supported        | Bounded PNG and SVG output; seeded executable SVG example.                                                                                |
 |    10 | Kernel completion                    | Supported, basic | Tab requests `complete_request`; the editor dropdown supports mouse, ↑/↓, Enter, Tab, Escape, and restores the caret after inserted text. |
