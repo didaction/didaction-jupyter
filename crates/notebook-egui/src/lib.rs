@@ -51,28 +51,32 @@ impl NotebookEguiApp {
         });
     }
     fn toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.heading(
                 RichText::new("didaction notebook")
                     .size(18.0)
                     .color(Color32::from_rgb(38, 50, 56)),
             );
             ui.separator();
+            let idle = !matches!(
+                self.state.sync_state,
+                SyncState::Dirty | SyncState::Executing
+            );
             if ui
-                .button("＋ Code")
+                .add_enabled(idle, egui::Button::new("Add code"))
                 .on_hover_text("Insert a code cell")
                 .clicked()
             {
                 self.insert_cell(CellType::Code);
             }
             if ui
-                .button("＋ Markdown")
+                .add_enabled(idle, egui::Button::new("Add Markdown"))
                 .on_hover_text("Insert a Markdown cell")
                 .clicked()
             {
                 self.insert_cell(CellType::Markdown);
             }
-            if ui.button("Run all").clicked() {
+            if ui.add_enabled(idle, egui::Button::new("Run all")).clicked() {
                 for cell in self.state.snapshot.cells.clone() {
                     if cell.cell_type == CellType::Code {
                         self.emit(NotebookCommandKind::ExecuteCell { cell_id: cell.id });
@@ -80,13 +84,20 @@ impl NotebookEguiApp {
                 }
             }
             ui.separator();
-            if ui.button("Interrupt").clicked() {
+            let can_interrupt = idle || self.state.sync_state == SyncState::Executing;
+            if ui
+                .add_enabled(can_interrupt, egui::Button::new("Interrupt"))
+                .clicked()
+            {
                 self.emit(NotebookCommandKind::InterruptKernel);
             }
-            if ui.button("Restart").clicked() {
+            if ui.add_enabled(idle, egui::Button::new("Restart")).clicked() {
                 self.emit(NotebookCommandKind::RestartKernel);
             }
-            if self.state.sync_state == SyncState::Disconnected && ui.button("Reconnect").clicked()
+            if self.state.sync_state == SyncState::Disconnected
+                && ui
+                    .add_enabled(idle, egui::Button::new("Reconnect"))
+                    .clicked()
             {
                 self.emit(NotebookCommandKind::Reconnect);
             }
@@ -117,7 +128,8 @@ impl NotebookEguiApp {
             SyncState::Error => ("Action required", Color32::from_rgb(198, 40, 40)),
         };
         ui.horizontal(|ui| {
-            ui.colored_label(color, "●");
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+            ui.painter().circle_filled(rect.center(), 4.0, color);
             ui.label(label);
             ui.separator();
             ui.label(format!(
@@ -174,12 +186,18 @@ impl NotebookEguiApp {
                     .monospace()
                     .color(Color32::from_rgb(75, 85, 92)),
                 );
-                if cell.cell_type == CellType::Code && ui.button("▶ Run").clicked() {
+                let idle = !matches!(
+                    self.state.sync_state,
+                    SyncState::Dirty | SyncState::Executing
+                );
+                if cell.cell_type == CellType::Code
+                    && ui.add_enabled(idle, egui::Button::new("Run")).clicked()
+                {
                     self.emit(NotebookCommandKind::ExecuteCell {
                         cell_id: cell.id.clone(),
                     });
                 }
-                if index > 0 && ui.small_button("↑").on_hover_text("Move cell up").clicked() {
+                if index > 0 && ui.add_enabled(idle, egui::Button::new("Move up")).clicked() {
                     self.emit(NotebookCommandKind::ModifyCells {
                         changes: vec![CellMutation::Move {
                             cell_id: cell.id.clone(),
@@ -189,8 +207,7 @@ impl NotebookEguiApp {
                 }
                 if index + 1 < self.state.snapshot.cells.len()
                     && ui
-                        .small_button("↓")
-                        .on_hover_text("Move cell down")
+                        .add_enabled(idle, egui::Button::new("Move down"))
                         .clicked()
                 {
                     self.emit(NotebookCommandKind::ModifyCells {
@@ -200,7 +217,7 @@ impl NotebookEguiApp {
                         }],
                     });
                 }
-                if ui.small_button("Delete").clicked() {
+                if ui.add_enabled(idle, egui::Button::new("Delete")).clicked() {
                     self.emit(NotebookCommandKind::ModifyCells {
                         changes: vec![CellMutation::Delete {
                             cell_id: cell.id.clone(),
@@ -245,8 +262,10 @@ impl NotebookEguiApp {
 
 impl eframe::App for NotebookEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let compact_controls = ctx.screen_rect().width() < 600.0;
         ctx.style_mut(|style| {
             style.spacing.item_spacing = egui::vec2(8.0, 8.0);
+            style.spacing.interact_size.y = if compact_controls { 44.0 } else { 30.0 };
             style.visuals.selection.bg_fill = Color32::from_rgb(210, 232, 246);
         });
         if ctx.input(|input| input.modifiers.command && input.key_pressed(Key::Enter))

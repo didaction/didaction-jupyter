@@ -5,6 +5,8 @@ use notebook_protocol::{
     CommandResult, NotebookCommand, NotebookSnapshot, validate_command, validate_snapshot,
 };
 #[cfg(target_arch = "wasm32")]
+use notebook_protocol::{ErrorCode, NotebookCommandKind, ProtocolError};
+#[cfg(target_arch = "wasm32")]
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
@@ -91,45 +93,118 @@ impl eframe::App for MountedApp {
         for command in commands {
             {
                 let mut locked = self.app.lock().expect("notebook app mutex poisoned");
-                let Ok(prepared) = locked.state.prepare(command.clone()) else {
-                    continue;
+                locked.state.sync_state = match &command.kind {
+                    NotebookCommandKind::ExecuteCell { .. }
+                    | NotebookCommandKind::ExecuteCode { .. } => {
+                        notebook_core::SyncState::Executing
+                    }
+                    _ => notebook_core::SyncState::Dirty,
                 };
-                locked.replace_state(prepared.optimistic_state);
+                locked.state.last_error = None;
             }
             let app = Arc::clone(&self.app);
             let dispatch = self.dispatch.clone();
             let repaint = ctx.clone();
             spawn_local(async move {
                 let Ok(serialized) = serde_json::to_string(&command) else {
+                    set_visible_error(
+                        &app,
+                        ErrorCode::InvalidInput,
+                        "Command could not be serialized",
+                        false,
+                        &repaint,
+                    );
                     return;
                 };
                 let Ok(promise) = dispatch.call1(&JsValue::NULL, &JsValue::from_str(&serialized))
                 else {
+                    set_visible_error(
+                        &app,
+                        ErrorCode::Disconnected,
+                        "Notebook command could not be dispatched",
+                        true,
+                        &repaint,
+                    );
                     return;
                 };
                 let Ok(result) = JsFuture::from(js_sys::Promise::from(promise)).await else {
+                    set_visible_error(
+                        &app,
+                        ErrorCode::Disconnected,
+                        "Notebook service disconnected; reconnect and retry",
+                        true,
+                        &repaint,
+                    );
                     return;
                 };
                 let Some(result) = result.as_string() else {
+                    set_visible_error(
+                        &app,
+                        ErrorCode::MalformedResponse,
+                        "Notebook service returned an unreadable result",
+                        true,
+                        &repaint,
+                    );
                     return;
                 };
                 let Ok(result) = serde_json::from_str::<CommandResult>(&result) else {
+                    set_visible_error(
+                        &app,
+                        ErrorCode::MalformedResponse,
+                        "Notebook service returned malformed data",
+                        true,
+                        &repaint,
+                    );
                     return;
                 };
-                let current = app
-                    .lock()
-                    .expect("notebook app mutex poisoned")
-                    .state
-                    .clone();
-                if let Ok(next) = current.apply_result(result) {
-                    app.lock()
+                if let Some(error) = result.error {
+                    set_visible_error(&app, error.code, &error.message, error.retryable, &repaint);
+                } else if let Some(snapshot) = result.snapshot {
+                    let current = app
+                        .lock()
                         .expect("notebook app mutex poisoned")
-                        .replace_state(next);
-                    repaint.request_repaint();
+                        .state
+                        .clone();
+                    if let Ok(next) = current.replace_snapshot(snapshot) {
+                        app.lock()
+                            .expect("notebook app mutex poisoned")
+                            .replace_state(next);
+                        repaint.request_repaint();
+                    }
+                } else {
+                    set_visible_error(
+                        &app,
+                        ErrorCode::MalformedResponse,
+                        "Successful notebook result omitted state",
+                        true,
+                        &repaint,
+                    );
                 }
             });
         }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn set_visible_error(
+    app: &Arc<Mutex<NotebookEguiApp>>,
+    code: ErrorCode,
+    message: &str,
+    retryable: bool,
+    repaint: &eframe::egui::Context,
+) {
+    let mut locked = app.lock().expect("notebook app mutex poisoned");
+    locked.state.sync_state = if code == ErrorCode::Disconnected {
+        notebook_core::SyncState::Disconnected
+    } else {
+        notebook_core::SyncState::Error
+    };
+    locked.state.last_error = Some(ProtocolError {
+        code,
+        message: message.to_owned(),
+        retryable,
+    });
+    repaint.request_repaint();
 }
 
 #[wasm_bindgen(js_name = mountNotebook)]

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import urllib.request
 import uuid
 
@@ -26,7 +27,8 @@ def call(payload: dict[str, object]) -> dict[str, object]:
         return json.load(response)
 
 
-setup = call(command("setup", path="acceptance.ipynb", kernel="python3", create=True))
+notebook_path = os.environ.get("DIDACTION_SMOKE_PATH", f"acceptance-{uuid.uuid4()}.ipynb")
+setup = call(command("setup", path=notebook_path, kernel="python3", create=True))
 assert not setup.get("error"), setup
 revision = setup["snapshot"]["revision"]
 for source in ("value = 40 + 2", "value"):

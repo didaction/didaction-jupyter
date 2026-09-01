@@ -24,7 +24,7 @@ async function boot(): Promise<void> {
   const transport = new McpNotebookTransport();
   const setup = await transport.setup(
     command("setup", {
-      path: "acceptance.ipynb",
+      path: "acceptance-demo-v1.ipynb",
       kernel: "python3",
       create: true,
     }),
