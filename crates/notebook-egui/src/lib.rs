@@ -691,10 +691,7 @@ impl NotebookEguiApp {
                         .max_height(220.0)
                         .show(ui, |ui| {
                             for (index, value) in completion.matches.iter().take(12).enumerate() {
-                                let button = egui::Button::new(RichText::new(value).monospace())
-                                    .selected(index == selected)
-                                    .min_size(egui::vec2(ui.available_width(), 28.0));
-                                if ui.add(button).clicked() {
+                                if completion_row(ui, value, index == selected).clicked() {
                                     accepted = Some(index);
                                 }
                             }
@@ -966,6 +963,17 @@ fn rendered_markdown_response(ui: &mut egui::Ui, source: &str) -> egui::Response
         .interact(egui::Sense::click())
 }
 
+fn completion_row(ui: &mut egui::Ui, value: &str, selected: bool) -> egui::Response {
+    let button = egui::Button::new(RichText::new(value).monospace())
+        .selected(selected)
+        .min_size(egui::vec2(ui.available_width(), 28.0));
+    let response = ui.add(button);
+    if selected {
+        response.scroll_to_me(None);
+    }
+    response
+}
+
 fn move_index_for_drop(source_index: usize, hovered_index: usize, before: bool) -> usize {
     let boundary = if before {
         hovered_index
@@ -1219,5 +1227,29 @@ mod tests {
         });
 
         assert!(senses_click);
+    }
+
+    #[test]
+    fn selected_completion_scrolls_into_view() {
+        let context = egui::Context::default();
+        let mut scroll_id = egui::Id::NULL;
+        for _ in 0..2 {
+            let _ = context.run(egui::RawInput::default(), |context| {
+                egui::CentralPanel::default().show(context, |ui| {
+                    scroll_id = ui.make_persistent_id(egui::Id::new("completion-scroll-test"));
+                    egui::ScrollArea::vertical()
+                        .id_salt("completion-scroll-test")
+                        .max_height(60.0)
+                        .show(ui, |ui| {
+                            for index in 0..12 {
+                                completion_row(ui, &format!("item-{index}"), index == 11);
+                            }
+                        });
+                });
+            });
+        }
+
+        let state = egui::scroll_area::State::load(&context, scroll_id).unwrap();
+        assert!(state.offset.y > 0.0);
     }
 }
