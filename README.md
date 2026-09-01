@@ -98,5 +98,7 @@ graph output are bounded; SVG is decoded only by egui's image loader.
 - Basic Markdown rendering rather than Jupyter's complete CommonMark/math stack.
 - Completion requests currently target the end of the active source and present
   a bounded candidate row; signature help and continuous completion are future work.
+- `egui_code_editor` is pinned to `0.2.17`, the release compatible with this
+  workspace's egui `0.32`; its newer egui `0.35` line cannot be mixed in directly.
 - No ipywidgets/comms, debugger, terminal, file browser, nbextensions, or trust UI.
 - WebMCP remains experimental and feature-detected; the notebook works without it.

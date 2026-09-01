@@ -1,4 +1,5 @@
 use egui::{Color32, CornerRadius, Key, Margin, RichText, Stroke, TextEdit};
+use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 use notebook_core::{NotebookState, SyncState};
 use notebook_protocol::{
     Cell, CellMutation, CellOutput, CellType, CompletionReply, NotebookCommand,
@@ -397,7 +398,6 @@ impl NotebookEguiApp {
             }
             let show_editor =
                 cell.cell_type != CellType::Markdown || !self.rendered_markdown.contains(&cell.id);
-            let mut completion_requested = false;
             let edited = show_editor
                 .then(|| {
                     let editor = self
@@ -406,16 +406,29 @@ impl NotebookEguiApp {
                         .find(|(id, _)| id == &cell.id)
                         .map(|(_, source)| source)
                         .unwrap();
-                    let response = ui.add_sized(
-                        [
-                            ui.available_width(),
-                            editor.lines().count().clamp(2, 18) as f32 * 20.0 + 12.0,
-                        ],
-                        TextEdit::multiline(editor)
-                            .font(egui::TextStyle::Monospace)
-                            .desired_width(f32::INFINITY)
-                            .code_editor(),
-                    );
+                    let response = if cell.cell_type == CellType::Code {
+                        CodeEditor::default()
+                            .id_source(format!("code-editor-{}", cell.id))
+                            .with_rows(editor.lines().count().clamp(2, 18))
+                            .with_fontsize(14.0)
+                            .with_theme(ColorTheme::GITHUB_LIGHT)
+                            .with_syntax(Syntax::python())
+                            .with_numlines(true)
+                            .vscroll(false)
+                            .show(ui, editor)
+                            .response
+                    } else {
+                        ui.add_sized(
+                            [
+                                ui.available_width(),
+                                editor.lines().count().clamp(2, 18) as f32 * 20.0 + 12.0,
+                            ],
+                            TextEdit::multiline(editor)
+                                .font(egui::TextStyle::Monospace)
+                                .desired_width(f32::INFINITY)
+                                .code_editor(),
+                        )
+                    };
                     if response.changed() {
                         self.dirty_editors.insert(cell.id.clone());
                     }
@@ -427,20 +440,10 @@ impl NotebookEguiApp {
                         response.surrender_focus();
                         self.edit_mode = false;
                     }
-                    if cell.cell_type == CellType::Code
-                        && response.has_focus()
-                        && ui.input(|input| input.key_pressed(Key::Tab))
-                    {
-                        ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Tab));
-                        completion_requested = true;
-                    }
                     (response.lost_focus() && self.dirty_editors.remove(&cell.id))
                         .then(|| editor.clone())
                 })
                 .flatten();
-            if completion_requested {
-                self.request_completion(&cell);
-            }
             if let Some(source) = edited {
                 self.emit(NotebookCommandKind::ModifyCells {
                     changes: vec![CellMutation::Update {
@@ -488,6 +491,20 @@ impl eframe::App for NotebookEguiApp {
             style.visuals.selection.bg_fill = Color32::from_rgb(210, 232, 246);
         });
         egui_extras::install_image_loaders(ctx);
+        if self.edit_mode
+            && ctx.input(|input| input.key_pressed(Key::Tab))
+            && let Some(cell) = self
+                .state
+                .snapshot
+                .selected_cell_id
+                .as_ref()
+                .and_then(|id| self.state.snapshot.cells.iter().find(|cell| &cell.id == id))
+                .filter(|cell| cell.cell_type == CellType::Code)
+                .cloned()
+        {
+            ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Tab));
+            self.request_completion(&cell);
+        }
         if ctx.input(|input| input.key_pressed(Key::Escape)) {
             self.edit_mode = false;
         }
