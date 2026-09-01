@@ -30,6 +30,19 @@ fn rich_image_uri(mime: &str, data: &str) -> String {
     )
 }
 
+fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < 24 || &bytes[..16] != b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR" {
+        return None;
+    }
+    let width = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
+    let height = u32::from_be_bytes(bytes[20..24].try_into().ok()?);
+    (width > 0 && height > 0 && width <= 16_384 && height <= 16_384).then_some((width, height))
+}
+
+fn cell_has_completed_execution(cell: &Cell) -> bool {
+    cell.cell_type == CellType::Code && cell.execution_count.is_some()
+}
+
 pub struct NotebookEguiApp {
     pub state: NotebookState,
     outbound: VecDeque<NotebookCommand>,
@@ -581,6 +594,7 @@ impl NotebookEguiApp {
                     self.state.sync_state,
                     SyncState::Dirty | SyncState::Executing
                 );
+                execution_status_icon(ui, cell_has_completed_execution(&cell));
                 let drag = ui
                     .add_enabled(idle, drag_handle())
                     .on_hover_text("Drag to reorder cell");
@@ -954,11 +968,18 @@ fn render_output(ui: &mut egui::Ui, output: &CellOutput) {
             .inner_margin(Margin::same(8))
             .show(ui, |ui| match decode_rich_image(mime, data) {
                 Ok(bytes) => {
-                    ui.add(
-                        egui::Image::from_bytes(rich_image_uri(mime, data), bytes)
-                            .max_width(ui.available_width())
-                            .alt_text("Notebook graph output"),
-                    );
+                    let dimensions = (mime == "image/png")
+                        .then(|| png_dimensions(&bytes))
+                        .flatten();
+                    let mut image = egui::Image::from_bytes(rich_image_uri(mime, data), bytes)
+                        .alt_text("Notebook graph output");
+                    if let Some((width, height)) = dimensions {
+                        let width = width as f32;
+                        let height = height as f32;
+                        let scale = (ui.available_width() / width).min(1.0);
+                        image = image.fit_to_exact_size(egui::vec2(width * scale, height * scale));
+                    }
+                    ui.add(image.max_width(ui.available_width()));
                 }
                 Err(_) => {
                     ui.colored_label(
@@ -1245,6 +1266,29 @@ fn drag_handle() -> egui::Button<'static> {
         .min_size(egui::vec2(52.0, 28.0))
 }
 
+fn execution_status_icon(ui: &mut egui::Ui, completed: bool) {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(14.0, 28.0), egui::Sense::hover());
+    if completed {
+        let center = rect.center();
+        let stroke = Stroke::new(1.8, Color32::from_rgb(46, 125, 50));
+        ui.painter().line_segment(
+            [
+                egui::pos2(center.x - 4.0, center.y),
+                egui::pos2(center.x - 1.0, center.y + 3.0),
+            ],
+            stroke,
+        );
+        ui.painter().line_segment(
+            [
+                egui::pos2(center.x - 1.0, center.y + 3.0),
+                egui::pos2(center.x + 5.0, center.y - 4.0),
+            ],
+            stroke,
+        );
+        response.on_hover_text("Cell execution completed");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1451,5 +1495,24 @@ mod tests {
         let bytes = decode_rich_image("image/png", "iVBORw0KGgo=").unwrap();
 
         assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+    }
+
+    #[test]
+    fn png_dimensions_reserve_plot_space_before_texture_loading() {
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        png.extend_from_slice(&715_u32.to_be_bytes());
+        png.extend_from_slice(&397_u32.to_be_bytes());
+
+        assert_eq!(png_dimensions(&png), Some((715, 397)));
+    }
+
+    #[test]
+    fn executed_code_cell_has_completion_status() {
+        let mut cell = app().state.snapshot.cells[0].clone();
+        assert!(!cell_has_completed_execution(&cell));
+
+        cell.execution_count = Some(1);
+
+        assert!(cell_has_completed_execution(&cell));
     }
 }
