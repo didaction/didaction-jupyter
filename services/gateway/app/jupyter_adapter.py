@@ -232,7 +232,10 @@ class JupyterNotebookTransport:
         def capture(message: dict[str, Any]) -> set[int]:
             changed = set(output_hook(outputs, message))
             if changed:
-                progress(outputs)
+                persisted_outputs = deepcopy(outputs)
+                for output in persisted_outputs:
+                    output.pop("transient", None)
+                progress(persisted_outputs)
             return changed
 
         reply = kernel._manager.client.execute_interactive(

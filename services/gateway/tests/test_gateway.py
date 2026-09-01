@@ -142,6 +142,14 @@ async def test_execute_stream_yields_iopub_updates_and_latest_clear_state(
                     "header": {"msg_type": "stream"},
                     "content": {"name": "stdout", "text": "latest\n"},
                 },
+                {
+                    "header": {"msg_type": "display_data"},
+                    "content": {
+                        "data": {"image/png": "chart"},
+                        "metadata": {},
+                        "transient": {"display_id": "plot-1"},
+                    },
+                },
             ]:
                 hook(message)
             return {"content": {"status": "ok", "execution_count": 7}}
@@ -177,6 +185,7 @@ async def test_execute_stream_yields_iopub_updates_and_latest_clear_state(
     assert states[-1].cells[0].outputs[0]["text"] == "latest\n"
     assert states[-1].cells[0].execution_count == 7
     assert saved[-1][0]["text"] == "latest\n"
+    assert all("transient" not in output for state in states for output in state.cells[0].outputs)
 
 
 @pytest.mark.asyncio
