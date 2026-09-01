@@ -35,10 +35,7 @@ class JupyterNotebookTransport:
         return {"Authorization": f"token {self.settings.jupyter_token}"}
 
     async def discover(self) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=self.settings.timeout_seconds) as client:
-            response = await client.get(
-                f"{self.settings.jupyter_url}/api/status", headers=self.headers
-            )
+        response = await self._request("GET", "/api/status")
         if response.status_code != 200:
             raise AdapterError("disconnected", "Jupyter Server is unavailable", True)
         self.profile = {

@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
+import httpx
 import nbformat
 import pytest
 
@@ -43,6 +44,23 @@ def test_startup_notebook_and_kernel_are_configuration(tmp_path: Path) -> None:
 
     assert settings.startup_notebook() == "course/week-1.ipynb"
     assert settings.kernel_name == "python-custom"
+
+
+@pytest.mark.asyncio
+async def test_discovery_reports_startup_race_as_typed_disconnect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def disconnected(*args: object, **kwargs: object) -> None:
+        raise httpx.ConnectError("not ready")
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", disconnected)
+    adapter = JupyterNotebookTransport(Settings(workspace=tmp_path))
+
+    with pytest.raises(AdapterError) as error:
+        await adapter.discover()
+
+    assert error.value.code == "disconnected"
+    assert error.value.retryable is True
 
 
 def test_direct_mutations_preserve_stable_identity(tmp_path: Path) -> None:

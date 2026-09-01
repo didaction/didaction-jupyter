@@ -110,4 +110,33 @@ graph_id = graph["snapshot"]["cells"][-1]["id"]
 graph = call(command("execute_cell", graph["snapshot"]["revision"], cell_id=graph_id))
 assert "image/svg+xml" in json.dumps(graph["snapshot"]["cells"]), graph
 
-print("direct Jupyter/ipykernel smoke: PASS (42, completion, stable edits, SVG graph)")
+stream_source = (
+    "from IPython.display import clear_output\n"
+    "print('obsolete output')\n"
+    "clear_output(wait=True)\n"
+    "print('latest output')"
+)
+stream = insert_cell(graph["snapshot"]["revision"], len(graph["snapshot"]["cells"]), stream_source)
+stream_id = stream["snapshot"]["cells"][-1]["id"]
+stream = call(command("execute_cell", stream["snapshot"]["revision"], cell_id=stream_id))
+stream_cell = next(cell for cell in stream["snapshot"]["cells"] if cell["id"] == stream_id)
+assert "latest output" in json.dumps(stream_cell), stream_cell
+assert "obsolete output" not in json.dumps(stream_cell["outputs"]), stream_cell
+
+cleared = call(
+    command(
+        "modify_cells",
+        stream["snapshot"]["revision"],
+        changes=[{"operation": "clear_outputs", "cell_id": stream_id}],
+    )
+)
+cleared_cell = next(cell for cell in cleared["snapshot"]["cells"] if cell["id"] == stream_id)
+assert cleared_cell["outputs"] == [], cleared_cell
+refreshed = call(command("query", cleared["snapshot"]["revision"], query="full"))
+refreshed_cell = next(cell for cell in refreshed["snapshot"]["cells"] if cell["id"] == stream_id)
+assert refreshed_cell["outputs"] == [], refreshed_cell
+
+print(
+    "direct Jupyter/ipykernel smoke: PASS "
+    "(42, completion, stable edits, SVG graph, latest output clear/refresh)"
+)
