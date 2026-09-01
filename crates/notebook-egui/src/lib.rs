@@ -1,10 +1,10 @@
 use egui::{Color32, CornerRadius, Key, Margin, RichText, Stroke, TextEdit};
 use notebook_core::{NotebookState, SyncState};
 use notebook_protocol::{
-    Cell, CellMutation, CellOutput, CellType, NotebookCommand, NotebookCommandKind,
-    PROTOCOL_VERSION,
+    Cell, CellMutation, CellOutput, CellType, CompletionReply, NotebookCommand,
+    NotebookCommandKind, PROTOCOL_VERSION,
 };
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
 pub struct NotebookEguiApp {
@@ -12,6 +12,10 @@ pub struct NotebookEguiApp {
     outbound: VecDeque<NotebookCommand>,
     editors: Vec<(String, String)>,
     dirty_editors: HashSet<String>,
+    completion_suggestions: HashMap<String, CompletionReply>,
+    pending_completions: BTreeMap<Uuid, String>,
+    rendered_markdown: HashSet<String>,
+    edit_mode: bool,
 }
 
 impl NotebookEguiApp {
@@ -27,6 +31,15 @@ impl NotebookEguiApp {
             outbound: VecDeque::new(),
             editors,
             dirty_editors: HashSet::new(),
+            completion_suggestions: HashMap::new(),
+            pending_completions: BTreeMap::new(),
+            rendered_markdown: HashSet::new(),
+            edit_mode: false,
+        }
+    }
+    pub fn apply_completion(&mut self, command_id: Uuid, completion: CompletionReply) {
+        if let Some(cell_id) = self.pending_completions.remove(&command_id) {
+            self.completion_suggestions.insert(cell_id, completion);
         }
     }
     pub fn drain_commands(&mut self) -> Vec<NotebookCommand> {
@@ -51,6 +64,22 @@ impl NotebookEguiApp {
             expected_revision: Some(self.state.snapshot.revision),
             timeout_ms: 30_000,
             kind,
+        });
+    }
+    fn request_completion(&mut self, cell: &Cell) {
+        let code = self.editor_source(cell);
+        let command_id = Uuid::new_v4();
+        self.pending_completions.insert(command_id, cell.id.clone());
+        self.outbound.push_back(NotebookCommand {
+            protocol_version: PROTOCOL_VERSION,
+            command_id,
+            idempotency_key: Uuid::new_v4().to_string(),
+            expected_revision: Some(self.state.snapshot.revision),
+            timeout_ms: 10_000,
+            kind: NotebookCommandKind::Complete {
+                cursor_pos: code.len(),
+                code,
+            },
         });
     }
     fn editor_source(&self, cell: &Cell) -> String {
@@ -116,6 +145,12 @@ impl NotebookEguiApp {
             if ui.add_enabled(idle, egui::Button::new("Restart")).clicked() {
                 self.emit(NotebookCommandKind::RestartKernel);
             }
+            ui.separator();
+            ui.label(if self.edit_mode {
+                "Edit mode"
+            } else {
+                "Command mode"
+            });
             if self.state.sync_state == SyncState::Disconnected
                 && ui
                     .add_enabled(idle, egui::Button::new("Reconnect"))
@@ -294,6 +329,19 @@ impl NotebookEguiApp {
                         }],
                     });
                 }
+                if cell.cell_type != CellType::Raw
+                    && ui.add_enabled(idle, egui::Button::new("Raw")).clicked()
+                {
+                    self.flush_editor(&cell);
+                    self.emit(NotebookCommandKind::ModifyCells {
+                        changes: vec![CellMutation::Update {
+                            cell_id: cell.id.clone(),
+                            source: Some(self.editor_source(&cell)),
+                            metadata: None,
+                            cell_type: Some(CellType::Raw),
+                        }],
+                    });
+                }
                 ui.separator();
                 if index > 0 && ui.add_enabled(idle, egui::Button::new("Move up")).clicked() {
                     self.flush_editor(&cell);
@@ -327,32 +375,72 @@ impl NotebookEguiApp {
                     });
                 }
             });
-            let edited = {
-                let editor = self
-                    .editors
-                    .iter_mut()
-                    .find(|(id, _)| id == &cell.id)
-                    .map(|(_, source)| source)
-                    .unwrap();
-                let response = ui.add_sized(
-                    [
-                        ui.available_width(),
-                        editor.lines().count().clamp(2, 18) as f32 * 20.0 + 12.0,
-                    ],
-                    TextEdit::multiline(editor)
-                        .font(egui::TextStyle::Monospace)
-                        .desired_width(f32::INFINITY)
-                        .code_editor(),
-                );
-                if response.changed() {
-                    self.dirty_editors.insert(cell.id.clone());
+            if cell.cell_type == CellType::Markdown {
+                let rendered = self.rendered_markdown.contains(&cell.id);
+                if ui
+                    .button(if rendered {
+                        "Edit Markdown"
+                    } else {
+                        "Render Markdown"
+                    })
+                    .clicked()
+                {
+                    if rendered {
+                        self.rendered_markdown.remove(&cell.id);
+                    } else {
+                        self.rendered_markdown.insert(cell.id.clone());
+                    }
                 }
-                if response.has_focus() || response.clicked() {
-                    self.state.snapshot.selected_cell_id = Some(cell.id.clone());
+                if rendered {
+                    render_markdown(ui, &self.editor_source(&cell));
                 }
-                (response.lost_focus() && self.dirty_editors.remove(&cell.id))
-                    .then(|| editor.clone())
-            };
+            }
+            let show_editor =
+                cell.cell_type != CellType::Markdown || !self.rendered_markdown.contains(&cell.id);
+            let mut completion_requested = false;
+            let edited = show_editor
+                .then(|| {
+                    let editor = self
+                        .editors
+                        .iter_mut()
+                        .find(|(id, _)| id == &cell.id)
+                        .map(|(_, source)| source)
+                        .unwrap();
+                    let response = ui.add_sized(
+                        [
+                            ui.available_width(),
+                            editor.lines().count().clamp(2, 18) as f32 * 20.0 + 12.0,
+                        ],
+                        TextEdit::multiline(editor)
+                            .font(egui::TextStyle::Monospace)
+                            .desired_width(f32::INFINITY)
+                            .code_editor(),
+                    );
+                    if response.changed() {
+                        self.dirty_editors.insert(cell.id.clone());
+                    }
+                    if response.has_focus() || response.clicked() {
+                        self.state.snapshot.selected_cell_id = Some(cell.id.clone());
+                        self.edit_mode = true;
+                    }
+                    if response.has_focus() && ui.input(|input| input.key_pressed(Key::Escape)) {
+                        response.surrender_focus();
+                        self.edit_mode = false;
+                    }
+                    if cell.cell_type == CellType::Code
+                        && response.has_focus()
+                        && ui.input(|input| input.key_pressed(Key::Tab))
+                    {
+                        ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Tab));
+                        completion_requested = true;
+                    }
+                    (response.lost_focus() && self.dirty_editors.remove(&cell.id))
+                        .then(|| editor.clone())
+                })
+                .flatten();
+            if completion_requested {
+                self.request_completion(&cell);
+            }
             if let Some(source) = edited {
                 self.emit(NotebookCommandKind::ModifyCells {
                     changes: vec![CellMutation::Update {
@@ -361,6 +449,26 @@ impl NotebookEguiApp {
                         metadata: None,
                         cell_type: Some(cell.cell_type.clone()),
                     }],
+                });
+            }
+            if let Some(completion) = self.completion_suggestions.get(&cell.id).cloned() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Completions:");
+                    for value in completion.matches.iter().take(12) {
+                        if ui.button(value).clicked() {
+                            if let Some((_, editor)) =
+                                self.editors.iter_mut().find(|(id, _)| id == &cell.id)
+                            {
+                                let start = completion.cursor_start.min(editor.len());
+                                let end = completion.cursor_end.min(editor.len()).max(start);
+                                if editor.is_char_boundary(start) && editor.is_char_boundary(end) {
+                                    editor.replace_range(start..end, value);
+                                    self.dirty_editors.insert(cell.id.clone());
+                                }
+                            }
+                            self.completion_suggestions.remove(&cell.id);
+                        }
+                    }
                 });
             }
             for output in &cell.outputs {
@@ -379,6 +487,30 @@ impl eframe::App for NotebookEguiApp {
             style.spacing.interact_size.y = if compact_controls { 44.0 } else { 30.0 };
             style.visuals.selection.bg_fill = Color32::from_rgb(210, 232, 246);
         });
+        egui_extras::install_image_loaders(ctx);
+        if ctx.input(|input| input.key_pressed(Key::Escape)) {
+            self.edit_mode = false;
+        }
+        let command_mode = !self.edit_mode;
+        if command_mode && ctx.input(|input| input.key_pressed(Key::A)) {
+            let index = self
+                .state
+                .snapshot
+                .selected_cell_id
+                .as_ref()
+                .and_then(|id| {
+                    self.state
+                        .snapshot
+                        .cells
+                        .iter()
+                        .position(|cell| &cell.id == id)
+                })
+                .unwrap_or(0);
+            self.insert_cell(index, CellType::Code, String::new());
+        }
+        if command_mode && ctx.input(|input| input.key_pressed(Key::B)) {
+            self.insert_cell_after_selection(CellType::Code);
+        }
         if ctx.input(|input| input.modifiers.command && input.key_pressed(Key::Enter))
             && let Some(id) = self.state.snapshot.selected_cell_id.clone()
         {
@@ -426,6 +558,25 @@ impl eframe::App for NotebookEguiApp {
 }
 
 fn render_output(ui: &mut egui::Ui, output: &CellOutput) {
+    if let CellOutput::Rich { mime, data } = output
+        && matches!(mime.as_str(), "image/png" | "image/svg+xml")
+    {
+        egui::Frame::new()
+            .fill(Color32::from_rgb(248, 250, 251))
+            .inner_margin(Margin::same(8))
+            .show(ui, |ui| {
+                ui.add(
+                    egui::Image::from_uri(if mime == "image/png" {
+                        format!("data:image/png;base64,{data}")
+                    } else {
+                        format!("data:image/svg+xml;base64,{data}")
+                    })
+                    .max_width(ui.available_width())
+                    .alt_text("Notebook graph output"),
+                );
+            });
+        return;
+    }
     let text = match output {
         CellOutput::Text { text } | CellOutput::Stream { text, .. } => text.clone(),
         CellOutput::Error {
@@ -441,4 +592,18 @@ fn render_output(ui: &mut egui::Ui, output: &CellOutput) {
         .show(ui, |ui| {
             ui.add(egui::Label::new(RichText::new(text).monospace()).wrap());
         });
+}
+
+fn render_markdown(ui: &mut egui::Ui, source: &str) {
+    for line in source.lines() {
+        if let Some(text) = line.strip_prefix("# ") {
+            ui.heading(text);
+        } else if let Some(text) = line.strip_prefix("## ") {
+            ui.label(RichText::new(text).size(18.0).strong());
+        } else if line.starts_with("- ") {
+            ui.label(format!("• {}", line.trim_start_matches("- ")));
+        } else {
+            ui.label(line);
+        }
+    }
 }

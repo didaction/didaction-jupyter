@@ -157,6 +157,13 @@ impl eframe::App for MountedApp {
                     );
                     return;
                 };
+                if let Some(completion) = result.completion.clone() {
+                    app.lock()
+                        .expect("notebook app mutex poisoned")
+                        .apply_completion(result.command_id, completion);
+                    repaint.request_repaint();
+                    return;
+                }
                 if let Some(error) = result.error {
                     set_visible_error(&app, error.code, &error.message, error.retryable, &repaint);
                 } else if let Some(snapshot) = result.snapshot {

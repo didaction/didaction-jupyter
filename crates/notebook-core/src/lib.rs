@@ -130,6 +130,14 @@ impl NotebookState {
             next.last_error = Some(error);
             return Ok(next);
         }
+        if result.completion.is_some() && result.snapshot.is_none() {
+            next.sync_state = if next.pending.is_empty() {
+                SyncState::Synchronized
+            } else {
+                SyncState::Dirty
+            };
+            return Ok(next);
+        }
         let snapshot = result.snapshot.ok_or_else(|| ProtocolError {
             code: ErrorCode::MalformedResponse,
             message: "successful result omitted snapshot".into(),
@@ -305,6 +313,7 @@ mod tests {
             base_revision: Some(1),
             committed_revision: Some(2),
             snapshot: Some(snapshot(2)),
+            completion: None,
             error: None,
         };
         let applied = state.apply_result(result.clone()).unwrap();
@@ -325,9 +334,47 @@ mod tests {
             base_revision: Some(1),
             committed_revision: Some(2),
             snapshot: None,
+            completion: None,
             error: None,
         };
         assert!(state.apply_result(result).is_err());
         assert_eq!(state, before);
+    }
+
+    #[test]
+    fn completion_result_commits_without_replacing_snapshot() {
+        let command = NotebookCommand {
+            protocol_version: 1,
+            command_id: Uuid::from_u128(2),
+            idempotency_key: "completion".into(),
+            expected_revision: Some(1),
+            timeout_ms: 1000,
+            kind: NotebookCommandKind::Complete {
+                code: "value.bi".into(),
+                cursor_pos: 8,
+            },
+        };
+        let state = NotebookState::new(snapshot(1))
+            .unwrap()
+            .prepare(command)
+            .unwrap()
+            .optimistic_state;
+        let result = CommandResult {
+            protocol_version: 1,
+            command_id: Uuid::from_u128(2),
+            idempotency_key: "completion".into(),
+            base_revision: Some(1),
+            committed_revision: Some(1),
+            snapshot: None,
+            completion: Some(notebook_protocol::CompletionReply {
+                matches: vec!["bit_length".into()],
+                cursor_start: 6,
+                cursor_end: 8,
+            }),
+            error: None,
+        };
+        let applied = state.apply_result(result).unwrap();
+        assert_eq!(applied.snapshot, snapshot(1));
+        assert_eq!(applied.sync_state, SyncState::Synchronized);
     }
 }

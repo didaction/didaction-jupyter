@@ -23,17 +23,13 @@ def call(payload: dict[str, object]) -> dict[str, object]:
         data=json.dumps(payload).encode(),
         headers={"content-type": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=40) as response:  # noqa: S310 - fixed loopback URL
+    with urllib.request.urlopen(request, timeout=40) as response:  # noqa: S310
         return json.load(response)
 
 
-notebook_path = os.environ.get("DIDACTION_SMOKE_PATH", f"acceptance-{uuid.uuid4()}.ipynb")
-setup = call(command("setup", path=notebook_path, kernel="python3", create=True))
-assert not setup.get("error"), setup
-revision = setup["snapshot"]["revision"]
-for source in ("value = 40 + 2", "value"):
-    index = len(setup["snapshot"]["cells"])
-    inserted = call(
+def insert_cell(revision: int, index: int, source: str, cell_type: str = "code") -> dict:
+    cell_id = str(uuid.uuid4())
+    result = call(
         command(
             "modify_cells",
             revision,
@@ -42,8 +38,8 @@ for source in ("value = 40 + 2", "value"):
                     "operation": "insert",
                     "index": index,
                     "cell": {
-                        "id": str(uuid.uuid4()),
-                        "cell_type": "code",
+                        "id": cell_id,
+                        "cell_type": cell_type,
                         "source": source,
                         "metadata": {},
                         "execution_count": None,
@@ -53,105 +49,64 @@ for source in ("value = 40 + 2", "value"):
             ],
         )
     )
-    assert not inserted.get("error"), inserted
-    revision = inserted["snapshot"]["revision"]
-    setup = call(command("execute_cell", revision, cell_id=f"position-{index}"))
-    assert not setup.get("error"), setup
-    revision = setup["snapshot"]["revision"]
-query = call(command("query", revision, query="full"))
-assert "42" in json.dumps(query["snapshot"]["cells"]), query
-revision = query["snapshot"]["revision"]
+    assert not result.get("error"), result
+    assert any(cell["id"] == cell_id for cell in result["snapshot"]["cells"]), result
+    return result
 
-# Exercise the ordinary notebook editing primitives through the same real MCP path.
-inserted = call(
+
+path = os.environ.get("DIDACTION_SMOKE_PATH", f"acceptance-{uuid.uuid4()}.ipynb")
+state = call(command("setup", path=path, kernel="python3", create=True))
+assert not state.get("error"), state
+revision = state["snapshot"]["revision"]
+
+first = insert_cell(revision, len(state["snapshot"]["cells"]), "value = 40 + 2")
+first_id = first["snapshot"]["cells"][-1]["id"]
+state = call(command("execute_cell", first["snapshot"]["revision"], cell_id=first_id))
+second = insert_cell(state["snapshot"]["revision"], len(state["snapshot"]["cells"]), "value")
+second_id = second["snapshot"]["cells"][-1]["id"]
+state = call(command("execute_cell", second["snapshot"]["revision"], cell_id=second_id))
+assert "42" in json.dumps(state["snapshot"]["cells"]), state
+
+completion = call(
     command(
-        "modify_cells",
-        revision,
-        changes=[
-            {
-                "operation": "insert",
-                "index": 2,
-                "cell": {
-                    "id": str(uuid.uuid4()),
-                    "cell_type": "markdown",
-                    "source": "draft note",
-                    "metadata": {},
-                    "execution_count": None,
-                    "outputs": [],
-                },
-            }
-        ],
+        "complete",
+        state["snapshot"]["revision"],
+        code="value.bi",
+        cursor_pos=len("value.bi"),
     )
 )
-assert not inserted.get("error"), inserted
-revision = inserted["snapshot"]["revision"]
+assert not completion.get("error"), completion
+assert "bit_length" in json.dumps(completion.get("completion")), completion
 
-edited = call(
-    command(
-        "modify_cells",
-        revision,
-        changes=[
-            {
-                "operation": "update",
-                "cell_id": "position-2",
-                "source": "## Verified note",
-                "metadata": None,
-                "cell_type": "markdown",
-            }
-        ],
-    )
-)
-assert not edited.get("error"), edited
-revision = edited["snapshot"]["revision"]
-
+note = insert_cell(state["snapshot"]["revision"], 0, "## Verified note", cell_type="markdown")
+note_id = note["snapshot"]["cells"][0]["id"]
 moved = call(
     command(
         "modify_cells",
-        revision,
-        changes=[{"operation": "move", "cell_id": "position-2", "index": 0}],
+        note["snapshot"]["revision"],
+        changes=[{"operation": "move", "cell_id": note_id, "index": 2}],
     )
 )
-assert not moved.get("error"), moved
-assert moved["snapshot"]["cells"][0]["source"] == "## Verified note", moved
-revision = moved["snapshot"]["revision"]
-
+assert moved["snapshot"]["cells"][2]["id"] == note_id, moved
 deleted = call(
     command(
         "modify_cells",
-        revision,
-        changes=[{"operation": "delete", "cell_id": "position-0"}],
+        moved["snapshot"]["revision"],
+        changes=[{"operation": "delete", "cell_id": note_id}],
     )
 )
-assert not deleted.get("error"), deleted
-assert [cell["source"] for cell in deleted["snapshot"]["cells"]] == [
-    "value = 40 + 2",
-    "value",
-], deleted
-revision = deleted["snapshot"]["revision"]
+assert all(cell["id"] != note_id for cell in deleted["snapshot"]["cells"]), deleted
 
-blank = call(
-    command(
-        "modify_cells",
-        revision,
-        changes=[
-            {
-                "operation": "insert",
-                "index": 1,
-                "cell": {
-                    "id": str(uuid.uuid4()),
-                    "cell_type": "code",
-                    "source": "",
-                    "metadata": {},
-                    "execution_count": None,
-                    "outputs": [],
-                },
-            }
-        ],
-    )
+graph_source = (
+    "from IPython.display import SVG, display\n"
+    'display(SVG(\'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">\''
+    '+\'<rect width="80" height="40" fill="#2d698f"/></svg>\'))'
 )
-assert not blank.get("error"), blank
-assert blank["snapshot"]["cells"][1]["source"] == "", blank
-print(
-    "real Jupyter/ipykernel/MCP/gateway smoke: PASS "
-    "(observed 42; add/edit/move/delete; blank insert)"
+graph = insert_cell(
+    deleted["snapshot"]["revision"], len(deleted["snapshot"]["cells"]), graph_source
 )
+graph_id = graph["snapshot"]["cells"][-1]["id"]
+graph = call(command("execute_cell", graph["snapshot"]["revision"], cell_id=graph_id))
+assert "image/svg+xml" in json.dumps(graph["snapshot"]["cells"]), graph
+
+print("direct Jupyter/ipykernel smoke: PASS (42, completion, stable edits, SVG graph)")

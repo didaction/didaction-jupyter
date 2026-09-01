@@ -149,6 +149,10 @@ pub enum NotebookCommandKind {
     },
     InterruptKernel,
     RestartKernel,
+    Complete {
+        code: String,
+        cursor_pos: usize,
+    },
     Reconnect,
     Close,
 }
@@ -176,7 +180,6 @@ pub enum ErrorCode {
     Timeout,
     Disconnected,
     TransportError,
-    IncompatibleMcpSchema,
     MalformedResponse,
     PathRejected,
     ExecutionRejected,
@@ -201,7 +204,17 @@ pub struct CommandResult {
     pub base_revision: Option<u64>,
     pub committed_revision: Option<u64>,
     pub snapshot: Option<NotebookSnapshot>,
+    #[serde(default)]
+    pub completion: Option<CompletionReply>,
     pub error: Option<ProtocolError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompletionReply {
+    pub matches: Vec<String>,
+    pub cursor_start: usize,
+    pub cursor_end: usize,
 }
 
 pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> {
@@ -228,6 +241,12 @@ pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> 
             }
         }
         NotebookCommandKind::ExecuteCode { code } => validate_source(code)?,
+        NotebookCommandKind::Complete { code, cursor_pos } => {
+            validate_source(code)?;
+            if *cursor_pos > code.len() {
+                return Err(bounds("completion cursor is outside source"));
+            }
+        }
         NotebookCommandKind::ExecuteCell { cell_id }
             if cell_id.is_empty() || cell_id.len() > 128 =>
         {
