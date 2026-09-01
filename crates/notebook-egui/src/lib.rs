@@ -14,6 +14,69 @@ use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
 
+const MAX_EMBEDDED_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Default)]
+struct DataImageBytesLoader;
+
+impl DataImageBytesLoader {
+    const ID: &'static str = egui::generate_loader_id!(DataImageBytesLoader);
+}
+
+impl egui::load::BytesLoader for DataImageBytesLoader {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn load(&self, _ctx: &egui::Context, uri: &str) -> egui::load::BytesLoadResult {
+        let Some((header, encoded)) = uri.split_once(',') else {
+            return Err(egui::load::LoadError::NotSupported);
+        };
+        let mime = header
+            .strip_prefix("data:")
+            .and_then(|header| header.strip_suffix(";base64"))
+            .filter(|mime| {
+                matches!(
+                    *mime,
+                    "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "image/svg+xml"
+                )
+            })
+            .ok_or(egui::load::LoadError::NotSupported)?;
+        if encoded.len() > MAX_EMBEDDED_IMAGE_BYTES.saturating_mul(4).div_ceil(3) {
+            return Err(egui::load::LoadError::Loading(
+                "embedded Markdown image exceeds the 8 MiB limit".into(),
+            ));
+        }
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .map_err(|_| egui::load::LoadError::Loading("invalid base64 image data".into()))?;
+        if bytes.len() > MAX_EMBEDDED_IMAGE_BYTES {
+            return Err(egui::load::LoadError::Loading(
+                "embedded Markdown image exceeds the 8 MiB limit".into(),
+            ));
+        }
+        Ok(egui::load::BytesPoll::Ready {
+            size: None,
+            bytes: egui::load::Bytes::Shared(bytes.into()),
+            mime: Some(mime.to_owned()),
+        })
+    }
+
+    fn forget(&self, _uri: &str) {}
+
+    fn forget_all(&self) {}
+
+    fn byte_size(&self) -> usize {
+        0
+    }
+}
+
+fn install_data_image_loader(ctx: &egui::Context) {
+    if !ctx.is_loader_installed(DataImageBytesLoader::ID) {
+        ctx.add_bytes_loader(Arc::new(DataImageBytesLoader));
+    }
+}
+
 fn decode_rich_image(_mime: &str, data: &str) -> Result<Vec<u8>, base64::DecodeError> {
     base64::engine::general_purpose::STANDARD.decode(data)
 }
@@ -1465,6 +1528,7 @@ impl eframe::App for NotebookEguiApp {
             style.spacing.interact_size.y = if compact_controls { 44.0 } else { 30.0 };
             style.visuals.selection.bg_fill = Color32::from_rgb(210, 232, 246);
         });
+        install_data_image_loader(ctx);
         egui_extras::install_image_loaders(ctx);
         let now = ctx.input(|input| input.time);
         if self.autosave_due.is_some_and(|deadline| deadline <= now) {
@@ -2501,6 +2565,19 @@ mod tests {
             assert!(image.height() > 1);
             assert!(image.pixels.iter().any(|pixel| pixel.a() > 0));
         }
+    }
+
+    #[test]
+    fn markdown_base64_image_uri_loads_without_network() {
+        let context = egui::Context::default();
+        install_data_image_loader(&context);
+        egui_extras::install_image_loaders(&context);
+        let uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+        assert!(matches!(
+            context.try_load_bytes(uri),
+            Ok(egui::load::BytesPoll::Ready { .. })
+        ));
     }
 
     #[test]
