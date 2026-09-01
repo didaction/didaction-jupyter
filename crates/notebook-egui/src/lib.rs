@@ -298,10 +298,12 @@ impl NotebookEguiApp {
                     self.state.sync_state,
                     SyncState::Dirty | SyncState::Executing
                 );
-                let drag = ui.add_enabled(
-                    idle,
-                    egui::Label::new(RichText::new("Drag").small()).sense(egui::Sense::drag()),
-                );
+                let drag = ui
+                    .add_enabled(idle, drag_handle())
+                    .on_hover_text("Drag to reorder cell");
+                if drag.hovered() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                }
                 if drag.drag_started() {
                     self.dragging_cell = Some(cell.id.clone());
                     self.state.snapshot.selected_cell_id = Some(cell.id.clone());
@@ -782,6 +784,12 @@ fn move_index_for_drop(source_index: usize, hovered_index: usize, before: bool) 
     boundary.saturating_sub(usize::from(source_index < boundary))
 }
 
+fn drag_handle() -> egui::Button<'static> {
+    egui::Button::new(RichText::new("Drag").small())
+        .sense(egui::Sense::drag())
+        .min_size(egui::vec2(52.0, 28.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -845,5 +853,12 @@ mod tests {
         assert_eq!(move_index_for_drop(0, 2, false), 2);
         assert_eq!(move_index_for_drop(3, 1, true), 1);
         assert_eq!(move_index_for_drop(3, 1, false), 2);
+    }
+
+    #[test]
+    fn drag_handle_is_a_non_selectable_button() {
+        fn assert_button(_: egui::Button<'static>) {}
+
+        assert_button(drag_handle());
     }
 }
