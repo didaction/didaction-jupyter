@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-01T13:10:45Z",
+  "title": "Design System: didaction notebook",
+  "extensions": {
+    "colorMeta": {
+      "brand-orange": {
+        "role": "primary",
+        "displayName": "Didaction Orange",
+        "canonical": "#d66b2c",
+        "tonalRamp": ["oklch(15% 0.153 47.5)", "oklch(25% 0.153 47.5)", "oklch(35% 0.153 47.5)", "oklch(45% 0.153 47.5)", "oklch(55% 0.153 47.5)", "oklch(65% 0.153 47.5)", "oklch(80% 0.153 47.5)", "oklch(95% 0.153 47.5)"]
+      },
+      "focus-blue": {
+        "role": "primary",
+        "displayName": "Notebook Blue",
+        "canonical": "#2d698f",
+        "tonalRamp": ["oklch(15% 0.087 239.6)", "oklch(25% 0.087 239.6)", "oklch(35% 0.087 239.6)", "oklch(45% 0.087 239.6)", "oklch(55% 0.087 239.6)", "oklch(65% 0.087 239.6)", "oklch(80% 0.087 239.6)", "oklch(95% 0.087 239.6)"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Charcoal Ink",
+        "canonical": "#263238",
+        "tonalRamp": ["oklch(15% 0.019 229.8)", "oklch(25% 0.019 229.8)", "oklch(35% 0.019 229.8)", "oklch(45% 0.019 229.8)", "oklch(55% 0.019 229.8)", "oklch(65% 0.019 229.8)", "oklch(80% 0.019 229.8)", "oklch(95% 0.019 229.8)"]
+      },
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Slate Metadata",
+        "canonical": "#53636b",
+        "tonalRamp": ["oklch(15% 0.023 229.5)", "oklch(25% 0.023 229.5)", "oklch(35% 0.023 229.5)", "oklch(45% 0.023 229.5)", "oklch(55% 0.023 229.5)", "oklch(65% 0.023 229.5)", "oklch(80% 0.023 229.5)", "oklch(95% 0.023 229.5)"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Notebook Canvas",
+        "canonical": "#f7f7f7",
+        "tonalRamp": ["oklch(15% 0.000 89.9)", "oklch(25% 0.000 89.9)", "oklch(35% 0.000 89.9)", "oklch(45% 0.000 89.9)", "oklch(55% 0.000 89.9)", "oklch(65% 0.000 89.9)", "oklch(80% 0.000 89.9)", "oklch(95% 0.000 89.9)"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Paper Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": ["oklch(15% 0.000 89.9)", "oklch(25% 0.000 89.9)", "oklch(35% 0.000 89.9)", "oklch(45% 0.000 89.9)", "oklch(55% 0.000 89.9)", "oklch(65% 0.000 89.9)", "oklch(80% 0.000 89.9)", "oklch(95% 0.000 89.9)"]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Hairline Divider",
+        "canonical": "#d7dcdf",
+        "tonalRamp": ["oklch(15% 0.007 233.7)", "oklch(25% 0.007 233.7)", "oklch(35% 0.007 233.7)", "oklch(45% 0.007 233.7)", "oklch(55% 0.007 233.7)", "oklch(65% 0.007 233.7)", "oklch(80% 0.007 233.7)", "oklch(95% 0.007 233.7)"]
+      },
+      "selected-cell": {
+        "role": "neutral",
+        "displayName": "Selected Paper",
+        "canonical": "#fafdff",
+        "tonalRamp": ["oklch(15% 0.004 236.5)", "oklch(25% 0.004 236.5)", "oklch(35% 0.004 236.5)", "oklch(45% 0.004 236.5)", "oklch(55% 0.004 236.5)", "oklch(65% 0.004 236.5)", "oklch(80% 0.004 236.5)", "oklch(95% 0.004 236.5)"]
+      },
+      "selection-blue": {
+        "role": "primary",
+        "displayName": "Selection Wash",
+        "canonical": "#d2e8f6",
+        "tonalRamp": ["oklch(15% 0.030 235.6)", "oklch(25% 0.030 235.6)", "oklch(35% 0.030 235.6)", "oklch(45% 0.030 235.6)", "oklch(55% 0.030 235.6)", "oklch(65% 0.030 235.6)", "oklch(80% 0.030 235.6)", "oklch(95% 0.030 235.6)"]
+      },
+      "output-surface": {
+        "role": "neutral",
+        "displayName": "Output Wash",
+        "canonical": "#f8fafb",
+        "tonalRamp": ["oklch(15% 0.003 228.8)", "oklch(25% 0.003 228.8)", "oklch(35% 0.003 228.8)", "oklch(45% 0.003 228.8)", "oklch(55% 0.003 228.8)", "oklch(65% 0.003 228.8)", "oklch(80% 0.003 228.8)", "oklch(95% 0.003 228.8)"]
+      },
+      "warning-surface": {
+        "role": "tertiary",
+        "displayName": "Trust Wash",
+        "canonical": "#fff8e8",
+        "tonalRamp": ["oklch(15% 0.022 87.1)", "oklch(25% 0.022 87.1)", "oklch(35% 0.022 87.1)", "oklch(45% 0.022 87.1)", "oklch(55% 0.022 87.1)", "oklch(65% 0.022 87.1)", "oklch(80% 0.022 87.1)", "oklch(95% 0.022 87.1)"]
+      },
+      "warning-divider": {
+        "role": "tertiary",
+        "displayName": "Trust Divider",
+        "canonical": "#ead49e",
+        "tonalRamp": ["oklch(15% 0.074 88.4)", "oklch(25% 0.074 88.4)", "oklch(35% 0.074 88.4)", "oklch(45% 0.074 88.4)", "oklch(55% 0.074 88.4)", "oklch(65% 0.074 88.4)", "oklch(80% 0.074 88.4)", "oklch(95% 0.074 88.4)"]
+      },
+      "success": {
+        "role": "secondary",
+        "displayName": "Saved Green",
+        "canonical": "#2e7d32",
+        "tonalRamp": ["oklch(15% 0.135 144.2)", "oklch(25% 0.135 144.2)", "oklch(35% 0.135 144.2)", "oklch(45% 0.135 144.2)", "oklch(55% 0.135 144.2)", "oklch(65% 0.135 144.2)", "oklch(80% 0.135 144.2)", "oklch(95% 0.135 144.2)"]
+      },
+      "pending": {
+        "role": "secondary",
+        "displayName": "Pending Orange",
+        "canonical": "#ef6c00",
+        "tonalRamp": ["oklch(15% 0.185 48.1)", "oklch(25% 0.185 48.1)", "oklch(35% 0.185 48.1)", "oklch(45% 0.185 48.1)", "oklch(55% 0.185 48.1)", "oklch(65% 0.185 48.1)", "oklch(80% 0.185 48.1)", "oklch(95% 0.185 48.1)"]
+      },
+      "running": {
+        "role": "secondary",
+        "displayName": "Running Blue",
+        "canonical": "#0277bd",
+        "tonalRamp": ["oklch(15% 0.139 245.4)", "oklch(25% 0.139 245.4)", "oklch(35% 0.139 245.4)", "oklch(45% 0.139 245.4)", "oklch(55% 0.139 245.4)", "oklch(65% 0.139 245.4)", "oklch(80% 0.139 245.4)", "oklch(95% 0.139 245.4)"]
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Action Red",
+        "canonical": "#c62828",
+        "tonalRamp": ["oklch(15% 0.194 26.7)", "oklch(25% 0.194 26.7)", "oklch(35% 0.194 26.7)", "oklch(45% 0.194 26.7)", "oklch(55% 0.194 26.7)", "oklch(65% 0.194 26.7)", "oklch(80% 0.194 26.7)", "oklch(95% 0.194 26.7)"]
+      }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Notebook Title", "purpose": "The compact egui notebook title." },
+      "body": { "displayName": "Interface Body", "purpose": "Controls, guidance, and bounded failures." },
+      "label": { "displayName": "Shell Metadata", "purpose": "Connection state, revision details, and trust copy." },
+      "code": { "displayName": "Notebook Code", "purpose": "Prompts, editable source, output, and tracebacks." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "reduced-motion-floor", "value": "0.01ms", "purpose": "Collapses any incidental animation when reduced motion is requested; the interface otherwise avoids decorative motion." }
+    ],
+    "breakpoints": [
+      { "name": "canvas-controls-compact", "value": "600px" },
+      { "name": "browser-shell-compact", "value": "640px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Shell Header",
+      "kind": "nav",
+      "description": "Compact product identity and connection status above the notebook canvas.",
+      "html": "<header class=\"ds-shell-header\"><div><strong>didaction</strong><span>local notebook</span></div><output>Connected · WebMCP unavailable</output></header>",
+      "css": ".ds-shell-header { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 20px; color: #263238; background: #fff; border-bottom: 1px solid #d7dcdf; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-shell-header div { display: flex; align-items: baseline; gap: 10px; } .ds-shell-header strong { color: #d66b2c; letter-spacing: -0.02em; } .ds-shell-header span, .ds-shell-header output { color: #53636b; font-size: 0.82rem; } @media (max-width: 640px) { .ds-shell-header { padding: 0 12px; } .ds-shell-header span { display: none; } }"
+    },
+    {
+      "name": "Browser Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Square fallback and recovery action with visible focus.",
+      "html": "<button class=\"ds-button\" type=\"button\">Retry</button>",
+      "css": ".ds-button { border: 1px solid #84949c; background: #fff; padding: 7px 12px; color: #263238; cursor: pointer; font: 400 16px/1.4 ui-sans-serif, system-ui, sans-serif; border-radius: 0; } .ds-button:hover { background: #eef4f7; } .ds-button:focus-visible { outline: 3px solid #2d698f; outline-offset: 3px; } .ds-button:active { background: #dfeaf0; }"
+    },
+    {
+      "name": "Selected Notebook Cell",
+      "kind": "card",
+      "refersTo": "cell-selected",
+      "description": "The active unit of notebook editing and execution.",
+      "html": "<article class=\"ds-cell ds-cell-selected\"><div class=\"ds-cell-actions\"><code>In [5]</code><button>Run</button><button>Move down</button><button>Delete</button></div><pre>value = 40 + 2</pre></article>",
+      "css": ".ds-cell { padding: 10px; color: #263238; background: #fff; border: 1px solid #d2d2d2; border-radius: 3px; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-cell-selected { background: #fafdff; border: 2px solid #2d6991; } .ds-cell-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .ds-cell code, .ds-cell pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; } .ds-cell button { min-height: 30px; border: 0; background: #e6e6e6; color: #4b555c; padding: 5px 8px; } .ds-cell button:hover { background: #dce6eb; } .ds-cell button:focus-visible { outline: 3px solid #2d698f; outline-offset: 2px; } .ds-cell pre { margin: 10px 0 0; padding: 8px 4px; background: #fff; }"
+    },
+    {
+      "name": "Notebook Output",
+      "kind": "custom",
+      "refersTo": "output-panel",
+      "description": "Committed text, stream, rich-data summary, or traceback directly beneath its source.",
+      "html": "<pre class=\"ds-output\">42</pre>",
+      "css": ".ds-output { margin: 8px 0 0; padding: 8px; color: #263238; background: #f8fafb; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 14px/20px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; } .ds-output:focus-visible { outline: 3px solid #2d698f; outline-offset: 3px; }"
+    },
+    {
+      "name": "Kernel Status Strip",
+      "kind": "custom",
+      "description": "Persistent synchronization, kernel, and revision context at the canvas edge.",
+      "html": "<div class=\"ds-status\" role=\"status\"><span><i></i>Saved</span><span>Kernel: python3 · Idle</span><span>Revision 5</span></div>",
+      "css": ".ds-status { display: flex; align-items: center; min-height: 32px; color: #53636b; background: #f7f7f7; border-top: 1px solid #c4c4c4; font: 400 13px/1.4 ui-sans-serif, system-ui, sans-serif; } .ds-status span { padding: 6px 10px; border-right: 1px solid #d7dcdf; } .ds-status i { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #2e7d32; } .ds-status:focus-visible { outline: 3px solid #2d698f; outline-offset: -3px; }"
+    },
+    {
+      "name": "Action Required Status",
+      "kind": "custom",
+      "description": "Bounded failure state that pairs the error with the next valid recovery action.",
+      "html": "<div class=\"ds-status-error\" role=\"alert\"><strong><i></i>Action required</strong><span>Connection lost — Retry or reconnect.</span></div>",
+      "css": ".ds-status-error { display: grid; gap: 4px; padding: 8px 10px; color: #b71c1c; background: #fff; border-top: 1px solid #d7dcdf; font: 400 13px/1.4 ui-sans-serif, system-ui, sans-serif; } .ds-status-error strong { font-weight: 600; } .ds-status-error i { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #c62828; } .ds-status-error:focus-visible { outline: 3px solid #2d698f; outline-offset: -3px; }"
+    },
+    {
+      "name": "Fatal Error Panel",
+      "kind": "card",
+      "description": "Startup failure replacement with a specific message and direct retry action.",
+      "html": "<section class=\"ds-fatal\" role=\"alert\"><h1>The notebook could not start</h1><p>The local notebook service did not respond.</p><button type=\"button\">Retry</button></section>",
+      "css": ".ds-fatal { max-width: 640px; margin: 80px auto; padding: 28px; color: #263238; background: #fff; border: 1px solid #c3cbd0; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-fatal h1 { margin-top: 0; font-size: 1.4rem; } .ds-fatal button { border: 1px solid #84949c; background: #fff; padding: 7px 12px; color: inherit; cursor: pointer; } .ds-fatal button:hover { background: #eef4f7; } .ds-fatal button:focus-visible { outline: 3px solid #2d698f; outline-offset: 3px; }"
+    },
+    {
+      "name": "Trust Notice",
+      "kind": "custom",
+      "refersTo": "privacy-note",
+      "description": "Persistent local-execution warning beneath the notebook.",
+      "html": "<p class=\"ds-trust-note\">Local execution is unsafe. Only run notebooks you trust.</p>",
+      "css": ".ds-trust-note { margin: 0; padding: 8px 20px; color: #53636b; background: #fff8e8; border-top: 1px solid #ead49e; font: 400 0.82rem/1.4 ui-sans-serif, system-ui, sans-serif; } .ds-trust-note:focus-visible { outline: 3px solid #2d698f; outline-offset: -3px; } @media (max-width: 640px) { .ds-trust-note { padding-inline: 12px; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Familiar Local Notebook",
+    "overview": "didaction should feel like opening the original Jupyter Notebook on a trusted local machine: a quiet vertical document, compact IDE chrome, and controls that stay close to the work. Familiarity is functional here. It lets a person read cells, edit code, execute, inspect output, recover the kernel, and resume without first learning a new interface language.\n\nThe visual system is deliberately utilitarian rather than expressive. White working surfaces sit on a nearly white canvas; thin dividers organize the shell; selection, focus, and kernel state receive the strongest color. The small orange wordmark is the only persistent brand accent. There are no decorative illustrations, floating panels, gradients, or ornamental motion.",
+    "keyCharacteristics": [
+      "Document-led vertical notebook flow.",
+      "Compact, desktop-IDE chrome that wraps cleanly on narrow screens.",
+      "Flat light surfaces separated by thin rules rather than depth effects.",
+      "Restrained sans-serif interface type paired with monospace code and output.",
+      "Blue emphasis for focus and cell selection; semantic color only for status and risk.",
+      "Quiet state changes with visible, actionable recovery paths."
+    ],
+    "rules": [
+      { "name": "The Color Has a Job Rule", "body": "Outside the wordmark, color must indicate focus, selection, synchronization, execution, warning, or failure.", "section": "colors" },
+      { "name": "The Current Cell Rule", "body": "The selected cell uses both a stronger blue edge and a barely tinted surface, so selection remains clear without filling the document with color.", "section": "colors" },
+      { "name": "The Code Stays Code Rule", "body": "Prompts, editable source, execution results, and tracebacks always use monospace; surrounding controls and system status always use the UI sans.", "section": "typography" },
+      { "name": "The Document Owns the Viewport Rule", "body": "Chrome stays compact so working cells, output, and kernel state remain visible together whenever the viewport allows it.", "section": "layout" },
+      { "name": "The Narrow Screen Preserves the Task Rule", "body": "Controls may wrap and secondary labels may disappear, but execution, recovery, status, and the ordered cell document remain available.", "section": "layout" },
+      { "name": "The Flat Notebook Rule", "body": "Do not use shadows, glass, gradients, or floating cards to separate ordinary notebook regions; use tonal surfaces and one-pixel rules.", "section": "elevation" },
+      { "name": "The Almost-Square Rule", "body": "Corners should feel structural and tool-like. Do not introduce pill controls or large card radii.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do keep the vertical notebook document, its ordered cells, and each output directly adjacent to its source.",
+      "Do reserve blue for focus, selection, and running state; reserve green, orange, and red for explicit system meaning.",
+      "Do preserve visible keyboard focus and touch-sized controls at narrow widths.",
+      "Do keep failures bounded, specific, and paired with the next valid recovery action.",
+      "Do show synchronization, kernel state, and revision as quiet persistent metadata."
+    ],
+    "donts": [
+      "Don't turn cells into elevated cards or distribute them across a dashboard grid.",
+      "Don't add decorative motion, gradients, glass effects, or oversized brand moments.",
+      "Don't hide interrupt, restart, reconnect, or failure guidance behind icon-only controls.",
+      "Don't use proportional type for code, prompts, output, or tracebacks.",
+      "Don't let responsive wrapping reorder the execution story or separate output from its cell."
+    ]
+  }
+}
