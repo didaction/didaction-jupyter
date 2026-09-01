@@ -590,7 +590,7 @@ impl NotebookEguiApp {
                 let rendered = self.rendered_markdown.contains(&cell.id);
                 if rendered {
                     let rendered_response =
-                        rendered_markdown_response(ui, &self.editor_source(&cell))
+                        rendered_markdown_response(ui, &cell.id, &self.editor_source(&cell))
                             .on_hover_text("Double-click to edit Markdown");
                     self.apply_rendered_markdown_interaction(
                         &cell.id,
@@ -760,10 +760,14 @@ impl NotebookEguiApp {
             self.state.snapshot.selected_cell_id = Some(cell_id.to_owned());
         }
         if double_clicked {
-            self.rendered_markdown.remove(cell_id);
-            self.pending_editor_focus = Some(cell_id.to_owned());
-            self.edit_mode = true;
+            self.begin_editing_cell(cell_id);
         }
+    }
+
+    fn begin_editing_cell(&mut self, cell_id: &str) {
+        self.rendered_markdown.remove(cell_id);
+        self.pending_editor_focus = Some(cell_id.to_owned());
+        self.edit_mode = true;
     }
 }
 
@@ -831,8 +835,7 @@ impl eframe::App for NotebookEguiApp {
             && ctx.input(|input| input.key_pressed(Key::Enter))
             && let Some((_, cell)) = self.selected_cell()
         {
-            self.pending_editor_focus = Some(cell.id);
-            self.edit_mode = true;
+            self.begin_editing_cell(&cell.id);
         }
         if command_mode
             && ctx.input(|input| input.key_pressed(Key::ArrowDown) || input.key_pressed(Key::J))
@@ -1068,10 +1071,13 @@ fn render_markdown(ui: &mut egui::Ui, source: &str) {
     }
 }
 
-fn rendered_markdown_response(ui: &mut egui::Ui, source: &str) -> egui::Response {
-    ui.scope(|ui| render_markdown(ui, source))
-        .response
-        .interact(egui::Sense::click())
+fn rendered_markdown_response(ui: &mut egui::Ui, cell_id: &str, source: &str) -> egui::Response {
+    let rendered = ui.scope(|ui| render_markdown(ui, source));
+    ui.interact(
+        rendered.response.rect,
+        ui.make_persistent_id(("rendered-markdown", cell_id)),
+        egui::Sense::click(),
+    )
 }
 
 fn completion_row(ui: &mut egui::Ui, value: &str, selected: bool) -> egui::Response {
@@ -1331,7 +1337,7 @@ mod tests {
         let mut senses_click = false;
         let _ = context.run(egui::RawInput::default(), |context| {
             egui::CentralPanel::default().show(context, |ui| {
-                senses_click = rendered_markdown_response(ui, "# Hello")
+                senses_click = rendered_markdown_response(ui, "markdown", "# Hello")
                     .sense
                     .senses_click();
             });
@@ -1360,6 +1366,19 @@ mod tests {
         app.apply_rendered_markdown_interaction("code", true, true);
 
         assert_eq!(app.state.snapshot.selected_cell_id.as_deref(), Some("code"));
+        assert!(app.edit_mode);
+        assert_eq!(app.pending_editor_focus.as_deref(), Some("code"));
+        assert!(!app.rendered_markdown.contains("code"));
+    }
+
+    #[test]
+    fn enter_on_selected_rendered_markdown_reveals_the_editor() {
+        let mut app = app();
+        app.state.snapshot.cells[0].cell_type = CellType::Markdown;
+        app.rendered_markdown.insert("code".into());
+
+        app.begin_editing_cell("code");
+
         assert!(app.edit_mode);
         assert_eq!(app.pending_editor_focus.as_deref(), Some("code"));
         assert!(!app.rendered_markdown.contains("code"));
