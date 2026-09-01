@@ -1,0 +1,33 @@
+services:
+  jupyter:
+    build: .
+    command: jupyter lab --config services/jupyter/jupyter_server_config.py
+    environment:
+      DIDACTION_JUPYTER_HOST: 0.0.0.0
+      DIDACTION_JUPYTER_PORT: 8888
+      DIDACTION_JUPYTER_TOKEN: ${DIDACTION_JUPYTER_TOKEN:?generate a development token}
+      DIDACTION_NOTEBOOK_WORKSPACE: /workspace
+      JUPYTER_CONFIG_DIR: /tmp/jupyter-config
+      JUPYTER_DATA_DIR: /tmp/jupyter-data
+      JUPYTER_RUNTIME_DIR: /tmp/jupyter-runtime
+    ports: ["127.0.0.1:8888:8888"]
+    volumes: ["notebooks:/workspace"]
+  mcp:
+    build: .
+    command: mcp-jupyter --transport http --host 0.0.0.0 --port 8090
+    environment:
+      TOKEN: ${DIDACTION_JUPYTER_TOKEN:?generate a development token}
+    ports: ["127.0.0.1:8090:8090"]
+    depends_on: [jupyter]
+  gateway:
+    build: .
+    command: uvicorn services.gateway.app.main:app --host 0.0.0.0 --port 8080
+    environment:
+      DIDACTION_JUPYTER_URL: http://jupyter:8888
+      DIDACTION_MCP_URL: http://mcp:8090/mcp/
+      DIDACTION_WORKSPACE: /workspace
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["notebooks:/workspace"]
+    depends_on: [mcp]
+volumes:
+  notebooks:
