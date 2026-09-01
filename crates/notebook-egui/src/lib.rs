@@ -592,12 +592,11 @@ impl NotebookEguiApp {
                     let rendered_response =
                         rendered_markdown_response(ui, &self.editor_source(&cell))
                             .on_hover_text("Double-click to edit Markdown");
-                    if rendered_response.double_clicked() {
-                        self.rendered_markdown.remove(&cell.id);
-                        self.state.snapshot.selected_cell_id = Some(cell.id.clone());
-                        self.pending_editor_focus = Some(cell.id.clone());
-                        self.edit_mode = true;
-                    }
+                    self.apply_rendered_markdown_interaction(
+                        &cell.id,
+                        rendered_response.clicked(),
+                        rendered_response.double_clicked(),
+                    );
                 } else if ui.button("Render Markdown").clicked() {
                     self.rendered_markdown.insert(cell.id.clone());
                     self.edit_mode = false;
@@ -748,6 +747,22 @@ impl NotebookEguiApp {
                 }
                 self.dragging_cell = None;
             }
+        }
+    }
+
+    fn apply_rendered_markdown_interaction(
+        &mut self,
+        cell_id: &str,
+        clicked: bool,
+        double_clicked: bool,
+    ) {
+        if clicked || double_clicked {
+            self.state.snapshot.selected_cell_id = Some(cell_id.to_owned());
+        }
+        if double_clicked {
+            self.rendered_markdown.remove(cell_id);
+            self.pending_editor_focus = Some(cell_id.to_owned());
+            self.edit_mode = true;
         }
     }
 }
@@ -1227,6 +1242,31 @@ mod tests {
         });
 
         assert!(senses_click);
+    }
+
+    #[test]
+    fn clicking_rendered_markdown_selects_without_editing() {
+        let mut app = app();
+        app.state.snapshot.selected_cell_id = None;
+
+        app.apply_rendered_markdown_interaction("code", true, false);
+
+        assert_eq!(app.state.snapshot.selected_cell_id.as_deref(), Some("code"));
+        assert!(!app.edit_mode);
+        assert!(app.pending_editor_focus.is_none());
+    }
+
+    #[test]
+    fn double_clicking_rendered_markdown_selects_and_edits() {
+        let mut app = app();
+        app.rendered_markdown.insert("code".into());
+
+        app.apply_rendered_markdown_interaction("code", true, true);
+
+        assert_eq!(app.state.snapshot.selected_cell_id.as_deref(), Some("code"));
+        assert!(app.edit_mode);
+        assert_eq!(app.pending_editor_focus.as_deref(), Some("code"));
+        assert!(!app.rendered_markdown.contains("code"));
     }
 
     #[test]
