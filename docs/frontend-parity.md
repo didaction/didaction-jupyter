@@ -23,7 +23,7 @@ behavior. See the [primary-source parity reference](jupyter-frontend-parity-refe
 |    10 | Kernel completion                    | Supported, basic | Tab requests `complete_request`; the editor dropdown supports mouse, ↑/↓, Enter, Tab, Escape, and restores the caret after inserted text. |
 |    11 | Interrupt/restart/reconnect          | Visual parity    | Familiar stop/restart toolbar position plus Kernel menu; restart confirmation, native lifecycle, and path-based session reuse.            |
 |    12 | Browser restart persistence          | Supported        | Notebook on disk plus reusable path-associated Jupyter session.                                                                           |
-|    13 | Keyboard notebook flow               | Supported        | Command/edit indicator, Escape, Enter, A/B, M/Y/R, Shift+Enter, Alt+Enter, Cmd/Ctrl+Enter, Tab, and edit-history shortcuts.               |
+|    13 | Keyboard notebook flow               | Supported        | Command/edit indicator, Escape, Enter, A/B, M/Y/R/O, Shift+Enter, Alt+Enter, Cmd/Ctrl+Enter, Tab, and edit-history shortcuts.             |
 |    14 | Markdown rendering                   | Visual parity    | CommonMark opens rendered by default; double-click or Enter edits; headings, links, lists, tasks, tables, fenced code, and math notation. |
 |    15 | Actionable failure/disconnect states | Supported        | Visible status, typed errors, reconnect action.                                                                                           |
 |    16 | Credential and path safety           | Supported        | Same-origin gateway, server-side token, confinement and bounds.                                                                           |
@@ -42,8 +42,9 @@ behavior. See the [primary-source parity reference](jupyter-frontend-parity-refe
 |     8 | Full Markdown + math        | Supported      | Pinned CommonMark renderer; math notation is styled and bounded, not full MathJax typesetting.   |
 |     9 | Table/HTML rich display     | Supported      | Markdown tables plus sanitized, script-free readable HTML/table output; arbitrary DOM is denied. |
 |    10 | Notebook rename/download    | Supported      | Confined rename and a human-triggered `.ipynb` download.                                         |
-|    11 | Cell collapse/line numbers  | Supported      | Per-cell collapse and line-number toggles for the current browser session.                       |
-|    12 | Autosave/checkpoints        | Supported      | Debounced autosave status and explicit Jupyter Contents checkpoints.                             |
+|    11 | Cell/output collapse        | Supported      | Separate per-cell and per-output collapse, including command-mode `O`; output data is preserved. |
+|    12 | Line-number visibility      | Supported      | Per-code-cell line-number toggles for the current browser session.                               |
+|    13 | Autosave/checkpoints        | Supported      | Debounced autosave status and explicit Jupyter Contents checkpoints.                             |
 
 ## Intentionally deferred
 

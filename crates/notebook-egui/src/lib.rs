@@ -67,6 +67,7 @@ pub struct NotebookEguiApp {
     redo_stack: Vec<Vec<CellMutation>>,
     suppress_history: bool,
     collapsed_cells: HashSet<String>,
+    collapsed_outputs: HashSet<String>,
     hidden_line_numbers: HashSet<String>,
     find_open: bool,
     find_query: String,
@@ -116,6 +117,7 @@ impl NotebookEguiApp {
             redo_stack: Vec::new(),
             suppress_history: false,
             collapsed_cells: HashSet::new(),
+            collapsed_outputs: HashSet::new(),
             hidden_line_numbers: HashSet::new(),
             find_open: false,
             find_query: String::new(),
@@ -179,6 +181,15 @@ impl NotebookEguiApp {
             .retain(|cell_id| current_markdown.contains(cell_id));
         self.rendered_markdown
             .extend(current_markdown.difference(&previous_markdown).cloned());
+        let current_cells = self
+            .state
+            .snapshot
+            .cells
+            .iter()
+            .map(|cell| cell.id.as_str())
+            .collect::<HashSet<_>>();
+        self.collapsed_outputs
+            .retain(|cell_id| current_cells.contains(cell_id.as_str()));
         self.editors = self
             .state
             .snapshot
@@ -503,6 +514,17 @@ impl NotebookEguiApp {
             self.emit(NotebookCommandKind::ModifyCells { changes });
         }
     }
+    fn toggle_selected_output(&mut self) {
+        let Some((_, cell)) = self.selected_cell() else {
+            return;
+        };
+        if cell.cell_type != CellType::Code || cell.outputs.is_empty() {
+            return;
+        }
+        if !self.collapsed_outputs.remove(&cell.id) {
+            self.collapsed_outputs.insert(cell.id);
+        }
+    }
     fn find_next(&mut self) {
         if self.find_query.is_empty() {
             return;
@@ -681,6 +703,21 @@ impl NotebookEguiApp {
                             ui.close();
                         }
                         if cell.cell_type == CellType::Code {
+                            let output_collapsed = self.collapsed_outputs.contains(&cell.id);
+                            if ui
+                                .add_enabled(
+                                    !cell.outputs.is_empty(),
+                                    egui::Button::new(if output_collapsed {
+                                        "Expand Output"
+                                    } else {
+                                        "Collapse Output"
+                                    }),
+                                )
+                                .clicked()
+                            {
+                                self.toggle_selected_output();
+                                ui.close();
+                            }
                             let hidden = self.hidden_line_numbers.contains(&cell.id);
                             if ui
                                 .button(if hidden {
@@ -1047,6 +1084,7 @@ impl NotebookEguiApp {
         let selected = self.selected_cells.contains(&cell.id)
             || self.state.snapshot.selected_cell_id.as_deref() == Some(&cell.id);
         let collapsed = self.collapsed_cells.contains(&cell.id);
+        let output_collapsed = self.collapsed_outputs.contains(&cell.id);
         let frame = egui::Frame::new()
             .fill(if selected {
                 Color32::from_rgb(250, 253, 255)
@@ -1110,6 +1148,23 @@ impl NotebookEguiApp {
                         self.collapsed_cells.remove(&cell.id);
                     } else {
                         self.collapsed_cells.insert(cell.id.clone());
+                    }
+                }
+                if cell.cell_type == CellType::Code
+                    && !cell.outputs.is_empty()
+                    && ui
+                        .small_button(if output_collapsed {
+                            "Expand output"
+                        } else {
+                            "Collapse output"
+                        })
+                        .on_hover_text("Toggle this cell's output (command mode: O)")
+                        .clicked()
+                {
+                    if output_collapsed {
+                        self.collapsed_outputs.remove(&cell.id);
+                    } else {
+                        self.collapsed_outputs.insert(cell.id.clone());
                     }
                 }
             });
@@ -1274,8 +1329,32 @@ impl NotebookEguiApp {
                             });
                     });
                 }
-                for output in &cell.outputs {
-                    render_output(ui, output);
+                if output_collapsed && !cell.outputs.is_empty() {
+                    let summary = output_collapse_summary(cell.outputs.len());
+                    let response = egui::Frame::new()
+                        .fill(Color32::from_rgb(248, 250, 251))
+                        .inner_margin(Margin::symmetric(8, 6))
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(summary)
+                                        .monospace()
+                                        .color(Color32::from_rgb(83, 99, 107)),
+                                )
+                                .sense(egui::Sense::click()),
+                            )
+                        })
+                        .inner;
+                    if response
+                        .on_hover_text("Click to expand this cell's output")
+                        .clicked()
+                    {
+                        self.collapsed_outputs.remove(&cell.id);
+                    }
+                } else {
+                    for output in &cell.outputs {
+                        render_output(ui, output);
+                    }
                 }
             }
         });
@@ -1518,6 +1597,9 @@ impl eframe::App for NotebookEguiApp {
         }
         if command_mode && ctx.input(|input| input.key_pressed(Key::R)) {
             self.set_selected_cell_type(CellType::Raw);
+        }
+        if command_mode && ctx.input(|input| input.key_pressed(Key::O)) {
+            self.toggle_selected_output();
         }
         if ctx.input(|input| input.modifiers.command && input.key_pressed(Key::Enter))
             && let Some(id) = self.state.snapshot.selected_cell_id.clone()
@@ -2008,6 +2090,13 @@ fn execution_status_icon(ui: &mut egui::Ui, completed: bool) {
     }
 }
 
+fn output_collapse_summary(count: usize) -> String {
+    match count {
+        1 => "… 1 output hidden — click to expand".into(),
+        count => format!("… {count} outputs hidden — click to expand"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2095,6 +2184,32 @@ mod tests {
         let app = NotebookEguiApp::new(NotebookState::new(snapshot).unwrap());
 
         assert!(app.rendered_markdown.contains("code"));
+    }
+
+    #[test]
+    fn output_collapse_is_local_and_preserves_outputs() {
+        let mut app = app();
+        app.state.snapshot.cells[0].outputs = vec![CellOutput::Text { text: "42".into() }];
+
+        app.toggle_selected_output();
+        assert!(app.collapsed_outputs.contains("code"));
+        assert_eq!(app.state.snapshot.cells[0].outputs.len(), 1);
+
+        app.toggle_selected_output();
+        assert!(!app.collapsed_outputs.contains("code"));
+        assert_eq!(app.state.snapshot.cells[0].outputs.len(), 1);
+    }
+
+    #[test]
+    fn output_collapse_summary_handles_singular_and_plural() {
+        assert_eq!(
+            output_collapse_summary(1),
+            "… 1 output hidden — click to expand"
+        );
+        assert_eq!(
+            output_collapse_summary(3),
+            "… 3 outputs hidden — click to expand"
+        );
     }
 
     #[test]
