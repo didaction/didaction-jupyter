@@ -527,6 +527,7 @@ impl NotebookEguiApp {
             .corner_radius(CornerRadius::same(3))
             .inner_margin(Margin::same(10));
         let frame_response = frame.show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
                 let idle = !matches!(
                     self.state.sync_state,
@@ -862,7 +863,7 @@ impl eframe::App for NotebookEguiApp {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        ui.set_max_width(1120.0);
+                        ui.set_width(notebook_document_width(ui.available_width()));
                         if self.state.snapshot.cells.is_empty() {
                             ui.vertical_centered(|ui| {
                                 ui.add_space(80.0);
@@ -942,6 +943,10 @@ fn move_index_for_drop(source_index: usize, hovered_index: usize, before: bool) 
         hovered_index + 1
     };
     boundary.saturating_sub(usize::from(source_index < boundary))
+}
+
+fn notebook_document_width(available_width: f32) -> f32 {
+    available_width.clamp(0.0, 1120.0)
 }
 
 #[derive(Clone, Copy)]
@@ -1130,5 +1135,12 @@ mod tests {
         fn assert_button(_: egui::Button<'static>) {}
 
         assert_button(drag_handle());
+    }
+
+    #[test]
+    fn notebook_document_width_tracks_narrow_frames() {
+        assert_eq!(notebook_document_width(720.0), 720.0);
+        assert_eq!(notebook_document_width(1440.0), 1120.0);
+        assert_eq!(notebook_document_width(-1.0), 0.0);
     }
 }

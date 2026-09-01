@@ -50,3 +50,39 @@ test("notebook canvas follows window resizing", async ({ page }) => {
   );
   expect(pageOverflow).toBe(false);
 });
+
+test("notebook canvas follows host panel resizing", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  const shell = page.locator("#notebook-shell");
+  const canvas = page.locator("#notebook-canvas");
+  await expect(canvas).toBeVisible({ timeout: 30_000 });
+
+  await shell.evaluate((element) => {
+    element.style.width = "720px";
+  });
+  await expect.poll(async () => (await canvas.boundingBox())?.width).toBe(720);
+
+  await expect
+    .poll(async () =>
+      canvas.evaluate((element) => {
+        const canvas = element as HTMLCanvasElement;
+        return Math.abs(
+          canvas.width - canvas.clientWidth * window.devicePixelRatio,
+        );
+      }),
+    )
+    .toBeLessThanOrEqual(1);
+  const metrics = await canvas.evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    return {
+      clientWidth: canvas.clientWidth,
+      backingWidth: canvas.width,
+      pixelRatio: window.devicePixelRatio,
+    };
+  });
+  expect(metrics.backingWidth).toBeCloseTo(
+    metrics.clientWidth * metrics.pixelRatio,
+    0,
+  );
+});
