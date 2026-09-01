@@ -1,0 +1,123 @@
+:root {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #263238;
+  background: #f7f7f7;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+body {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+::selection {
+  background: #c7e2f3;
+  color: #15242c;
+}
+:focus-visible {
+  outline: 3px solid #2d698f;
+  outline-offset: 3px;
+}
+.skip-link {
+  position: fixed;
+  top: -60px;
+  left: 16px;
+  z-index: 10;
+  background: #fff;
+  padding: 10px 14px;
+  color: #194e70;
+}
+.skip-link:focus {
+  top: 12px;
+}
+.shell-header {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid #d7dcdf;
+}
+.shell-header div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.shell-header strong {
+  color: #d66b2c;
+  letter-spacing: -0.02em;
+}
+.shell-header span,
+#connection-status,
+.privacy-note {
+  color: #53636b;
+  font-size: 0.82rem;
+}
+#notebook-shell {
+  min-height: 0;
+  position: relative;
+}
+#notebook-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 540px;
+}
+.fatal-error {
+  max-width: 640px;
+  margin: 80px auto;
+  background: #fff;
+  padding: 28px;
+  border: 1px solid #c3cbd0;
+}
+.fatal-error h1 {
+  margin-top: 0;
+  font-size: 1.4rem;
+}
+button {
+  border: 1px solid #84949c;
+  background: #fff;
+  padding: 7px 12px;
+  color: inherit;
+  cursor: pointer;
+}
+button:hover {
+  background: #eef4f7;
+}
+.privacy-note {
+  margin: 0;
+  padding: 8px 20px;
+  background: #fff8e8;
+  border-top: 1px solid #ead49e;
+}
+@media (max-width: 640px) {
+  .shell-header {
+    padding: 0 12px;
+  }
+  .shell-header span {
+    display: none;
+  }
+  #notebook-canvas {
+    min-height: 620px;
+  }
+  .privacy-note {
+    padding-inline: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+  }
+}

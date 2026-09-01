@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>didaction notebook</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#notebook-canvas">Skip to notebook</a>
+    <header class="shell-header" aria-label="Notebook application">
+      <div><strong>didaction</strong><span>local notebook</span></div>
+      <output id="connection-status" role="status" aria-live="polite"
+        >Connecting…</output
+      >
+    </header>
+    <main id="notebook-shell" aria-label="Interactive notebook">
+      <canvas
+        id="notebook-canvas"
+        tabindex="0"
+        aria-label="Notebook editor canvas"
+      ></canvas>
+      <section
+        id="fatal-error"
+        class="fatal-error"
+        hidden
+        aria-live="assertive"
+      >
+        <h1>The notebook could not start</h1>
+        <p></p>
+        <button type="button" onclick="location.reload()">Retry</button>
+      </section>
+    </main>
+    <p class="privacy-note">
+      Local execution is unsafe. Only run notebooks you trust.
+    </p>
+    <script type="module" src="/src/bootstrap.ts"></script>
+  </body>
+</html>

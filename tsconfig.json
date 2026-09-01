@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["web/src/**/*.ts", "tests/browser/**/*.ts", "vite.config.ts"]
+}
