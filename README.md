@@ -66,6 +66,19 @@ installed kernelspecs with:
 uv run jupyter kernelspec list
 ```
 
+If the desired environment contains `ipykernel` but is not already registered,
+provide its Python executable at startup. The launcher creates a repository-local
+kernelspec under `.runtime/kernel-prefix` and does not modify user-wide Jupyter
+configuration:
+
+```bash
+DIDACTION_NOTEBOOK_WORKSPACE=/absolute/notebooks \
+DIDACTION_NOTEBOOK_PATH=course/week-1.ipynb \
+DIDACTION_KERNEL_NAME=course-environment \
+DIDACTION_KERNEL_PYTHON=/absolute/course/.venv/bin/python \
+scripts/dev.sh
+```
+
 ### Docker
 
 ```bash

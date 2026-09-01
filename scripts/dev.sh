@@ -13,6 +13,23 @@ export JUPYTER_CONFIG_DIR="$PWD/.runtime/jupyter-config"
 export JUPYTER_DATA_DIR="$PWD/.runtime/jupyter-data"
 export JUPYTER_RUNTIME_DIR="$PWD/.runtime/jupyter-runtime"
 
+if [[ -n "${DIDACTION_KERNEL_PYTHON:-}" ]]; then
+  if [[ ! "$DIDACTION_KERNEL_NAME" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "DIDACTION_KERNEL_NAME contains unsupported characters" >&2
+    exit 2
+  fi
+  if [[ ! -x "$DIDACTION_KERNEL_PYTHON" ]]; then
+    echo "DIDACTION_KERNEL_PYTHON is not an executable file" >&2
+    exit 2
+  fi
+  DIDACTION_KERNEL_PREFIX="$PWD/.runtime/kernel-prefix"
+  "$DIDACTION_KERNEL_PYTHON" -m ipykernel install \
+    --prefix "$DIDACTION_KERNEL_PREFIX" \
+    --name "$DIDACTION_KERNEL_NAME" \
+    --display-name "$DIDACTION_KERNEL_NAME" >/dev/null
+  export JUPYTER_PATH="$DIDACTION_KERNEL_PREFIX/share/jupyter${JUPYTER_PATH:+:$JUPYTER_PATH}"
+fi
+
 pids=()
 cleanup() { for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done; }
 trap cleanup EXIT INT TERM
