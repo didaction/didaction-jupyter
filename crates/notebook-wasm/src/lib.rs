@@ -1,0 +1,170 @@
+use notebook_core::NotebookState;
+#[cfg(target_arch = "wasm32")]
+use notebook_egui::NotebookEguiApp;
+use notebook_protocol::{
+    CommandResult, NotebookCommand, NotebookSnapshot, validate_command, validate_snapshot,
+};
+#[cfg(target_arch = "wasm32")]
+use std::sync::{Arc, Mutex};
+use wasm_bindgen::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_futures::{JsFuture, spawn_local};
+
+#[wasm_bindgen]
+pub struct NotebookApplication {
+    state: NotebookState,
+    disposed: bool,
+}
+
+#[wasm_bindgen]
+impl NotebookApplication {
+    #[wasm_bindgen(constructor)]
+    pub fn new(snapshot: &str) -> Result<NotebookApplication, JsError> {
+        let snapshot: NotebookSnapshot = serde_json::from_str(snapshot).map_err(js_error)?;
+        Ok(Self {
+            state: NotebookState::new(snapshot).map_err(js_error)?,
+            disposed: false,
+        })
+    }
+    #[wasm_bindgen(js_name = prepareCommand)]
+    pub fn prepare_command(&mut self, input: &str) -> Result<String, JsError> {
+        self.ensure_active()?;
+        let command: NotebookCommand = serde_json::from_str(input).map_err(js_error)?;
+        validate_command(&command).map_err(js_error)?;
+        let prepared = self.state.prepare(command).map_err(js_error)?;
+        self.state = prepared.optimistic_state;
+        serde_json::to_string(&prepared.command).map_err(js_error)
+    }
+    #[wasm_bindgen(js_name = applyCommandResult)]
+    pub fn apply_command_result(&mut self, input: &str) -> Result<String, JsError> {
+        self.ensure_active()?;
+        let result: CommandResult = serde_json::from_str(input).map_err(js_error)?;
+        self.state = self.state.apply_result(result).map_err(js_error)?;
+        self.public_snapshot()
+    }
+    #[wasm_bindgen(js_name = replaceSnapshot)]
+    pub fn replace_snapshot(&mut self, input: &str) -> Result<String, JsError> {
+        self.ensure_active()?;
+        let snapshot: NotebookSnapshot = serde_json::from_str(input).map_err(js_error)?;
+        validate_snapshot(&snapshot).map_err(js_error)?;
+        self.state = self.state.replace_snapshot(snapshot).map_err(js_error)?;
+        self.public_snapshot()
+    }
+    #[wasm_bindgen(js_name = publicSnapshot)]
+    pub fn public_snapshot(&self) -> Result<String, JsError> {
+        self.ensure_active()?;
+        serde_json::to_string(&self.state).map_err(js_error)
+    }
+    pub fn dispose(&mut self) {
+        self.disposed = true;
+    }
+    fn ensure_active(&self) -> Result<(), JsError> {
+        if self.disposed {
+            Err(JsError::new("NotebookApplication is disposed"))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[wasm_bindgen(js_name = validateNotebookCommand)]
+pub fn validate_notebook_command(input: &str) -> Result<String, JsError> {
+    let command: NotebookCommand = serde_json::from_str(input).map_err(js_error)?;
+    validate_command(&command).map_err(js_error)?;
+    serde_json::to_string(&command).map_err(js_error)
+}
+
+#[cfg(target_arch = "wasm32")]
+struct MountedApp {
+    app: Arc<Mutex<NotebookEguiApp>>,
+    dispatch: js_sys::Function,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl eframe::App for MountedApp {
+    fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
+        let commands = {
+            let mut app = self.app.lock().expect("notebook app mutex poisoned");
+            app.update(ctx, frame);
+            app.drain_commands()
+        };
+        for command in commands {
+            {
+                let mut locked = self.app.lock().expect("notebook app mutex poisoned");
+                let Ok(prepared) = locked.state.prepare(command.clone()) else {
+                    continue;
+                };
+                locked.replace_state(prepared.optimistic_state);
+            }
+            let app = Arc::clone(&self.app);
+            let dispatch = self.dispatch.clone();
+            let repaint = ctx.clone();
+            spawn_local(async move {
+                let Ok(serialized) = serde_json::to_string(&command) else {
+                    return;
+                };
+                let Ok(promise) = dispatch.call1(&JsValue::NULL, &JsValue::from_str(&serialized))
+                else {
+                    return;
+                };
+                let Ok(result) = JsFuture::from(js_sys::Promise::from(promise)).await else {
+                    return;
+                };
+                let Some(result) = result.as_string() else {
+                    return;
+                };
+                let Ok(result) = serde_json::from_str::<CommandResult>(&result) else {
+                    return;
+                };
+                let current = app
+                    .lock()
+                    .expect("notebook app mutex poisoned")
+                    .state
+                    .clone();
+                if let Ok(next) = current.apply_result(result) {
+                    app.lock()
+                        .expect("notebook app mutex poisoned")
+                        .replace_state(next);
+                    repaint.request_repaint();
+                }
+            });
+        }
+    }
+}
+
+#[wasm_bindgen(js_name = mountNotebook)]
+#[cfg(target_arch = "wasm32")]
+pub async fn mount_notebook(
+    element_id: String,
+    snapshot: String,
+    dispatch: js_sys::Function,
+) -> Result<(), JsValue> {
+    let snapshot: NotebookSnapshot =
+        serde_json::from_str(&snapshot).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let state =
+        NotebookState::new(snapshot).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let app = Arc::new(Mutex::new(NotebookEguiApp::new(state)));
+    let mounted = Arc::clone(&app);
+    use wasm_bindgen::JsCast;
+    let canvas = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.get_element_by_id(&element_id))
+        .ok_or_else(|| JsValue::from_str("notebook canvas element not found"))?
+        .dyn_into::<web_sys::HtmlCanvasElement>()?;
+    eframe::WebRunner::new()
+        .start(
+            canvas,
+            eframe::WebOptions::default(),
+            Box::new(move |_| {
+                Ok(Box::new(MountedApp {
+                    app: mounted,
+                    dispatch,
+                }))
+            }),
+        )
+        .await
+}
+
+fn js_error(error: impl std::fmt::Display) -> JsError {
+    JsError::new(&error.to_string())
+}

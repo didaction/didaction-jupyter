@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/notebook-protocol",
+  "crates/notebook-core",
+  "crates/notebook-egui",
+  "crates/notebook-wasm",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/didaction/didaction-jupyter"
+
+[workspace.dependencies]
+async-trait = "0.1.89"
+eframe = { version = "0.32.3", default-features = false, features = ["glow"] }
+egui = "0.32.3"
+egui_extras = { version = "0.32.3", features = ["syntect"] }
+js-sys = "0.3.82"
+notebook-core = { path = "crates/notebook-core" }
+notebook-egui = { path = "crates/notebook-egui" }
+notebook-protocol = { path = "crates/notebook-protocol" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+uuid = { version = "1.18.1", features = ["js", "serde", "v4"] }
+wasm-bindgen = "0.2.105"
+wasm-bindgen-futures = "0.4.55"
+web-sys = { version = "0.3.82", features = ["CssStyleDeclaration", "Document", "Element", "HtmlCanvasElement", "HtmlElement", "Node", "Window"] }
+
+[profile.release]
+lto = "thin"
+opt-level = "s"
+codegen-units = 1
