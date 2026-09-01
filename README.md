@@ -88,9 +88,11 @@ workspace-relative; credentials stay server-side; source, notebook contents,
 outputs, tokens, cookies, session IDs, and kernel IDs are excluded from routine
 logs and browser-visible results.
 
-HTML/JavaScript output, widgets/comms, terminals, package installation, and
-arbitrary gateway/Jupyter forwarding are deliberately unavailable. PNG and SVG
-graph output are bounded; SVG is decoded only by egui's image loader.
+HTML/JavaScript output, widgets/comms, terminals, and arbitrary gateway/Jupyter
+forwarding are deliberately unavailable. Trusted human-authored code cells may
+use the pinned kernel `pip` through IPython's `%pip`; package installation remains
+unavailable to WebMCP and typed gateway commands. PNG and SVG graph output are
+bounded; SVG is decoded only by egui's image loader.
 
 ## Current limitations
 

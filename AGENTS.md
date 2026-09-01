@@ -28,10 +28,12 @@ second mutation path or a generic Jupyter forwarding method.
   results, unknown protocol versions, and unsupported operations.
 - Failed deterministic transitions leave prior state unchanged; result handling
   remains idempotent by command and idempotency key.
-- Kernel execution uses `allow_stdin=false`; no terminals, package installation,
-  arbitrary request forwarding, widgets/comms, or shell management.
+- Kernel execution uses `allow_stdin=false`; no terminals, automated package
+  installation, arbitrary request forwarding, widgets/comms, or shell management.
+  Trusted human-authored cells may use the pinned kernel `pip`; never expose that
+  capability as a WebMCP or generic gateway operation.
 - Jupyter, gateway, and frontend bind to loopback in non-container startup.
-- `jupyter-server`, `jupyter-kernel-client`, `ipykernel`, and `nbformat` stay
+- `jupyter-server`, `jupyter-kernel-client`, `ipykernel`, `nbformat`, and `pip` stay
   exactly pinned; protocol upgrades require real integration verification.
 
 ## Commands

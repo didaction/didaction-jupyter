@@ -12,6 +12,7 @@ uv run ruff format --check services scripts tests
 uv run ruff check services scripts tests
 uv run mypy
 uv run pytest -q
+uv run python -m pip --version
 pnpm run build
 pnpm run test:browser
 scripts/smoke.sh
