@@ -3,7 +3,7 @@ import {
   CommandGateway,
   createQueuedNotebookDispatcher,
 } from "./command-gateway";
-import { McpNotebookTransport } from "./mcp-client";
+import { GatewayNotebookTransport } from "./gateway-client";
 import type { NotebookCommand, NotebookSnapshot } from "./types";
 import { installWebMcp } from "./webmcp";
 
@@ -24,10 +24,10 @@ const command = (
 
 async function boot(): Promise<void> {
   await init();
-  const transport = new McpNotebookTransport();
+  const transport = new GatewayNotebookTransport();
   const setup = await transport.setup(
     command("setup", {
-      path: "acceptance-demo-v1.ipynb",
+      path: "notebook-parity-demo.ipynb",
       kernel: "python3",
       create: true,
     }),

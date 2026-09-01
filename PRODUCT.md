@@ -9,8 +9,8 @@ web
 ## Stack
 
 Delegated within a constrained architecture: Rust/egui compiled to WebAssembly,
-TypeScript for browser APIs and transport, and Python/FastAPI for the local MCP
-gateway and Jupyter-native services.
+TypeScript for browser APIs and transport, and Python/FastAPI for the local
+gateway and direct Jupyter services.
 
 ## Users
 
@@ -33,18 +33,18 @@ revision-aware command pipeline rather than separate notebook implementations.
 
 Desktop-oriented local development with Jupyter notebooks, installed
 kernelspecs, an IPython acceptance kernel, an egui canvas, a same-origin gateway,
-and a loopback-only MCP/Jupyter service stack.
+and a loopback-only gateway/Jupyter service stack.
 
 ## Capabilities and Constraints
 
 - Familiar ordered Markdown and code-cell editing and execution.
 - Kernel status, interrupt, restart, reconnect, and refresh behavior.
 - Typed protocol validation in Rust/WASM; browser APIs and transport in
-  TypeScript; credentials and MCP session state in the local gateway.
-- Exact `mcp-jupyter==2.0.2` pin with schema compatibility gating.
+  TypeScript; credentials and Jupyter session state in the local gateway.
+- Exact Jupyter Server, kernel-client, ipykernel, and nbformat pins.
 - Bounded inputs, outputs, timeouts, metadata, and aggregate responses.
-- Local-development-only code execution; no package installation, arbitrary MCP
-  forwarding, unrestricted filesystems, or remote multi-user claims.
+- Local-development-only code execution; no package installation, arbitrary
+  Jupyter forwarding, unrestricted filesystems, or remote multi-user claims.
 
 ## Brand Commitments
 

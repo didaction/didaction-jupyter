@@ -22,6 +22,7 @@ export class CommandGateway {
       interrupt_kernel: "interrupt",
       restart_kernel: "restart",
       reconnect: "reconnect",
+      complete: "complete",
     };
     const method = route[command.type];
     if (!method || method === "close")

@@ -1,7 +1,7 @@
 [project]
 name = "didaction-jupyter"
 version = "0.1.0"
-description = "Local-first egui, WebMCP, MCP, and Jupyter notebook environment"
+description = "Local-first egui and Jupyter notebook environment"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "fastapi==0.116.1",
@@ -9,9 +9,9 @@ dependencies = [
   "ipykernel==6.30.1",
   "jupyter-collaboration==4.0.2",
   "jupyter-kernel-client==0.8.0",
+  "jupyter-server==2.21.0",
   "jupyterlab==4.4.5",
-  "mcp-jupyter==2.0.2",
-  "mcp==1.13.1",
+  "nbformat==5.10.4",
   "pydantic==2.11.7",
   "uvicorn==0.35.0",
 ]
@@ -39,6 +39,14 @@ ignore = ["S101"]
 python_version = "3.11"
 strict = true
 files = ["services/gateway/app", "services/gateway/tests"]
+
+[[tool.mypy.overrides]]
+module = ["jupyter_kernel_client", "nbformat", "nbformat.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["services.gateway.app.jupyter_adapter", "services.gateway.tests.test_gateway"]
+disable_error_code = ["no-untyped-call"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

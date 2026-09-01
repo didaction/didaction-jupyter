@@ -6,10 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DIDACTION_", extra="ignore")
-    mcp_url: str = "http://127.0.0.1:8090/mcp/"
     jupyter_url: str = "http://127.0.0.1:8888"
+    jupyter_token: str = ""
     workspace: Path = Path(".runtime/notebooks")
-    schema_fixture: Path = Path("tests/fixtures/mcp-jupyter-2.0.2-tools.json")
     request_limit: int = Field(default=300_000, ge=1, le=4_000_000)
     response_limit: int = Field(default=4_000_000, ge=1, le=8_000_000)
     timeout_seconds: float = Field(default=30.0, ge=0.1, le=120.0)

@@ -8,13 +8,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from .config import Settings
-from .mcp_adapter import AdapterError, McpNotebookTransport
+from .jupyter_adapter import AdapterError, JupyterNotebookTransport
 from .models import Command, CommandResult, GatewayError
 from .normalize import normalize_cells
 from .redaction import RedactingFilter
 
 settings = Settings()
-transport = McpNotebookTransport(settings)
+transport = JupyterNotebookTransport(settings)
 logger = logging.getLogger("didaction.gateway")
 logger.addFilter(RedactingFilter())
 current_notebook: str | None = None
@@ -27,9 +27,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         await transport.discover()
     except AdapterError as error:
-        logger.error("MCP compatibility check failed: %s", error.code)
+        logger.error("Jupyter compatibility check failed: %s", error.code)
     yield
-    transport.ready = False
+    await transport.close()
 
 
 app = FastAPI(title="didaction notebook gateway", version="1", lifespan=lifespan)
@@ -55,7 +55,7 @@ async def ready() -> JSONResponse:
         status_code=200 if transport.ready else 503,
         content={
             "status": "ready" if transport.ready else "not_ready",
-            "mcp_profile": transport.profile if transport.ready else None,
+            "jupyter_profile": transport.profile if transport.ready else None,
         },
     )
 
@@ -82,7 +82,17 @@ async def command_endpoint(command: Command) -> CommandResult:
             raise AdapterError(
                 "stale_revision", "Notebook revision changed; refresh and retry", True
             )
-        await transport.execute(command, current_notebook)
+        raw = await transport.execute(command, current_notebook)
+        if command.type == "complete":
+            result = CommandResult(
+                command_id=command.command_id,
+                idempotency_key=command.idempotency_key,
+                base_revision=base_revision,
+                committed_revision=base_revision,
+                completion=raw,
+            )
+            result_cache[command.idempotency_key] = result
+            return result
         if current_notebook is None:
             raise AdapterError("invalid_input", "No notebook is open")
         query = command.model_copy(update={"type": "query", "query": "full"})

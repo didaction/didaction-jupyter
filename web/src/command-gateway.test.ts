@@ -3,7 +3,7 @@ import {
   CommandGateway,
   createQueuedNotebookDispatcher,
 } from "./command-gateway";
-import { MockNotebookTransport } from "./mcp-client";
+import { MockNotebookTransport } from "./gateway-client";
 import type { CommandResult, NotebookCommand, WasmApplication } from "./types";
 
 describe("CommandGateway", () => {

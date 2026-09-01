@@ -1,1 +1,1 @@
-"""Bounded local adapter between the browser protocol and mcp-jupyter."""
+"""Bounded local adapter between the browser protocol and Jupyter Server."""

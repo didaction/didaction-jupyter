@@ -10,6 +10,11 @@ export type CommandResult = Record<string, unknown> & {
   command_id: string;
   idempotency_key: string;
   snapshot?: NotebookSnapshot;
+  completion?: {
+    matches: string[];
+    cursor_start: number;
+    cursor_end: number;
+  };
   error?: { code: string; message: string; retryable: boolean };
 };
 export type NotebookSnapshot = Record<string, unknown> & {
@@ -31,5 +36,6 @@ export interface NotebookTransport {
   interrupt(command: NotebookCommand): Promise<CommandResult>;
   restart(command: NotebookCommand): Promise<CommandResult>;
   reconnect(command: NotebookCommand): Promise<CommandResult>;
+  complete(command: NotebookCommand): Promise<CommandResult>;
   close(): Promise<void>;
 }

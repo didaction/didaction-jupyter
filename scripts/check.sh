@@ -12,7 +12,6 @@ uv run ruff format --check services scripts tests
 uv run ruff check services scripts tests
 uv run mypy
 uv run pytest -q
-uv run python scripts/discover_mcp.py
 pnpm run build
 pnpm run test:browser
 scripts/smoke.sh

@@ -2,7 +2,9 @@ import logging
 import re
 
 REDACTED = "[REDACTED]"
-SENSITIVE = re.compile(r"(?i)(token|authorization|mcp-session-id|code|source|output|content)")
+SENSITIVE = re.compile(
+    r"(?i)(token|authorization|cookie|session-id|kernel-id|code|source|output|content)"
+)
 
 
 def redact(value: object) -> object:

@@ -22,6 +22,7 @@ class Command(StrictModel):
         "execute_code",
         "interrupt_kernel",
         "restart_kernel",
+        "complete",
         "reconnect",
         "close",
     ]
@@ -32,6 +33,7 @@ class Command(StrictModel):
     changes: list[dict[str, Any]] | None = Field(default=None, max_length=256)
     cell_id: str | None = Field(default=None, max_length=128)
     code: str | None = Field(default=None, max_length=262_144)
+    cursor_pos: int | None = Field(default=None, ge=0, le=262_144)
 
     @model_validator(mode="after")
     def required_by_type(self) -> "Command":
@@ -41,6 +43,8 @@ class Command(StrictModel):
             raise ValueError("modify_cells requires changes")
         if self.type == "execute_cell" and not self.cell_id:
             raise ValueError("execute_cell requires cell_id")
+        if self.type == "complete" and self.code is None:
+            raise ValueError("complete requires code")
         return self
 
 
@@ -57,4 +61,5 @@ class CommandResult(StrictModel):
     base_revision: int | None = None
     committed_revision: int | None = None
     snapshot: dict[str, Any] | None = None
+    completion: dict[str, Any] | None = None
     error: GatewayError | None = None

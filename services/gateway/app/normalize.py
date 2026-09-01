@@ -1,9 +1,10 @@
+import base64
 from typing import Any
-
-from .mcp_adapter import EMPTY_CELL_SENTINEL
 
 
 def normalize_cells(raw: Any) -> list[dict[str, Any]]:
+    if isinstance(raw, dict) and "cells" in raw:
+        raw = raw["cells"]
     if isinstance(raw, dict) and "result" in raw:
         raw = raw["result"]
     if not isinstance(raw, list):
@@ -34,13 +35,22 @@ def normalize_cells(raw: Any) -> list[dict[str, Any]]:
                         "traceback": [_text(v) for v in output.get("traceback", [])[:64]],
                     }
                 )
-            else:
+            elif output_type in {"execute_result", "display_data"}:
                 data = output.get("data", {})
-                text = data.get("text/plain", "") if isinstance(data, dict) else ""
-                outputs.append({"kind": "text", "text": _text(text)})
+                if isinstance(data, dict) and "image/png" in data:
+                    outputs.append(
+                        {"kind": "rich", "mime": "image/png", "data": _text(data["image/png"])}
+                    )
+                elif isinstance(data, dict) and "image/svg+xml" in data:
+                    svg = _text(data["image/svg+xml"])
+                    encoded = base64.b64encode(svg.encode()).decode()
+                    outputs.append({"kind": "rich", "mime": "image/svg+xml", "data": encoded})
+                else:
+                    text = data.get("text/plain", "") if isinstance(data, dict) else ""
+                    outputs.append({"kind": "text", "text": _text(text)})
         cells.append(
             {
-                "id": f"position-{index}",
+                "id": item.get("id") or f"position-{index}",
                 "cell_type": item.get("cell_type", "raw"),
                 "source": _text(item.get("source", ""))[:262_144],
                 "metadata": item.get("metadata", {}),
@@ -56,4 +66,4 @@ def _text(value: Any) -> str:
         text = "".join(str(part) for part in value)
     else:
         text = str(value)
-    return "" if text == EMPTY_CELL_SENTINEL else text
+    return text

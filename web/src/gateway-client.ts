@@ -4,7 +4,7 @@ import type {
   NotebookTransport,
 } from "./types";
 
-export class McpNotebookTransport implements NotebookTransport {
+export class GatewayNotebookTransport implements NotebookTransport {
   constructor(private readonly endpoint = "/api/v1/commands") {}
   private async call(command: NotebookCommand): Promise<CommandResult> {
     const controller = new AbortController();
@@ -34,10 +34,11 @@ export class McpNotebookTransport implements NotebookTransport {
   interrupt = (c: NotebookCommand) => this.call(c);
   restart = (c: NotebookCommand) => this.call(c);
   reconnect = (c: NotebookCommand) => this.call(c);
+  complete = (c: NotebookCommand) => this.call(c);
   close = async () => {};
 }
 
-export class MockNotebookTransport extends McpNotebookTransport {
+export class MockNotebookTransport extends GatewayNotebookTransport {
   constructor(
     private readonly handler: (
       command: NotebookCommand,
@@ -52,6 +53,7 @@ export class MockNotebookTransport extends McpNotebookTransport {
   override interrupt = this.setup;
   override restart = this.setup;
   override reconnect = this.setup;
+  override complete = this.setup;
 }
 
 export type Fault =

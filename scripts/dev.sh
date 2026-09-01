@@ -16,7 +16,6 @@ cleanup() { for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done; }
 trap cleanup EXIT INT TERM
 
 uv run jupyter lab --config services/jupyter/jupyter_server_config.py & pids+=("$!")
-uv run mcp-jupyter --transport http --host 127.0.0.1 --port 8090 & pids+=("$!")
 uv run uvicorn services.gateway.app.main:app --host 127.0.0.1 --port 8080 & pids+=("$!")
 pnpm run dev & pids+=("$!")
 
