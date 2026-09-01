@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+base64.workspace = true
 egui.workspace = true
 egui_code_editor.workspace = true
 egui_extras.workspace = true

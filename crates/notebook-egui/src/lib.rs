@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use egui::text::{CCursor, CCursorRange, LayoutJob, TextFormat};
 use egui::{Color32, CornerRadius, FontId, Key, Margin, RichText, Stroke, TextEdit};
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
@@ -6,8 +7,28 @@ use notebook_protocol::{
     Cell, CellMutation, CellOutput, CellType, CompletionReply, NotebookCommand,
     NotebookCommandKind, PROTOCOL_VERSION,
 };
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque, hash_map::DefaultHasher};
+use std::hash::{Hash, Hasher};
 use uuid::Uuid;
+
+fn decode_rich_image(_mime: &str, data: &str) -> Result<Vec<u8>, base64::DecodeError> {
+    base64::engine::general_purpose::STANDARD.decode(data)
+}
+
+fn rich_image_uri(mime: &str, data: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    mime.hash(&mut hasher);
+    data.hash(&mut hasher);
+    let extension = if mime == "image/svg+xml" {
+        "svg"
+    } else {
+        "png"
+    };
+    format!(
+        "bytes://notebook-output/{:016x}.{extension}",
+        hasher.finish()
+    )
+}
 
 pub struct NotebookEguiApp {
     pub state: NotebookState,
@@ -931,16 +952,20 @@ fn render_output(ui: &mut egui::Ui, output: &CellOutput) {
         egui::Frame::new()
             .fill(Color32::from_rgb(248, 250, 251))
             .inner_margin(Margin::same(8))
-            .show(ui, |ui| {
-                ui.add(
-                    egui::Image::from_uri(if mime == "image/png" {
-                        format!("data:image/png;base64,{data}")
-                    } else {
-                        format!("data:image/svg+xml;base64,{data}")
-                    })
-                    .max_width(ui.available_width())
-                    .alt_text("Notebook graph output"),
-                );
+            .show(ui, |ui| match decode_rich_image(mime, data) {
+                Ok(bytes) => {
+                    ui.add(
+                        egui::Image::from_bytes(rich_image_uri(mime, data), bytes)
+                            .max_width(ui.available_width())
+                            .alt_text("Notebook graph output"),
+                    );
+                }
+                Err(_) => {
+                    ui.colored_label(
+                        Color32::from_rgb(198, 40, 40),
+                        "Image output could not be decoded. Re-run the cell to regenerate it.",
+                    );
+                }
             });
         return;
     }
@@ -1419,5 +1444,12 @@ mod tests {
             section.format.color == Color32::from_rgb(198, 40, 40)
                 && &job.text[section.byte_range.clone()] == "SyntaxError"
         }));
+    }
+
+    #[test]
+    fn rich_png_output_is_decoded_for_the_egui_bytes_loader() {
+        let bytes = decode_rich_image("image/png", "iVBORw0KGgo=").unwrap();
+
+        assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
     }
 }

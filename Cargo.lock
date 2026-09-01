@@ -1314,6 +1314,7 @@ dependencies = [
 name = "notebook-egui"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "eframe",
  "egui",
  "egui_code_editor",
