@@ -14,6 +14,7 @@ pub struct NotebookEguiApp {
     editors: Vec<(String, String)>,
     dirty_editors: HashSet<String>,
     completion_suggestions: HashMap<String, CompletionReply>,
+    completion_selection: HashMap<String, usize>,
     pending_completions: BTreeMap<Uuid, String>,
     rendered_markdown: HashSet<String>,
     edit_mode: bool,
@@ -33,6 +34,7 @@ impl NotebookEguiApp {
             editors,
             dirty_editors: HashSet::new(),
             completion_suggestions: HashMap::new(),
+            completion_selection: HashMap::new(),
             pending_completions: BTreeMap::new(),
             rendered_markdown: HashSet::new(),
             edit_mode: false,
@@ -40,6 +42,7 @@ impl NotebookEguiApp {
     }
     pub fn apply_completion(&mut self, command_id: Uuid, completion: CompletionReply) {
         if let Some(cell_id) = self.pending_completions.remove(&command_id) {
+            self.completion_selection.insert(cell_id.clone(), 0);
             self.completion_suggestions.insert(cell_id, completion);
         }
     }
@@ -82,6 +85,34 @@ impl NotebookEguiApp {
                 code,
             },
         });
+    }
+    fn close_completion(&mut self, cell_id: &str) {
+        self.completion_suggestions.remove(cell_id);
+        self.completion_selection.remove(cell_id);
+    }
+    fn accept_completion(&mut self, cell_id: &str) {
+        let Some(completion) = self.completion_suggestions.get(cell_id).cloned() else {
+            return;
+        };
+        let index = self
+            .completion_selection
+            .get(cell_id)
+            .copied()
+            .unwrap_or_default()
+            .min(completion.matches.len().saturating_sub(1));
+        let Some(value) = completion.matches.get(index) else {
+            self.close_completion(cell_id);
+            return;
+        };
+        if let Some((_, editor)) = self.editors.iter_mut().find(|(id, _)| id == cell_id) {
+            let start = completion.cursor_start.min(editor.len());
+            let end = completion.cursor_end.min(editor.len()).max(start);
+            if editor.is_char_boundary(start) && editor.is_char_boundary(end) {
+                editor.replace_range(start..end, value);
+                self.dirty_editors.insert(cell_id.to_owned());
+            }
+        }
+        self.close_completion(cell_id);
     }
     fn editor_source(&self, cell: &Cell) -> String {
         self.editors
@@ -455,24 +486,37 @@ impl NotebookEguiApp {
                 });
             }
             if let Some(completion) = self.completion_suggestions.get(&cell.id).cloned() {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Completions:");
-                    for value in completion.matches.iter().take(12) {
-                        if ui.button(value).clicked() {
-                            if let Some((_, editor)) =
-                                self.editors.iter_mut().find(|(id, _)| id == &cell.id)
-                            {
-                                let start = completion.cursor_start.min(editor.len());
-                                let end = completion.cursor_end.min(editor.len()).max(start);
-                                if editor.is_char_boundary(start) && editor.is_char_boundary(end) {
-                                    editor.replace_range(start..end, value);
-                                    self.dirty_editors.insert(cell.id.clone());
+                let selected = self
+                    .completion_selection
+                    .get(&cell.id)
+                    .copied()
+                    .unwrap_or_default();
+                let mut accepted = None;
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_min_width(ui.available_width().min(420.0));
+                    ui.label(
+                        RichText::new("Code completions")
+                            .small()
+                            .color(Color32::from_rgb(83, 99, 107)),
+                    );
+                    egui::ScrollArea::vertical()
+                        .max_height(220.0)
+                        .show(ui, |ui| {
+                            for (index, value) in completion.matches.iter().take(12).enumerate() {
+                                let button = egui::Button::new(RichText::new(value).monospace())
+                                    .selected(index == selected)
+                                    .min_size(egui::vec2(ui.available_width(), 28.0));
+                                if ui.add(button).clicked() {
+                                    accepted = Some(index);
                                 }
                             }
-                            self.completion_suggestions.remove(&cell.id);
-                        }
-                    }
+                        });
+                    ui.label("↑/↓ select · Enter or Tab apply · Esc close");
                 });
+                if let Some(index) = accepted {
+                    self.completion_selection.insert(cell.id.clone(), index);
+                    self.accept_completion(&cell.id);
+                }
             }
             for output in &cell.outputs {
                 render_output(ui, output);
@@ -491,12 +535,44 @@ impl eframe::App for NotebookEguiApp {
             style.visuals.selection.bg_fill = Color32::from_rgb(210, 232, 246);
         });
         egui_extras::install_image_loaders(ctx);
-        if self.edit_mode
+        let selected_cell_id = self.state.snapshot.selected_cell_id.clone();
+        let completion_open = selected_cell_id
+            .as_ref()
+            .is_some_and(|id| self.completion_suggestions.contains_key(id));
+        if completion_open && let Some(cell_id) = selected_cell_id.as_ref() {
+            let count = self
+                .completion_suggestions
+                .get(cell_id)
+                .map_or(0, |completion| completion.matches.len().min(12));
+            if count > 0 && ctx.input(|input| input.key_pressed(Key::ArrowDown)) {
+                ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::ArrowDown));
+                let selected = self
+                    .completion_selection
+                    .entry(cell_id.clone())
+                    .or_default();
+                *selected = (*selected + 1).min(count - 1);
+            }
+            if count > 0 && ctx.input(|input| input.key_pressed(Key::ArrowUp)) {
+                ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::ArrowUp));
+                let selected = self
+                    .completion_selection
+                    .entry(cell_id.clone())
+                    .or_default();
+                *selected = selected.saturating_sub(1);
+            }
+            if ctx.input(|input| input.key_pressed(Key::Enter) || input.key_pressed(Key::Tab)) {
+                ctx.input_mut(|input| {
+                    input.consume_key(egui::Modifiers::NONE, Key::Enter);
+                    input.consume_key(egui::Modifiers::NONE, Key::Tab);
+                });
+                self.accept_completion(cell_id);
+            } else if ctx.input(|input| input.key_pressed(Key::Escape)) {
+                ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape));
+                self.close_completion(cell_id);
+            }
+        } else if self.edit_mode
             && ctx.input(|input| input.key_pressed(Key::Tab))
-            && let Some(cell) = self
-                .state
-                .snapshot
-                .selected_cell_id
+            && let Some(cell) = selected_cell_id
                 .as_ref()
                 .and_then(|id| self.state.snapshot.cells.iter().find(|cell| &cell.id == id))
                 .filter(|cell| cell.cell_type == CellType::Code)
@@ -505,7 +581,7 @@ impl eframe::App for NotebookEguiApp {
             ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Tab));
             self.request_completion(&cell);
         }
-        if ctx.input(|input| input.key_pressed(Key::Escape)) {
+        if !completion_open && ctx.input(|input| input.key_pressed(Key::Escape)) {
             self.edit_mode = false;
         }
         let command_mode = !self.edit_mode;
@@ -622,5 +698,62 @@ fn render_markdown(ui: &mut egui::Ui, source: &str) {
         } else {
             ui.label(line);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notebook_protocol::{KernelIdentity, KernelState, NotebookIdentity, NotebookSnapshot};
+
+    fn app() -> NotebookEguiApp {
+        let snapshot = NotebookSnapshot {
+            protocol_version: PROTOCOL_VERSION,
+            schema_version: 1,
+            notebook: NotebookIdentity {
+                path: "completion.ipynb".into(),
+                workspace: "local".into(),
+            },
+            kernel: KernelIdentity {
+                name: "python3".into(),
+                display_name: "Python 3".into(),
+                session_id: None,
+                state: KernelState::Idle,
+            },
+            revision: 1,
+            cells: vec![Cell {
+                id: "code".into(),
+                cell_type: CellType::Code,
+                source: "value.bi".into(),
+                metadata: serde_json::json!({}),
+                execution_count: None,
+                outputs: vec![],
+            }],
+            selected_cell_id: Some("code".into()),
+        };
+        NotebookEguiApp::new(NotebookState::new(snapshot).unwrap())
+    }
+
+    #[test]
+    fn selected_completion_replaces_kernel_cursor_range() {
+        let mut app = app();
+        let cell = app.state.snapshot.cells[0].clone();
+        app.request_completion(&cell);
+        let command_id = app.drain_commands()[0].command_id;
+        app.apply_completion(
+            command_id,
+            CompletionReply {
+                matches: vec!["bit_count".into(), "bit_length".into()],
+                cursor_start: 6,
+                cursor_end: 8,
+            },
+        );
+        app.completion_selection.insert("code".into(), 1);
+
+        app.accept_completion("code");
+
+        assert_eq!(app.editors[0].1, "value.bit_length");
+        assert!(app.dirty_editors.contains("code"));
+        assert!(!app.completion_suggestions.contains_key("code"));
     }
 }

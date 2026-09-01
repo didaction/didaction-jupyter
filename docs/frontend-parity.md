@@ -18,7 +18,7 @@ not a claim of JupyterLab completeness.
 |     7 | Run cell and run all                 | Supported        | Real kernel-channel execution; bounded persisted outputs.                                                                |
 |     8 | Text, stream, error outputs          | Supported        | Execution count and bounded traceback rendering.                                                                         |
 |     9 | Basic graphs                         | Supported        | Bounded PNG and SVG output; seeded executable SVG example.                                                               |
-|    10 | Kernel completion                    | Supported, basic | Tab requests `complete_request`; bounded candidates apply to source.                                                     |
+|    10 | Kernel completion                    | Supported, basic | Tab requests `complete_request`; an editor dropdown supports mouse, ↑/↓, Enter, Tab, and Escape.                         |
 |    11 | Interrupt/restart/reconnect          | Supported        | Native kernel REST lifecycle and path-based session reuse.                                                               |
 |    12 | Browser restart persistence          | Supported        | Notebook on disk plus reusable path-associated Jupyter session.                                                          |
 |    13 | Keyboard notebook flow               | Supported, basic | Command/edit indicator, Escape, A/B, Cmd/Ctrl+Enter, Tab.                                                                |
