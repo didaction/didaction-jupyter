@@ -1,12 +1,15 @@
 import asyncio
 import hashlib
 import json
+from collections.abc import AsyncIterator, Callable
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import httpx
 import nbformat
 from jupyter_kernel_client import KernelClient
+from jupyter_kernel_client.client import output_hook  # type: ignore[import-untyped]
 
 from .config import Settings
 from .models import Command
@@ -58,6 +61,7 @@ class JupyterNotebookTransport:
             await self._ensure_notebook(path, bool(command.create))
             await self._ensure_kernel(path, command.kernel or self.settings.kernel_name)
             return await self._read_notebook(path)
+
         if notebook_path is None:
             raise AdapterError("invalid_input", "No notebook is open")
         path = self.settings.confined_path(notebook_path)
@@ -160,6 +164,94 @@ class JupyterNotebookTransport:
             else:
                 raise AdapterError("unsupported_operation", "Unsupported notebook command")
             return await self._read_notebook(path)
+
+    async def execute_stream(
+        self, command: Command, notebook_path: str | None
+    ) -> AsyncIterator[Any]:
+        if command.type != "execute_cell":
+            raise AdapterError("unsupported_operation", "Only cell execution can stream")
+        if notebook_path is None:
+            raise AdapterError("invalid_input", "No notebook is open")
+        path = self.settings.confined_path(notebook_path)
+        lock = self.locks.setdefault(path, asyncio.Lock())
+        async with lock:
+            notebook = await self._read_notebook(path)
+            cell = self._cell(notebook, command.cell_id)
+            if cell.get("cell_type") != "code":
+                raise AdapterError("invalid_input", "Only code cells can execute")
+            kernel = await self._ensure_kernel(path, command.kernel or self.settings.kernel_name)
+            cell["execution_count"] = None
+            cell["outputs"] = []
+            await self._save_notebook(path, notebook)
+            yield deepcopy(notebook)
+
+            loop = asyncio.get_running_loop()
+            updates: asyncio.Queue[list[dict[str, Any]]] = asyncio.Queue()
+
+            def progress(outputs: list[dict[str, Any]]) -> None:
+                loop.call_soon_threadsafe(updates.put_nowait, deepcopy(outputs))
+
+            execution = asyncio.create_task(
+                asyncio.to_thread(
+                    self._execute_with_progress,
+                    kernel,
+                    self._source(cell.get("source", "")),
+                    command.timeout_ms / 1000,
+                    progress,
+                )
+            )
+            while not execution.done() or not updates.empty():
+                try:
+                    outputs = await asyncio.wait_for(updates.get(), timeout=0.05)
+                except TimeoutError:
+                    continue
+                cell["outputs"] = outputs[:128]
+                await self._save_notebook(path, notebook)
+                yield deepcopy(notebook)
+            try:
+                reply = await execution
+            except TimeoutError as error:
+                await asyncio.to_thread(kernel.interrupt)
+                raise AdapterError(
+                    "timeout", "Cell execution timed out and was interrupted", True
+                ) from error
+            cell["execution_count"] = reply.get("execution_count")
+            cell["outputs"] = reply.get("outputs", [])[:128]
+            await self._save_notebook(path, notebook)
+            yield deepcopy(notebook)
+
+    @staticmethod
+    def _execute_with_progress(
+        kernel: KernelClient,
+        source: str,
+        timeout: float,
+        progress: Callable[[list[dict[str, Any]]], None],
+    ) -> dict[str, Any]:
+        outputs: list[dict[str, Any]] = []
+
+        def capture(message: dict[str, Any]) -> set[int]:
+            changed = set(output_hook(outputs, message))
+            if changed:
+                progress(outputs)
+            return changed
+
+        reply = kernel._manager.client.execute_interactive(
+            source,
+            silent=False,
+            store_history=True,
+            allow_stdin=False,
+            stop_on_error=True,
+            timeout=timeout,
+            output_hook=capture,
+        )
+        content = reply["content"]
+        for output in outputs:
+            output.pop("transient", None)
+        return {
+            "execution_count": content.get("execution_count"),
+            "outputs": outputs,
+            "status": content["status"],
+        }
 
     async def _request(self, method: str, route: str, **kwargs: Any) -> httpx.Response:
         try:

@@ -18,11 +18,17 @@ channels WebSocket into internal snapshots.
 Human egui and WebMCP calls both enter `web/src/command-gateway.ts`. Never add a
 second mutation path or a generic Jupyter forwarding method.
 
+Execution progress travels as bounded NDJSON snapshots from kernel IOPub through
+the same command gateway. TypeScript passes progress through the narrow mounted
+WASM callback; only the final result commits the command and ends executing state.
+
 ## Invariants
 
 - Rust/WASM never fetches, opens sockets/files, launches processes, or knows URLs.
 - The browser never receives Jupyter tokens, cookies, session IDs, or kernel IDs.
 - Raw Jupyter data never enters egui state; normalize it to protocol snapshots.
+- Preserve IOPub ordering and `clear_output`/`update_display_data` replacement
+  semantics; progress may reconcile state but must not finish the command.
 - Use stable nbformat cell IDs; indexes are ordering only.
 - Reject traversal, absolute paths, oversized data, stale revisions, malformed
   results, unknown protocol versions, and unsupported operations.

@@ -14,7 +14,7 @@ WebMCP tool ─┘                                      ↓
                                   direct Jupyter gateway adapter
                          Contents/Sessions/Kernels REST + kernel WebSocket
                                                    ↓
-                              bounded result → WASM reconciliation → egui
+                 bounded NDJSON progress/final → WASM reconciliation → egui
 ```
 
 Rust/WASM never performs fetch or opens a WebSocket. TypeScript owns browser
@@ -22,6 +22,11 @@ APIs and calls only the same-origin gateway. The gateway owns the Jupyter token,
 confines notebook paths, correlates kernel messages, bounds outputs, and
 normalizes nbformat into the versioned Rust protocol. Human actions and optional
 browser WebMCP tools therefore share one validated mutation path.
+
+Cell execution uses `/api/v1/commands/stream`. Each bounded NDJSON event is a
+normalized notebook snapshot derived from an IOPub update; `clear_output` and
+`update_display_data` replace prior state before the idle final result. Partial
+snapshots are persisted so a refresh observes the latest received kernel state.
 
 See [frontend parity](docs/frontend-parity.md) for the prioritized compatibility
 matrix and [direct protocol investigation](docs/direct-jupyter-protocol-investigation.md)
@@ -87,8 +92,9 @@ scripts/smoke.sh
 ```
 
 The smoke test creates a notebook, performs stable-ID cell edits and moves,
-executes through a real IPython kernel, verifies `42`, requests completion, and
-checks rich graph output.
+executes through a real IPython kernel, verifies `42`, requests completion,
+checks rich graph output, and asserts ordered intermediate stream/clear/final
+events plus refresh reconciliation.
 
 ## Security warning
 
@@ -108,8 +114,8 @@ bounded; SVG is decoded only by egui's image loader.
 ## Current limitations
 
 - Single-writer notebook saves; simultaneous edits from JupyterLab can conflict.
-- Math notation is rendered as bounded styled text, not full MathJax/LaTeX
-  typesetting. Arbitrary HTML is reduced to safe readable text/table output.
+- Math notation is locally typeset from a bounded LaTeX subset with MiTeX and
+  Typst; arbitrary HTML is reduced to safe readable text/table output.
 - Structural undo does not restore cleared kernel outputs; rerun the cell instead.
 - Cell collapse and line-number preferences last for the browser session and are
   not yet persisted in notebook metadata.

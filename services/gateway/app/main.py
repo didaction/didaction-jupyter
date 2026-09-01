@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from .config import Settings
 from .jupyter_adapter import AdapterError, JupyterNotebookTransport
@@ -20,6 +20,38 @@ logger = logging.getLogger("didaction.gateway")
 logger.addFilter(RedactingFilter())
 current_notebook: str | None = None
 result_cache: dict[str, CommandResult] = {}
+
+
+def snapshot_result(
+    command: Command,
+    raw: Any,
+    notebook_path: str,
+    base_revision: int | None,
+    kernel_state: str = "idle",
+) -> CommandResult:
+    cells = normalize_cells(raw)
+    revision = transport.revision_for(notebook_path, cells)
+    snapshot = {
+        "protocol_version": 1,
+        "schema_version": 1,
+        "notebook": {"path": notebook_path, "workspace": "local"},
+        "kernel": {
+            "name": settings.kernel_name,
+            "display_name": settings.kernel_name,
+            "session_id": None,
+            "state": kernel_state,
+        },
+        "revision": revision,
+        "cells": cells,
+        "selected_cell_id": cells[0]["id"] if cells else None,
+    }
+    return CommandResult(
+        command_id=command.command_id,
+        idempotency_key=command.idempotency_key,
+        base_revision=base_revision,
+        committed_revision=revision,
+        snapshot=snapshot,
+    )
 
 
 @asynccontextmanager
@@ -112,29 +144,7 @@ async def command_endpoint(command: Command) -> CommandResult:
             raise AdapterError("invalid_input", "No notebook is open")
         query = command.model_copy(update={"type": "query", "query": "full"})
         raw = await transport.execute(query, current_notebook)
-        cells = normalize_cells(raw)
-        revision = transport.revision_for(current_notebook, cells)
-        snapshot = {
-            "protocol_version": 1,
-            "schema_version": 1,
-            "notebook": {"path": current_notebook, "workspace": "local"},
-            "kernel": {
-                "name": settings.kernel_name,
-                "display_name": settings.kernel_name,
-                "session_id": None,
-                "state": "idle",
-            },
-            "revision": revision,
-            "cells": cells,
-            "selected_cell_id": cells[0]["id"] if cells else None,
-        }
-        result = CommandResult(
-            command_id=command.command_id,
-            idempotency_key=command.idempotency_key,
-            base_revision=base_revision,
-            committed_revision=revision,
-            snapshot=snapshot,
-        )
+        result = snapshot_result(command, raw, current_notebook, base_revision)
     except AdapterError as error:
         result = CommandResult(
             command_id=command.command_id,
@@ -144,6 +154,70 @@ async def command_endpoint(command: Command) -> CommandResult:
         )
     result_cache[command.idempotency_key] = result
     return result
+
+
+@app.post("/api/v1/commands/stream")
+async def command_stream(command: Command) -> StreamingResponse:
+    async def events() -> AsyncIterator[str]:
+        if command.type != "execute_cell":
+            error = CommandResult(
+                command_id=command.command_id,
+                idempotency_key=command.idempotency_key,
+                error=GatewayError(
+                    code="unsupported_operation",
+                    message="Only cell execution supports streaming",
+                    retryable=False,
+                ),
+            )
+            yield f"{error.model_dump_json()}\n"
+            return
+        cached = result_cache.get(command.idempotency_key)
+        if cached is not None:
+            yield f"{cached.model_dump_json()}\n"
+            return
+        base_revision = None
+        try:
+            if not transport.ready:
+                await transport.discover()
+            if current_notebook is None:
+                raise AdapterError("invalid_input", "No notebook is open")
+            if current_notebook in transport.revisions:
+                base_revision = transport.revisions[current_notebook][1]
+            if (
+                command.expected_revision is not None
+                and base_revision is not None
+                and command.expected_revision != base_revision
+            ):
+                raise AdapterError(
+                    "stale_revision", "Notebook revision changed; refresh and retry", True
+                )
+            final: CommandResult | None = None
+            async for raw in transport.execute_stream(command, current_notebook):
+                final = snapshot_result(
+                    command, raw, current_notebook, base_revision, kernel_state="busy"
+                )
+                yield f"{final.model_dump_json()}\n"
+            if final is None or final.snapshot is None:
+                raise AdapterError("malformed_response", "Execution returned no notebook state")
+            final.snapshot["kernel"]["state"] = "idle"
+            result_cache[command.idempotency_key] = final
+            yield f"{final.model_dump_json()}\n"
+        except AdapterError as error:
+            result = CommandResult(
+                command_id=command.command_id,
+                idempotency_key=command.idempotency_key,
+                base_revision=base_revision,
+                error=GatewayError(
+                    code=error.code, message=error.message, retryable=error.retryable
+                ),
+            )
+            yield f"{result.model_dump_json()}\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/v1/download")

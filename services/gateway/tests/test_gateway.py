@@ -1,11 +1,15 @@
+import json
 import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import httpx
 import nbformat
 import pytest
 
+from services.gateway.app import main as gateway_main
 from services.gateway.app.config import Settings
 from services.gateway.app.jupyter_adapter import AdapterError, JupyterNotebookTransport
 from services.gateway.app.models import Command
@@ -112,6 +116,106 @@ def test_clear_outputs_resets_execution_state(tmp_path: Path) -> None:
 
     assert notebook.cells[0].outputs == []
     assert notebook.cells[0].execution_count is None
+
+
+@pytest.mark.asyncio
+async def test_execute_stream_yields_iopub_updates_and_latest_clear_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    adapter = JupyterNotebookTransport(Settings(workspace=tmp_path))
+    notebook = nbformat.v4.new_notebook(
+        cells=[nbformat.v4.new_code_cell("stream", id="stream-cell")]
+    )
+    saved: list[list[dict[str, object]]] = []
+
+    class ProtocolClient:
+        def execute_interactive(self, code: str, **kwargs: object) -> dict[str, object]:
+            hook = kwargs["output_hook"]
+            assert callable(hook)
+            for message in [
+                {
+                    "header": {"msg_type": "stream"},
+                    "content": {"name": "stdout", "text": "obsolete\n"},
+                },
+                {"header": {"msg_type": "clear_output"}, "content": {"wait": True}},
+                {
+                    "header": {"msg_type": "stream"},
+                    "content": {"name": "stdout", "text": "latest\n"},
+                },
+            ]:
+                hook(message)
+            return {"content": {"status": "ok", "execution_count": 7}}
+
+    class Kernel:
+        class Manager:
+            client = ProtocolClient()
+
+        _manager = Manager()
+
+    async def read(_: str) -> Any:
+        return notebook
+
+    async def save(_: str, value: Any) -> None:
+        saved.append([dict(output) for output in value.cells[0].outputs])
+
+    async def kernel(_: str, __: str) -> Any:
+        return Kernel()
+
+    monkeypatch.setattr(adapter, "_read_notebook", read)
+    monkeypatch.setattr(adapter, "_save_notebook", save)
+    monkeypatch.setattr(adapter, "_ensure_kernel", kernel)
+    states = [
+        state
+        async for state in adapter.execute_stream(
+            make_command("execute_cell", cell_id="stream-cell"), "stream.ipynb"
+        )
+    ]
+
+    observed = [state.cells[0].outputs for state in states]
+    assert any(outputs and outputs[0].get("text") == "obsolete\n" for outputs in observed)
+    assert any(outputs == [] for outputs in observed[1:])
+    assert states[-1].cells[0].outputs[0]["text"] == "latest\n"
+    assert states[-1].cells[0].execution_count == 7
+    assert saved[-1][0]["text"] == "latest\n"
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_emits_busy_snapshots_before_idle_final(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = nbformat.v4.new_notebook(cells=[nbformat.v4.new_code_cell("print('one')", id="cell")])
+    first.cells[0].outputs = [nbformat.v4.new_output("stream", name="stdout", text="one\n")]
+    final = nbformat.from_dict(first)
+    final.cells[0].outputs = [nbformat.v4.new_output("stream", name="stdout", text="two\n")]
+
+    class StreamingTransport:
+        ready = True
+        revisions = {"stream.ipynb": ("before", 1)}
+
+        async def execute_stream(self, command: Command, path: str) -> AsyncIterator[Any]:
+            yield first
+            yield final
+
+        def revision_for(self, path: str, cells: list[dict[str, Any]]) -> int:
+            return 2 if cells[0]["outputs"][0]["text"] == "one\n" else 3
+
+    monkeypatch.setattr(gateway_main, "transport", StreamingTransport())
+    monkeypatch.setattr(gateway_main, "current_notebook", "stream.ipynb")
+    gateway_main.result_cache.clear()
+    payload = make_command("execute_cell", cell_id="cell").model_dump(mode="json")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=gateway_main.app), base_url="http://test"
+    ) as client:
+        response = await client.post("/api/v1/commands/stream", json=payload)
+
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert [event["snapshot"]["kernel"]["state"] for event in events] == [
+        "busy",
+        "busy",
+        "idle",
+    ]
+    assert events[0]["snapshot"]["cells"][0]["outputs"][0]["text"] == "one\n"
+    assert events[-1]["snapshot"]["cells"][0]["outputs"][0]["text"] == "two\n"
 
 
 def test_stale_cell_is_typed_error(tmp_path: Path) -> None:

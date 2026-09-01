@@ -8,9 +8,21 @@ use notebook_protocol::{
 use notebook_protocol::{ErrorCode, NotebookCommandKind, ProtocolError};
 #[cfg(target_arch = "wasm32")]
 use std::sync::{Arc, Mutex};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::{JsFuture, spawn_local};
+
+#[cfg(any(test, target_arch = "wasm32"))]
+fn apply_progress_snapshot(
+    current: &NotebookState,
+    snapshot: NotebookSnapshot,
+) -> Result<NotebookState, notebook_core::DomainError> {
+    let mut next = current.replace_snapshot(snapshot)?;
+    next.sync_state = notebook_core::SyncState::Executing;
+    Ok(next)
+}
 
 #[wasm_bindgen]
 pub struct NotebookApplication {
@@ -120,8 +132,36 @@ impl eframe::App for MountedApp {
                     );
                     return;
                 };
-                let Ok(promise) = dispatch.call1(&JsValue::NULL, &JsValue::from_str(&serialized))
-                else {
+                let progress_app = Arc::clone(&app);
+                let progress_repaint = repaint.clone();
+                let progress = Closure::<dyn FnMut(JsValue)>::new(move |value: JsValue| {
+                    let Some(serialized) = value.as_string() else {
+                        return;
+                    };
+                    let Ok(result) = serde_json::from_str::<CommandResult>(&serialized) else {
+                        return;
+                    };
+                    let Some(snapshot) = result.snapshot else {
+                        return;
+                    };
+                    let current = progress_app
+                        .lock()
+                        .expect("notebook app mutex poisoned")
+                        .state
+                        .clone();
+                    if let Ok(next) = apply_progress_snapshot(&current, snapshot) {
+                        progress_app
+                            .lock()
+                            .expect("notebook app mutex poisoned")
+                            .replace_state(next);
+                        progress_repaint.request_repaint();
+                    }
+                });
+                let Ok(promise) = dispatch.call2(
+                    &JsValue::NULL,
+                    &JsValue::from_str(&serialized),
+                    progress.as_ref(),
+                ) else {
                     app.lock()
                         .expect("notebook app mutex poisoned")
                         .finish_command(command_id);
@@ -275,4 +315,45 @@ pub async fn mount_notebook(
 
 fn js_error(error: impl std::fmt::Display) -> JsError {
     JsError::new(&error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(revision: u64, output: &str) -> NotebookSnapshot {
+        serde_json::from_value(serde_json::json!({
+            "protocol_version": 1,
+            "schema_version": 1,
+            "notebook": {"path": "stream.ipynb", "workspace": "local"},
+            "kernel": {"name": "python3", "display_name": "Python 3", "state": "busy"},
+            "revision": revision,
+            "cells": [{
+                "id": "cell",
+                "cell_type": "code",
+                "source": "print('stream')",
+                "metadata": {},
+                "execution_count": null,
+                "outputs": [{"kind": "stream", "name": "stdout", "text": output}]
+            }],
+            "selected_cell_id": "cell"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn progress_snapshot_reconciles_output_without_marking_execution_finished() {
+        let state = NotebookState::new(snapshot(1, "obsolete\n")).unwrap();
+
+        let next = apply_progress_snapshot(&state, snapshot(2, "latest\n")).unwrap();
+
+        assert_eq!(next.sync_state, notebook_core::SyncState::Executing);
+        assert_eq!(
+            next.snapshot.cells[0].outputs,
+            vec![notebook_protocol::CellOutput::Stream {
+                name: "stdout".into(),
+                text: "latest\n".into()
+            }]
+        );
+    }
 }

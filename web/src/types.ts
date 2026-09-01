@@ -23,6 +23,7 @@ export type NotebookSnapshot = Record<string, unknown> & {
   revision: number;
   cells: unknown[];
 };
+export type NotebookProgress = (result: CommandResult) => void;
 export interface WasmApplication {
   prepareCommand(input: string): string;
   applyCommandResult(input: string): string;
@@ -33,7 +34,10 @@ export interface NotebookTransport {
   setup(command: NotebookCommand): Promise<CommandResult>;
   query(command: NotebookCommand): Promise<CommandResult>;
   modifyCells(command: NotebookCommand): Promise<CommandResult>;
-  execute(command: NotebookCommand): Promise<CommandResult>;
+  execute(
+    command: NotebookCommand,
+    onProgress?: NotebookProgress,
+  ): Promise<CommandResult>;
   interrupt(command: NotebookCommand): Promise<CommandResult>;
   restart(command: NotebookCommand): Promise<CommandResult>;
   checkpoint(command: NotebookCommand): Promise<CommandResult>;

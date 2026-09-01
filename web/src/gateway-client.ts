@@ -1,6 +1,7 @@
 import type {
   CommandResult,
   NotebookCommand,
+  NotebookProgress,
   NotebookTransport,
 } from "./types";
 
@@ -27,10 +28,55 @@ export class GatewayNotebookTransport implements NotebookTransport {
       clearTimeout(timer);
     }
   }
+  private async callStream(
+    command: NotebookCommand,
+    onProgress?: NotebookProgress,
+  ): Promise<CommandResult> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), command.timeout_ms);
+    try {
+      const response = await fetch(`${this.endpoint}/stream`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(command),
+        signal: controller.signal,
+        credentials: "same-origin",
+      });
+      if (!response.ok || !response.body)
+        throw new Error(`Gateway stream returned HTTP ${response.status}`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = "";
+      let latest: CommandResult | undefined;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffered += decoder.decode(value, { stream: true });
+        if (buffered.length > 4_000_000 && !buffered.includes("\n"))
+          throw new Error("Gateway stream event exceeded the browser limit");
+        const lines = buffered.split("\n");
+        buffered = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          latest = JSON.parse(line) as CommandResult;
+          onProgress?.(latest);
+        }
+      }
+      if (buffered.trim()) {
+        latest = JSON.parse(buffered) as CommandResult;
+        onProgress?.(latest);
+      }
+      if (!latest) throw new Error("Gateway stream returned no result");
+      return latest;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   setup = (c: NotebookCommand) => this.call(c);
   query = (c: NotebookCommand) => this.call(c);
   modifyCells = (c: NotebookCommand) => this.call(c);
-  execute = (c: NotebookCommand) => this.call(c);
+  execute = (c: NotebookCommand, onProgress?: NotebookProgress) =>
+    this.callStream(c, onProgress);
   interrupt = (c: NotebookCommand) => this.call(c);
   restart = (c: NotebookCommand) => this.call(c);
   checkpoint = (c: NotebookCommand) => this.call(c);
@@ -72,7 +118,8 @@ export class MockNotebookTransport extends GatewayNotebookTransport {
   override setup = (c: NotebookCommand) => Promise.resolve(this.handler(c));
   override query = this.setup;
   override modifyCells = this.setup;
-  override execute = this.setup;
+  override execute = (c: NotebookCommand, _onProgress?: NotebookProgress) =>
+    Promise.resolve(this.handler(c));
   override interrupt = this.setup;
   override restart = this.setup;
   override checkpoint = this.setup;

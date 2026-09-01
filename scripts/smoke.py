@@ -28,6 +28,21 @@ def call(payload: dict[str, object]) -> dict[str, object]:
         return json.load(response)
 
 
+def call_stream(payload: dict[str, object]) -> list[dict[str, object]]:
+    gateway_url = os.environ.get("DIDACTION_GATEWAY_URL", "http://127.0.0.1:8080")
+    request = urllib.request.Request(  # noqa: S310 - local acceptance harness.
+        f"{gateway_url}/api/v1/commands/stream",
+        data=json.dumps(payload).encode(),
+        headers={"content-type": "application/json"},
+    )
+    events = []
+    with urllib.request.urlopen(request, timeout=40) as response:  # noqa: S310
+        for line in response:
+            if line.strip():
+                events.append(json.loads(line))
+    return events
+
+
 def insert_cell(revision: int, index: int, source: str, cell_type: str = "code") -> dict:
     cell_id = str(uuid.uuid4())
     result = call(
@@ -111,14 +126,29 @@ graph = call(command("execute_cell", graph["snapshot"]["revision"], cell_id=grap
 assert "image/svg+xml" in json.dumps(graph["snapshot"]["cells"]), graph
 
 stream_source = (
-    "from IPython.display import clear_output\n"
-    "print('obsolete output')\n"
+    "from IPython.display import clear_output\nimport time\n"
+    "print('obsolete output', flush=True)\ntime.sleep(0.2)\n"
     "clear_output(wait=True)\n"
-    "print('latest output')"
+    "print('latest output', flush=True)\ntime.sleep(0.2)"
 )
 stream = insert_cell(graph["snapshot"]["revision"], len(graph["snapshot"]["cells"]), stream_source)
 stream_id = stream["snapshot"]["cells"][-1]["id"]
-stream = call(command("execute_cell", stream["snapshot"]["revision"], cell_id=stream_id))
+stream_events = call_stream(
+    command("execute_cell", stream["snapshot"]["revision"], cell_id=stream_id)
+)
+assert len(stream_events) >= 5, stream_events
+assert all(event["snapshot"]["kernel"]["state"] == "busy" for event in stream_events[:-1]), (
+    stream_events
+)
+assert stream_events[-1]["snapshot"]["kernel"]["state"] == "idle", stream_events
+assert any(
+    "obsolete output" in json.dumps(event["snapshot"]["cells"]) for event in stream_events[:-1]
+), stream_events
+assert any(
+    all(cell["id"] != stream_id or cell["outputs"] == [] for cell in event["snapshot"]["cells"])
+    for event in stream_events[1:-1]
+), stream_events
+stream = stream_events[-1]
 stream_cell = next(cell for cell in stream["snapshot"]["cells"] if cell["id"] == stream_id)
 assert "latest output" in json.dumps(stream_cell), stream_cell
 assert "obsolete output" not in json.dumps(stream_cell["outputs"]), stream_cell
@@ -138,5 +168,5 @@ assert refreshed_cell["outputs"] == [], refreshed_cell
 
 print(
     "direct Jupyter/ipykernel smoke: PASS "
-    "(42, completion, stable edits, SVG graph, latest output clear/refresh)"
+    "(42, completion, stable edits, SVG graph, intermediate stream/clear/refresh)"
 )

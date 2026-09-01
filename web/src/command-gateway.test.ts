@@ -95,4 +95,48 @@ describe("CommandGateway", () => {
     expect(maximumActive).toBe(1);
     expect(observedRevisions).toEqual([1, 2]);
   });
+
+  it("forwards execution progress without committing it as the final result", async () => {
+    const applied: string[] = [];
+    const progress: string[] = [];
+    const wasm: WasmApplication = {
+      prepareCommand: (value) => value,
+      applyCommandResult: (value) => {
+        applied.push(value);
+        return value;
+      },
+      publicSnapshot: () => "{}",
+      dispose: () => {},
+    };
+    const intermediate: CommandResult = {
+      protocol_version: 1,
+      command_id: "00000000-0000-0000-0000-000000000003",
+      idempotency_key: "stream",
+      snapshot: { protocol_version: 1, revision: 2, cells: [] },
+    };
+    const final: CommandResult = {
+      ...intermediate,
+      snapshot: { protocol_version: 1, revision: 3, cells: [] },
+    };
+    const transport = new MockNotebookTransport(() => final);
+    transport.execute = async (_command, onProgress) => {
+      onProgress?.(intermediate);
+      return final;
+    };
+    const gateway = new CommandGateway(wasm, transport);
+
+    await gateway.execute(
+      JSON.stringify({
+        protocol_version: 1,
+        command_id: final.command_id,
+        idempotency_key: "stream",
+        timeout_ms: 1000,
+        type: "execute_cell",
+      }),
+      (result) => progress.push(JSON.stringify(result)),
+    );
+
+    expect(progress).toEqual([JSON.stringify(intermediate)]);
+    expect(applied).toEqual([JSON.stringify(final)]);
+  });
 });
