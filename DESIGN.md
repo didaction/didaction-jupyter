@@ -98,12 +98,13 @@ components:
 
 didaction should feel like opening the original Jupyter Notebook on a trusted local machine: a quiet vertical document, compact IDE chrome, and controls that stay close to the work. Familiarity is functional here. It lets a person read cells, edit code, execute, inspect output, recover the kernel, and resume without first learning a new interface language.
 
-The visual system is deliberately utilitarian rather than expressive. White working surfaces sit on a nearly white canvas; thin dividers organize the shell; selection, focus, and kernel state receive the strongest color. The small orange wordmark is the only persistent brand accent. There are no decorative illustrations, floating panels, gradients, or ornamental motion.
+The visual system is deliberately utilitarian rather than expressive. White working surfaces sit on a nearly white canvas; thin dividers organize the shell; selection, focus, and kernel state receive the strongest color. The egui canvas explicitly uses light visuals so system preference cannot change this material grammar. The small orange wordmark is the only persistent brand accent. There are no decorative illustrations, floating panels, gradients, or ornamental motion.
 
 **Key Characteristics:**
 
 - Document-led vertical notebook flow.
 - Compact, desktop-IDE chrome that wraps cleanly on narrow screens.
+- Explicit light-mode egui primitives with grouped, text-labeled per-cell actions.
 - Flat light surfaces separated by thin rules rather than depth effects.
 - Restrained sans-serif interface type paired with monospace code and output.
 - Blue emphasis for focus and cell selection; semantic color only for status and risk.
@@ -169,7 +170,7 @@ The screen is a three-row shell: a compact connection header, a notebook canvas 
 
 Cells form a single ordered column with a maximum working width of 1120px. The document uses a 16px horizontal gutter and 12px vertical inset, 10px between cells, and 10px within each cell. Cell editors expand from two to eighteen visible lines before their surrounding document flow carries the rest of the work.
 
-At widths below 640px, browser-shell gutters contract to 12px and the secondary “local notebook” label disappears. At widths below 600px, egui controls become 44px tall and wrapped toolbars form additional rows. Cell order, output adjacency, kernel status, and the trust notice remain intact; horizontal overflow is not part of the interaction model.
+At widths below 640px, browser-shell gutters contract to 12px and the secondary “local notebook” label disappears. At widths below 600px, egui controls become 44px tall and wrapped toolbars form additional rows. Each cell action row also wraps, with separators preserving the execution, insertion/duplication, type-conversion, movement, and destructive groups. Cell order, output adjacency, kernel status, and the trust notice remain intact; horizontal overflow is not part of the interaction model.
 
 ### Named Rules
 
@@ -204,13 +205,15 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 - **Character:** Compact, native-feeling controls grouped by separators and allowed to wrap.
 - **Actions:** Cell creation and “Run all” precede kernel recovery actions. Reconnect appears only when disconnected.
 - **State:** Commands are disabled while a mutation or execution makes them unsafe; control availability communicates command validity without noisy animation.
+- **Commit behavior:** “Run all” flushes every visible dirty source before queuing code-cell execution, so the notebook runs what the user can see.
 
 ### Notebook Cell
 
 - **Shape:** A nearly square bordered container with a small inner inset.
 - **Selection:** The active cell receives a 2px blue edge and a barely blue surface; inactive cells use a 1px neutral edge and white surface.
-- **Header:** Monospace prompt or cell type sits beside local actions. Movement and deletion stay with the cell they affect.
-- **Editor:** Multiline monospace editing fills the available width and grows within bounded visible lines.
+- **Header:** The monospace prompt or cell type precedes a wrapping row of primitive text controls. Separators group Run; Add above, Add below, and Duplicate; Code/Markdown conversion; Move up/down; and Delete. Only actions valid for the current cell and position appear.
+- **Editor:** Multiline monospace editing fills the available width, grows within bounded visible lines, and selects its cell on focus or click.
+- **Commit behavior:** Changed source flushes on focus loss. Run, keyboard Run, insertion, duplication, conversion, movement, and deletion flush the visible source before their serialized mutation or execution commands, keeping actions aligned with the text on screen.
 
 ### Output
 
@@ -245,6 +248,7 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 - **Do** keep the vertical notebook document, its ordered cells, and each output directly adjacent to its source.
 - **Do** reserve blue for focus, selection, and running state; reserve green, orange, and red for explicit system meaning.
 - **Do** preserve visible keyboard focus and touch-sized controls at narrow widths.
+- **Do** keep per-cell primitives text-labeled, grouped by task, and attached to the cell they modify.
 - **Do** keep failures bounded, specific, and paired with the next valid recovery action.
 - **Do** show synchronization, kernel state, and revision as quiet persistent metadata.
 

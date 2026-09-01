@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-01T13:10:45Z",
+  "generatedAt": "2026-09-01T14:02:51Z",
   "title": "Design System: didaction notebook",
   "extensions": {
     "colorMeta": {
@@ -8,108 +8,268 @@
         "role": "primary",
         "displayName": "Didaction Orange",
         "canonical": "#d66b2c",
-        "tonalRamp": ["oklch(15% 0.153 47.5)", "oklch(25% 0.153 47.5)", "oklch(35% 0.153 47.5)", "oklch(45% 0.153 47.5)", "oklch(55% 0.153 47.5)", "oklch(65% 0.153 47.5)", "oklch(80% 0.153 47.5)", "oklch(95% 0.153 47.5)"]
+        "tonalRamp": [
+          "oklch(15% 0.153 47.5)",
+          "oklch(25% 0.153 47.5)",
+          "oklch(35% 0.153 47.5)",
+          "oklch(45% 0.153 47.5)",
+          "oklch(55% 0.153 47.5)",
+          "oklch(65% 0.153 47.5)",
+          "oklch(80% 0.153 47.5)",
+          "oklch(95% 0.153 47.5)"
+        ]
       },
       "focus-blue": {
         "role": "primary",
         "displayName": "Notebook Blue",
         "canonical": "#2d698f",
-        "tonalRamp": ["oklch(15% 0.087 239.6)", "oklch(25% 0.087 239.6)", "oklch(35% 0.087 239.6)", "oklch(45% 0.087 239.6)", "oklch(55% 0.087 239.6)", "oklch(65% 0.087 239.6)", "oklch(80% 0.087 239.6)", "oklch(95% 0.087 239.6)"]
+        "tonalRamp": [
+          "oklch(15% 0.087 239.6)",
+          "oklch(25% 0.087 239.6)",
+          "oklch(35% 0.087 239.6)",
+          "oklch(45% 0.087 239.6)",
+          "oklch(55% 0.087 239.6)",
+          "oklch(65% 0.087 239.6)",
+          "oklch(80% 0.087 239.6)",
+          "oklch(95% 0.087 239.6)"
+        ]
       },
       "ink": {
         "role": "neutral",
         "displayName": "Charcoal Ink",
         "canonical": "#263238",
-        "tonalRamp": ["oklch(15% 0.019 229.8)", "oklch(25% 0.019 229.8)", "oklch(35% 0.019 229.8)", "oklch(45% 0.019 229.8)", "oklch(55% 0.019 229.8)", "oklch(65% 0.019 229.8)", "oklch(80% 0.019 229.8)", "oklch(95% 0.019 229.8)"]
+        "tonalRamp": [
+          "oklch(15% 0.019 229.8)",
+          "oklch(25% 0.019 229.8)",
+          "oklch(35% 0.019 229.8)",
+          "oklch(45% 0.019 229.8)",
+          "oklch(55% 0.019 229.8)",
+          "oklch(65% 0.019 229.8)",
+          "oklch(80% 0.019 229.8)",
+          "oklch(95% 0.019 229.8)"
+        ]
       },
       "muted-ink": {
         "role": "neutral",
         "displayName": "Slate Metadata",
         "canonical": "#53636b",
-        "tonalRamp": ["oklch(15% 0.023 229.5)", "oklch(25% 0.023 229.5)", "oklch(35% 0.023 229.5)", "oklch(45% 0.023 229.5)", "oklch(55% 0.023 229.5)", "oklch(65% 0.023 229.5)", "oklch(80% 0.023 229.5)", "oklch(95% 0.023 229.5)"]
+        "tonalRamp": [
+          "oklch(15% 0.023 229.5)",
+          "oklch(25% 0.023 229.5)",
+          "oklch(35% 0.023 229.5)",
+          "oklch(45% 0.023 229.5)",
+          "oklch(55% 0.023 229.5)",
+          "oklch(65% 0.023 229.5)",
+          "oklch(80% 0.023 229.5)",
+          "oklch(95% 0.023 229.5)"
+        ]
       },
       "canvas": {
         "role": "neutral",
         "displayName": "Notebook Canvas",
         "canonical": "#f7f7f7",
-        "tonalRamp": ["oklch(15% 0.000 89.9)", "oklch(25% 0.000 89.9)", "oklch(35% 0.000 89.9)", "oklch(45% 0.000 89.9)", "oklch(55% 0.000 89.9)", "oklch(65% 0.000 89.9)", "oklch(80% 0.000 89.9)", "oklch(95% 0.000 89.9)"]
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(25% 0.000 89.9)",
+          "oklch(35% 0.000 89.9)",
+          "oklch(45% 0.000 89.9)",
+          "oklch(55% 0.000 89.9)",
+          "oklch(65% 0.000 89.9)",
+          "oklch(80% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
       },
       "surface": {
         "role": "neutral",
         "displayName": "Paper Surface",
         "canonical": "#ffffff",
-        "tonalRamp": ["oklch(15% 0.000 89.9)", "oklch(25% 0.000 89.9)", "oklch(35% 0.000 89.9)", "oklch(45% 0.000 89.9)", "oklch(55% 0.000 89.9)", "oklch(65% 0.000 89.9)", "oklch(80% 0.000 89.9)", "oklch(95% 0.000 89.9)"]
+        "tonalRamp": [
+          "oklch(15% 0.000 89.9)",
+          "oklch(25% 0.000 89.9)",
+          "oklch(35% 0.000 89.9)",
+          "oklch(45% 0.000 89.9)",
+          "oklch(55% 0.000 89.9)",
+          "oklch(65% 0.000 89.9)",
+          "oklch(80% 0.000 89.9)",
+          "oklch(95% 0.000 89.9)"
+        ]
       },
       "divider": {
         "role": "neutral",
         "displayName": "Hairline Divider",
         "canonical": "#d7dcdf",
-        "tonalRamp": ["oklch(15% 0.007 233.7)", "oklch(25% 0.007 233.7)", "oklch(35% 0.007 233.7)", "oklch(45% 0.007 233.7)", "oklch(55% 0.007 233.7)", "oklch(65% 0.007 233.7)", "oklch(80% 0.007 233.7)", "oklch(95% 0.007 233.7)"]
+        "tonalRamp": [
+          "oklch(15% 0.007 233.7)",
+          "oklch(25% 0.007 233.7)",
+          "oklch(35% 0.007 233.7)",
+          "oklch(45% 0.007 233.7)",
+          "oklch(55% 0.007 233.7)",
+          "oklch(65% 0.007 233.7)",
+          "oklch(80% 0.007 233.7)",
+          "oklch(95% 0.007 233.7)"
+        ]
       },
       "selected-cell": {
         "role": "neutral",
         "displayName": "Selected Paper",
         "canonical": "#fafdff",
-        "tonalRamp": ["oklch(15% 0.004 236.5)", "oklch(25% 0.004 236.5)", "oklch(35% 0.004 236.5)", "oklch(45% 0.004 236.5)", "oklch(55% 0.004 236.5)", "oklch(65% 0.004 236.5)", "oklch(80% 0.004 236.5)", "oklch(95% 0.004 236.5)"]
+        "tonalRamp": [
+          "oklch(15% 0.004 236.5)",
+          "oklch(25% 0.004 236.5)",
+          "oklch(35% 0.004 236.5)",
+          "oklch(45% 0.004 236.5)",
+          "oklch(55% 0.004 236.5)",
+          "oklch(65% 0.004 236.5)",
+          "oklch(80% 0.004 236.5)",
+          "oklch(95% 0.004 236.5)"
+        ]
       },
       "selection-blue": {
         "role": "primary",
         "displayName": "Selection Wash",
         "canonical": "#d2e8f6",
-        "tonalRamp": ["oklch(15% 0.030 235.6)", "oklch(25% 0.030 235.6)", "oklch(35% 0.030 235.6)", "oklch(45% 0.030 235.6)", "oklch(55% 0.030 235.6)", "oklch(65% 0.030 235.6)", "oklch(80% 0.030 235.6)", "oklch(95% 0.030 235.6)"]
+        "tonalRamp": [
+          "oklch(15% 0.030 235.6)",
+          "oklch(25% 0.030 235.6)",
+          "oklch(35% 0.030 235.6)",
+          "oklch(45% 0.030 235.6)",
+          "oklch(55% 0.030 235.6)",
+          "oklch(65% 0.030 235.6)",
+          "oklch(80% 0.030 235.6)",
+          "oklch(95% 0.030 235.6)"
+        ]
       },
       "output-surface": {
         "role": "neutral",
         "displayName": "Output Wash",
         "canonical": "#f8fafb",
-        "tonalRamp": ["oklch(15% 0.003 228.8)", "oklch(25% 0.003 228.8)", "oklch(35% 0.003 228.8)", "oklch(45% 0.003 228.8)", "oklch(55% 0.003 228.8)", "oklch(65% 0.003 228.8)", "oklch(80% 0.003 228.8)", "oklch(95% 0.003 228.8)"]
+        "tonalRamp": [
+          "oklch(15% 0.003 228.8)",
+          "oklch(25% 0.003 228.8)",
+          "oklch(35% 0.003 228.8)",
+          "oklch(45% 0.003 228.8)",
+          "oklch(55% 0.003 228.8)",
+          "oklch(65% 0.003 228.8)",
+          "oklch(80% 0.003 228.8)",
+          "oklch(95% 0.003 228.8)"
+        ]
       },
       "warning-surface": {
         "role": "tertiary",
         "displayName": "Trust Wash",
         "canonical": "#fff8e8",
-        "tonalRamp": ["oklch(15% 0.022 87.1)", "oklch(25% 0.022 87.1)", "oklch(35% 0.022 87.1)", "oklch(45% 0.022 87.1)", "oklch(55% 0.022 87.1)", "oklch(65% 0.022 87.1)", "oklch(80% 0.022 87.1)", "oklch(95% 0.022 87.1)"]
+        "tonalRamp": [
+          "oklch(15% 0.022 87.1)",
+          "oklch(25% 0.022 87.1)",
+          "oklch(35% 0.022 87.1)",
+          "oklch(45% 0.022 87.1)",
+          "oklch(55% 0.022 87.1)",
+          "oklch(65% 0.022 87.1)",
+          "oklch(80% 0.022 87.1)",
+          "oklch(95% 0.022 87.1)"
+        ]
       },
       "warning-divider": {
         "role": "tertiary",
         "displayName": "Trust Divider",
         "canonical": "#ead49e",
-        "tonalRamp": ["oklch(15% 0.074 88.4)", "oklch(25% 0.074 88.4)", "oklch(35% 0.074 88.4)", "oklch(45% 0.074 88.4)", "oklch(55% 0.074 88.4)", "oklch(65% 0.074 88.4)", "oklch(80% 0.074 88.4)", "oklch(95% 0.074 88.4)"]
+        "tonalRamp": [
+          "oklch(15% 0.074 88.4)",
+          "oklch(25% 0.074 88.4)",
+          "oklch(35% 0.074 88.4)",
+          "oklch(45% 0.074 88.4)",
+          "oklch(55% 0.074 88.4)",
+          "oklch(65% 0.074 88.4)",
+          "oklch(80% 0.074 88.4)",
+          "oklch(95% 0.074 88.4)"
+        ]
       },
       "success": {
         "role": "secondary",
         "displayName": "Saved Green",
         "canonical": "#2e7d32",
-        "tonalRamp": ["oklch(15% 0.135 144.2)", "oklch(25% 0.135 144.2)", "oklch(35% 0.135 144.2)", "oklch(45% 0.135 144.2)", "oklch(55% 0.135 144.2)", "oklch(65% 0.135 144.2)", "oklch(80% 0.135 144.2)", "oklch(95% 0.135 144.2)"]
+        "tonalRamp": [
+          "oklch(15% 0.135 144.2)",
+          "oklch(25% 0.135 144.2)",
+          "oklch(35% 0.135 144.2)",
+          "oklch(45% 0.135 144.2)",
+          "oklch(55% 0.135 144.2)",
+          "oklch(65% 0.135 144.2)",
+          "oklch(80% 0.135 144.2)",
+          "oklch(95% 0.135 144.2)"
+        ]
       },
       "pending": {
         "role": "secondary",
         "displayName": "Pending Orange",
         "canonical": "#ef6c00",
-        "tonalRamp": ["oklch(15% 0.185 48.1)", "oklch(25% 0.185 48.1)", "oklch(35% 0.185 48.1)", "oklch(45% 0.185 48.1)", "oklch(55% 0.185 48.1)", "oklch(65% 0.185 48.1)", "oklch(80% 0.185 48.1)", "oklch(95% 0.185 48.1)"]
+        "tonalRamp": [
+          "oklch(15% 0.185 48.1)",
+          "oklch(25% 0.185 48.1)",
+          "oklch(35% 0.185 48.1)",
+          "oklch(45% 0.185 48.1)",
+          "oklch(55% 0.185 48.1)",
+          "oklch(65% 0.185 48.1)",
+          "oklch(80% 0.185 48.1)",
+          "oklch(95% 0.185 48.1)"
+        ]
       },
       "running": {
         "role": "secondary",
         "displayName": "Running Blue",
         "canonical": "#0277bd",
-        "tonalRamp": ["oklch(15% 0.139 245.4)", "oklch(25% 0.139 245.4)", "oklch(35% 0.139 245.4)", "oklch(45% 0.139 245.4)", "oklch(55% 0.139 245.4)", "oklch(65% 0.139 245.4)", "oklch(80% 0.139 245.4)", "oklch(95% 0.139 245.4)"]
+        "tonalRamp": [
+          "oklch(15% 0.139 245.4)",
+          "oklch(25% 0.139 245.4)",
+          "oklch(35% 0.139 245.4)",
+          "oklch(45% 0.139 245.4)",
+          "oklch(55% 0.139 245.4)",
+          "oklch(65% 0.139 245.4)",
+          "oklch(80% 0.139 245.4)",
+          "oklch(95% 0.139 245.4)"
+        ]
       },
       "danger": {
         "role": "secondary",
         "displayName": "Action Red",
         "canonical": "#c62828",
-        "tonalRamp": ["oklch(15% 0.194 26.7)", "oklch(25% 0.194 26.7)", "oklch(35% 0.194 26.7)", "oklch(45% 0.194 26.7)", "oklch(55% 0.194 26.7)", "oklch(65% 0.194 26.7)", "oklch(80% 0.194 26.7)", "oklch(95% 0.194 26.7)"]
+        "tonalRamp": [
+          "oklch(15% 0.194 26.7)",
+          "oklch(25% 0.194 26.7)",
+          "oklch(35% 0.194 26.7)",
+          "oklch(45% 0.194 26.7)",
+          "oklch(55% 0.194 26.7)",
+          "oklch(65% 0.194 26.7)",
+          "oklch(80% 0.194 26.7)",
+          "oklch(95% 0.194 26.7)"
+        ]
       }
     },
     "typographyMeta": {
-      "title": { "displayName": "Notebook Title", "purpose": "The compact egui notebook title." },
-      "body": { "displayName": "Interface Body", "purpose": "Controls, guidance, and bounded failures." },
-      "label": { "displayName": "Shell Metadata", "purpose": "Connection state, revision details, and trust copy." },
-      "code": { "displayName": "Notebook Code", "purpose": "Prompts, editable source, output, and tracebacks." }
+      "title": {
+        "displayName": "Notebook Title",
+        "purpose": "The compact egui notebook title."
+      },
+      "body": {
+        "displayName": "Interface Body",
+        "purpose": "Controls, guidance, and bounded failures."
+      },
+      "label": {
+        "displayName": "Shell Metadata",
+        "purpose": "Connection state, revision details, and trust copy."
+      },
+      "code": {
+        "displayName": "Notebook Code",
+        "purpose": "Prompts, editable source, output, and tracebacks."
+      }
     },
     "shadows": [],
     "motion": [
-      { "name": "reduced-motion-floor", "value": "0.01ms", "purpose": "Collapses any incidental animation when reduced motion is requested; the interface otherwise avoids decorative motion." }
+      {
+        "name": "reduced-motion-floor",
+        "value": "0.01ms",
+        "purpose": "Collapses any incidental animation when reduced motion is requested; the interface otherwise avoids decorative motion."
+      }
     ],
     "breakpoints": [
       { "name": "canvas-controls-compact", "value": "600px" },
@@ -136,9 +296,9 @@
       "name": "Selected Notebook Cell",
       "kind": "card",
       "refersTo": "cell-selected",
-      "description": "The active unit of notebook editing and execution.",
-      "html": "<article class=\"ds-cell ds-cell-selected\"><div class=\"ds-cell-actions\"><code>In [5]</code><button>Run</button><button>Move down</button><button>Delete</button></div><pre>value = 40 + 2</pre></article>",
-      "css": ".ds-cell { padding: 10px; color: #263238; background: #fff; border: 1px solid #d2d2d2; border-radius: 3px; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-cell-selected { background: #fafdff; border: 2px solid #2d6991; } .ds-cell-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .ds-cell code, .ds-cell pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; } .ds-cell button { min-height: 30px; border: 0; background: #e6e6e6; color: #4b555c; padding: 5px 8px; } .ds-cell button:hover { background: #dce6eb; } .ds-cell button:focus-visible { outline: 3px solid #2d698f; outline-offset: 2px; } .ds-cell pre { margin: 10px 0 0; padding: 8px 4px; background: #fff; }"
+      "description": "The active unit of editing with grouped primitive actions; visible source flushes before serialized structural or execution commands.",
+      "html": "<article class=\"ds-cell ds-cell-selected\"><div class=\"ds-cell-actions\"><code>In [3]</code><span class=\"ds-cell-action-group\"><button type=\"button\">Run</button></span><i aria-hidden=\"true\"></i><span class=\"ds-cell-action-group\"><button type=\"button\">Add above</button><button type=\"button\">Add below</button><button type=\"button\">Duplicate</button></span><i aria-hidden=\"true\"></i><span class=\"ds-cell-action-group\"><button type=\"button\">Markdown</button></span><i aria-hidden=\"true\"></i><span class=\"ds-cell-action-group\"><button type=\"button\">Move down</button></span><i aria-hidden=\"true\"></i><span class=\"ds-cell-action-group\"><button type=\"button\">Delete</button></span></div><pre>value = 40 + 2</pre></article>",
+      "css": ".ds-cell { color-scheme: light; padding: 10px; color: #263238; background: #fff; border: 1px solid #d2d2d2; border-radius: 3px; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-cell-selected { background: #fafdff; border: 2px solid #2d6991; } .ds-cell-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .ds-cell-action-group { display: inline-flex; align-items: center; gap: 8px; } .ds-cell-actions > i { width: 1px; height: 22px; background: #d2d2d2; } .ds-cell code, .ds-cell pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; } .ds-cell button { min-height: 30px; border: 0; background: #e6e6e6; color: #4b555c; padding: 5px 8px; } .ds-cell button:hover { background: #dce6eb; } .ds-cell button:focus-visible { outline: 3px solid #2d698f; outline-offset: 2px; } .ds-cell button:active { background: #cfdde4; } .ds-cell pre { margin: 10px 0 0; padding: 8px 4px; background: #fff; } @media (max-width: 600px) { .ds-cell button { min-height: 44px; } }"
     },
     {
       "name": "Notebook Output",
@@ -180,28 +340,58 @@
   ],
   "narrative": {
     "northStar": "The Familiar Local Notebook",
-    "overview": "didaction should feel like opening the original Jupyter Notebook on a trusted local machine: a quiet vertical document, compact IDE chrome, and controls that stay close to the work. Familiarity is functional here. It lets a person read cells, edit code, execute, inspect output, recover the kernel, and resume without first learning a new interface language.\n\nThe visual system is deliberately utilitarian rather than expressive. White working surfaces sit on a nearly white canvas; thin dividers organize the shell; selection, focus, and kernel state receive the strongest color. The small orange wordmark is the only persistent brand accent. There are no decorative illustrations, floating panels, gradients, or ornamental motion.",
+    "overview": "didaction should feel like opening the original Jupyter Notebook on a trusted local machine: a quiet vertical document, compact IDE chrome, and controls that stay close to the work. Familiarity is functional here. It lets a person read cells, edit code, execute, inspect output, recover the kernel, and resume without first learning a new interface language.\n\nThe visual system is deliberately utilitarian rather than expressive. White working surfaces sit on a nearly white canvas; thin dividers organize the shell; selection, focus, and kernel state receive the strongest color. The egui canvas explicitly uses light visuals so system preference cannot change this material grammar. The small orange wordmark is the only persistent brand accent. There are no decorative illustrations, floating panels, gradients, or ornamental motion.",
     "keyCharacteristics": [
       "Document-led vertical notebook flow.",
       "Compact, desktop-IDE chrome that wraps cleanly on narrow screens.",
+      "Explicit light-mode egui primitives with grouped, text-labeled per-cell actions.",
       "Flat light surfaces separated by thin rules rather than depth effects.",
       "Restrained sans-serif interface type paired with monospace code and output.",
       "Blue emphasis for focus and cell selection; semantic color only for status and risk.",
       "Quiet state changes with visible, actionable recovery paths."
     ],
     "rules": [
-      { "name": "The Color Has a Job Rule", "body": "Outside the wordmark, color must indicate focus, selection, synchronization, execution, warning, or failure.", "section": "colors" },
-      { "name": "The Current Cell Rule", "body": "The selected cell uses both a stronger blue edge and a barely tinted surface, so selection remains clear without filling the document with color.", "section": "colors" },
-      { "name": "The Code Stays Code Rule", "body": "Prompts, editable source, execution results, and tracebacks always use monospace; surrounding controls and system status always use the UI sans.", "section": "typography" },
-      { "name": "The Document Owns the Viewport Rule", "body": "Chrome stays compact so working cells, output, and kernel state remain visible together whenever the viewport allows it.", "section": "layout" },
-      { "name": "The Narrow Screen Preserves the Task Rule", "body": "Controls may wrap and secondary labels may disappear, but execution, recovery, status, and the ordered cell document remain available.", "section": "layout" },
-      { "name": "The Flat Notebook Rule", "body": "Do not use shadows, glass, gradients, or floating cards to separate ordinary notebook regions; use tonal surfaces and one-pixel rules.", "section": "elevation" },
-      { "name": "The Almost-Square Rule", "body": "Corners should feel structural and tool-like. Do not introduce pill controls or large card radii.", "section": "shapes" }
+      {
+        "name": "The Color Has a Job Rule",
+        "body": "Outside the wordmark, color must indicate focus, selection, synchronization, execution, warning, or failure.",
+        "section": "colors"
+      },
+      {
+        "name": "The Current Cell Rule",
+        "body": "The selected cell uses both a stronger blue edge and a barely tinted surface, so selection remains clear without filling the document with color.",
+        "section": "colors"
+      },
+      {
+        "name": "The Code Stays Code Rule",
+        "body": "Prompts, editable source, execution results, and tracebacks always use monospace; surrounding controls and system status always use the UI sans.",
+        "section": "typography"
+      },
+      {
+        "name": "The Document Owns the Viewport Rule",
+        "body": "Chrome stays compact so working cells, output, and kernel state remain visible together whenever the viewport allows it.",
+        "section": "layout"
+      },
+      {
+        "name": "The Narrow Screen Preserves the Task Rule",
+        "body": "Controls may wrap and secondary labels may disappear, but execution, recovery, status, and the ordered cell document remain available.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Notebook Rule",
+        "body": "Do not use shadows, glass, gradients, or floating cards to separate ordinary notebook regions; use tonal surfaces and one-pixel rules.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Almost-Square Rule",
+        "body": "Corners should feel structural and tool-like. Do not introduce pill controls or large card radii.",
+        "section": "shapes"
+      }
     ],
     "dos": [
       "Do keep the vertical notebook document, its ordered cells, and each output directly adjacent to its source.",
       "Do reserve blue for focus, selection, and running state; reserve green, orange, and red for explicit system meaning.",
       "Do preserve visible keyboard focus and touch-sized controls at narrow widths.",
+      "Do keep per-cell primitives text-labeled, grouped by task, and attached to the cell they modify.",
       "Do keep failures bounded, specific, and paired with the next valid recovery action.",
       "Do show synchronization, kernel state, and revision as quiet persistent metadata."
     ],

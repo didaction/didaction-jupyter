@@ -4,13 +4,14 @@ use notebook_protocol::{
     Cell, CellMutation, CellOutput, CellType, NotebookCommand, NotebookCommandKind,
     PROTOCOL_VERSION,
 };
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use uuid::Uuid;
 
 pub struct NotebookEguiApp {
     pub state: NotebookState,
     outbound: VecDeque<NotebookCommand>,
     editors: Vec<(String, String)>,
+    dirty_editors: HashSet<String>,
 }
 
 impl NotebookEguiApp {
@@ -25,6 +26,7 @@ impl NotebookEguiApp {
             state,
             outbound: VecDeque::new(),
             editors,
+            dirty_editors: HashSet::new(),
         }
     }
     pub fn drain_commands(&mut self) -> Vec<NotebookCommand> {
@@ -39,6 +41,7 @@ impl NotebookEguiApp {
             .iter()
             .map(|c| (c.id.clone(), c.source.clone()))
             .collect();
+        self.dirty_editors.clear();
     }
     fn emit(&mut self, kind: NotebookCommandKind) {
         self.outbound.push_back(NotebookCommand {
@@ -49,6 +52,24 @@ impl NotebookEguiApp {
             timeout_ms: 30_000,
             kind,
         });
+    }
+    fn editor_source(&self, cell: &Cell) -> String {
+        self.editors
+            .iter()
+            .find(|(id, _)| id == &cell.id)
+            .map_or_else(|| cell.source.clone(), |(_, source)| source.clone())
+    }
+    fn flush_editor(&mut self, cell: &Cell) {
+        if self.dirty_editors.remove(&cell.id) {
+            self.emit(NotebookCommandKind::ModifyCells {
+                changes: vec![CellMutation::Update {
+                    cell_id: cell.id.clone(),
+                    source: Some(self.editor_source(cell)),
+                    metadata: None,
+                    cell_type: Some(cell.cell_type.clone()),
+                }],
+            });
+        }
     }
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
@@ -67,17 +88,18 @@ impl NotebookEguiApp {
                 .on_hover_text("Insert a code cell")
                 .clicked()
             {
-                self.insert_cell(CellType::Code);
+                self.insert_cell_after_selection(CellType::Code);
             }
             if ui
                 .add_enabled(idle, egui::Button::new("Add Markdown"))
                 .on_hover_text("Insert a Markdown cell")
                 .clicked()
             {
-                self.insert_cell(CellType::Markdown);
+                self.insert_cell_after_selection(CellType::Markdown);
             }
             if ui.add_enabled(idle, egui::Button::new("Run all")).clicked() {
                 for cell in self.state.snapshot.cells.clone() {
+                    self.flush_editor(&cell);
                     if cell.cell_type == CellType::Code {
                         self.emit(NotebookCommandKind::ExecuteCell { cell_id: cell.id });
                     }
@@ -103,20 +125,43 @@ impl NotebookEguiApp {
             }
         });
     }
-    fn insert_cell(&mut self, cell_type: CellType) {
+    fn insert_cell_after_selection(&mut self, cell_type: CellType) {
+        if let Some(selected) = self
+            .state
+            .snapshot
+            .cells
+            .iter()
+            .find(|cell| Some(&cell.id) == self.state.snapshot.selected_cell_id.as_ref())
+            .cloned()
+        {
+            self.flush_editor(&selected);
+        }
+        let index = self
+            .state
+            .snapshot
+            .selected_cell_id
+            .as_ref()
+            .and_then(|id| {
+                self.state
+                    .snapshot
+                    .cells
+                    .iter()
+                    .position(|cell| &cell.id == id)
+            })
+            .map_or(self.state.snapshot.cells.len(), |index| index + 1);
+        self.insert_cell(index, cell_type, String::new());
+    }
+    fn insert_cell(&mut self, index: usize, cell_type: CellType, source: String) {
         let cell = Cell {
             id: Uuid::new_v4().to_string(),
             cell_type,
-            source: String::new(),
+            source,
             metadata: serde_json::json!({}),
             execution_count: None,
             outputs: vec![],
         };
         self.emit(NotebookCommandKind::ModifyCells {
-            changes: vec![CellMutation::Insert {
-                index: self.state.snapshot.cells.len(),
-                cell,
-            }],
+            changes: vec![CellMutation::Insert { index, cell }],
         });
     }
     fn status(&self, ui: &mut egui::Ui) {
@@ -173,7 +218,7 @@ impl NotebookEguiApp {
             .corner_radius(CornerRadius::same(3))
             .inner_margin(Margin::same(10));
         frame.show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(
                     RichText::new(match cell.cell_type {
                         CellType::Code => format!(
@@ -193,11 +238,65 @@ impl NotebookEguiApp {
                 if cell.cell_type == CellType::Code
                     && ui.add_enabled(idle, egui::Button::new("Run")).clicked()
                 {
+                    self.flush_editor(&cell);
                     self.emit(NotebookCommandKind::ExecuteCell {
                         cell_id: cell.id.clone(),
                     });
                 }
+                ui.separator();
+                if ui
+                    .add_enabled(idle, egui::Button::new("Add above"))
+                    .clicked()
+                {
+                    self.flush_editor(&cell);
+                    self.insert_cell(index, CellType::Code, String::new());
+                }
+                if ui
+                    .add_enabled(idle, egui::Button::new("Add below"))
+                    .clicked()
+                {
+                    self.flush_editor(&cell);
+                    self.insert_cell(index + 1, CellType::Code, String::new());
+                }
+                if ui
+                    .add_enabled(idle, egui::Button::new("Duplicate"))
+                    .clicked()
+                {
+                    self.flush_editor(&cell);
+                    self.insert_cell(index + 1, cell.cell_type.clone(), self.editor_source(&cell));
+                }
+                ui.separator();
+                if cell.cell_type != CellType::Code
+                    && ui.add_enabled(idle, egui::Button::new("Code")).clicked()
+                {
+                    self.flush_editor(&cell);
+                    self.emit(NotebookCommandKind::ModifyCells {
+                        changes: vec![CellMutation::Update {
+                            cell_id: cell.id.clone(),
+                            source: Some(self.editor_source(&cell)),
+                            metadata: None,
+                            cell_type: Some(CellType::Code),
+                        }],
+                    });
+                }
+                if cell.cell_type != CellType::Markdown
+                    && ui
+                        .add_enabled(idle, egui::Button::new("Markdown"))
+                        .clicked()
+                {
+                    self.flush_editor(&cell);
+                    self.emit(NotebookCommandKind::ModifyCells {
+                        changes: vec![CellMutation::Update {
+                            cell_id: cell.id.clone(),
+                            source: Some(self.editor_source(&cell)),
+                            metadata: None,
+                            cell_type: Some(CellType::Markdown),
+                        }],
+                    });
+                }
+                ui.separator();
                 if index > 0 && ui.add_enabled(idle, egui::Button::new("Move up")).clicked() {
+                    self.flush_editor(&cell);
                     self.emit(NotebookCommandKind::ModifyCells {
                         changes: vec![CellMutation::Move {
                             cell_id: cell.id.clone(),
@@ -210,6 +309,7 @@ impl NotebookEguiApp {
                         .add_enabled(idle, egui::Button::new("Move down"))
                         .clicked()
                 {
+                    self.flush_editor(&cell);
                     self.emit(NotebookCommandKind::ModifyCells {
                         changes: vec![CellMutation::Move {
                             cell_id: cell.id.clone(),
@@ -217,7 +317,9 @@ impl NotebookEguiApp {
                         }],
                     });
                 }
+                ui.separator();
                 if ui.add_enabled(idle, egui::Button::new("Delete")).clicked() {
+                    self.flush_editor(&cell);
                     self.emit(NotebookCommandKind::ModifyCells {
                         changes: vec![CellMutation::Delete {
                             cell_id: cell.id.clone(),
@@ -242,7 +344,14 @@ impl NotebookEguiApp {
                         .desired_width(f32::INFINITY)
                         .code_editor(),
                 );
-                (response.lost_focus() && response.changed()).then(|| editor.clone())
+                if response.changed() {
+                    self.dirty_editors.insert(cell.id.clone());
+                }
+                if response.has_focus() || response.clicked() {
+                    self.state.snapshot.selected_cell_id = Some(cell.id.clone());
+                }
+                (response.lost_focus() && self.dirty_editors.remove(&cell.id))
+                    .then(|| editor.clone())
             };
             if let Some(source) = edited {
                 self.emit(NotebookCommandKind::ModifyCells {
@@ -250,6 +359,7 @@ impl NotebookEguiApp {
                         cell_id: cell.id.clone(),
                         source: Some(source),
                         metadata: None,
+                        cell_type: Some(cell.cell_type.clone()),
                     }],
                 });
             }
@@ -264,6 +374,7 @@ impl eframe::App for NotebookEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let compact_controls = ctx.screen_rect().width() < 600.0;
         ctx.style_mut(|style| {
+            style.visuals = egui::Visuals::light();
             style.spacing.item_spacing = egui::vec2(8.0, 8.0);
             style.spacing.interact_size.y = if compact_controls { 44.0 } else { 30.0 };
             style.visuals.selection.bg_fill = Color32::from_rgb(210, 232, 246);
@@ -271,6 +382,16 @@ impl eframe::App for NotebookEguiApp {
         if ctx.input(|input| input.modifiers.command && input.key_pressed(Key::Enter))
             && let Some(id) = self.state.snapshot.selected_cell_id.clone()
         {
+            if let Some(cell) = self
+                .state
+                .snapshot
+                .cells
+                .iter()
+                .find(|cell| cell.id == id)
+                .cloned()
+            {
+                self.flush_editor(&cell);
+            }
             self.emit(NotebookCommandKind::ExecuteCell { cell_id: id });
         }
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| self.toolbar(ui));

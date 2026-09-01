@@ -1,5 +1,8 @@
 import init, { mountNotebook, NotebookApplication } from "../pkg/notebook_wasm";
-import { CommandGateway } from "./command-gateway";
+import {
+  CommandGateway,
+  createQueuedNotebookDispatcher,
+} from "./command-gateway";
 import { McpNotebookTransport } from "./mcp-client";
 import type { NotebookCommand, NotebookSnapshot } from "./types";
 import { installWebMcp } from "./webmcp";
@@ -36,6 +39,12 @@ async function boot(): Promise<void> {
   const snapshot = setup.snapshot as NotebookSnapshot;
   const wasm = new NotebookApplication(JSON.stringify(snapshot));
   const gateway = new CommandGateway(wasm, transport);
+  const dispatchEguiCommand = createQueuedNotebookDispatcher(gateway, () =>
+    Number(
+      (JSON.parse(wasm.publicSnapshot()) as { snapshot: NotebookSnapshot })
+        .snapshot.revision,
+    ),
+  );
   const hasWebMcp = installWebMcp(
     gateway,
     () =>
@@ -51,7 +60,7 @@ async function boot(): Promise<void> {
   await mountNotebook(
     "notebook-canvas",
     JSON.stringify(snapshot),
-    (serialized: string) => gateway.execute(serialized),
+    dispatchEguiCommand,
   );
   window.addEventListener(
     "beforeunload",

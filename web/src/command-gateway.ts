@@ -33,3 +33,22 @@ export class CommandGateway {
     return JSON.stringify(result);
   }
 }
+
+export function createQueuedNotebookDispatcher(
+  gateway: CommandGateway,
+  currentRevision: () => number,
+): (serialized: string) => Promise<string> {
+  let tail = Promise.resolve();
+  return (serialized: string) => {
+    const task = tail.then(() => {
+      const command = JSON.parse(serialized) as NotebookCommand;
+      command.expected_revision = currentRevision();
+      return gateway.execute(JSON.stringify(command));
+    });
+    tail = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    return task;
+  };
+}
