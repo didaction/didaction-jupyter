@@ -32,6 +32,13 @@ impl NotebookEguiApp {
             .iter()
             .map(|c| (c.id.clone(), c.source.clone()))
             .collect();
+        let rendered_markdown = state
+            .snapshot
+            .cells
+            .iter()
+            .filter(|cell| cell.cell_type == CellType::Markdown)
+            .map(|cell| cell.id.clone())
+            .collect();
         Self {
             state,
             outbound: VecDeque::new(),
@@ -42,7 +49,7 @@ impl NotebookEguiApp {
             pending_caret_positions: HashMap::new(),
             pending_completions: BTreeMap::new(),
             dragging_cell: None,
-            rendered_markdown: HashSet::new(),
+            rendered_markdown,
             edit_mode: false,
             pending_editor_focus: None,
         }
@@ -57,7 +64,27 @@ impl NotebookEguiApp {
         self.outbound.drain(..).collect()
     }
     pub fn replace_state(&mut self, state: NotebookState) {
+        let previous_markdown: HashSet<_> = self
+            .state
+            .snapshot
+            .cells
+            .iter()
+            .filter(|cell| cell.cell_type == CellType::Markdown)
+            .map(|cell| cell.id.clone())
+            .collect();
         self.state = state;
+        let current_markdown: HashSet<_> = self
+            .state
+            .snapshot
+            .cells
+            .iter()
+            .filter(|cell| cell.cell_type == CellType::Markdown)
+            .map(|cell| cell.id.clone())
+            .collect();
+        self.rendered_markdown
+            .retain(|cell_id| current_markdown.contains(cell_id));
+        self.rendered_markdown
+            .extend(current_markdown.difference(&previous_markdown).cloned());
         self.editors = self
             .state
             .snapshot
@@ -561,22 +588,20 @@ impl NotebookEguiApp {
             });
             if cell.cell_type == CellType::Markdown {
                 let rendered = self.rendered_markdown.contains(&cell.id);
-                if ui
-                    .button(if rendered {
-                        "Edit Markdown"
-                    } else {
-                        "Render Markdown"
-                    })
-                    .clicked()
-                {
-                    if rendered {
-                        self.rendered_markdown.remove(&cell.id);
-                    } else {
-                        self.rendered_markdown.insert(cell.id.clone());
-                    }
-                }
                 if rendered {
-                    render_markdown(ui, &self.editor_source(&cell));
+                    let rendered_response = ui
+                        .scope(|ui| render_markdown(ui, &self.editor_source(&cell)))
+                        .response
+                        .on_hover_text("Double-click to edit Markdown");
+                    if rendered_response.double_clicked() {
+                        self.rendered_markdown.remove(&cell.id);
+                        self.state.snapshot.selected_cell_id = Some(cell.id.clone());
+                        self.pending_editor_focus = Some(cell.id.clone());
+                        self.edit_mode = true;
+                    }
+                } else if ui.button("Render Markdown").clicked() {
+                    self.rendered_markdown.insert(cell.id.clone());
+                    self.edit_mode = false;
                 }
             }
             let show_editor =
@@ -1142,5 +1167,37 @@ mod tests {
         assert_eq!(notebook_document_width(720.0), 720.0);
         assert_eq!(notebook_document_width(1440.0), 1120.0);
         assert_eq!(notebook_document_width(-1.0), 0.0);
+    }
+
+    #[test]
+    fn markdown_is_rendered_by_default() {
+        let mut snapshot = app().state.snapshot;
+        snapshot.cells[0].cell_type = CellType::Markdown;
+
+        let app = NotebookEguiApp::new(NotebookState::new(snapshot).unwrap());
+
+        assert!(app.rendered_markdown.contains("code"));
+    }
+
+    #[test]
+    fn refresh_preserves_editing_and_renders_new_markdown() {
+        let mut snapshot = app().state.snapshot;
+        snapshot.cells[0].cell_type = CellType::Markdown;
+        let mut app = NotebookEguiApp::new(NotebookState::new(snapshot.clone()).unwrap());
+        app.rendered_markdown.remove("code");
+
+        snapshot.revision += 1;
+        snapshot.cells.push(Cell {
+            id: "new-markdown".into(),
+            cell_type: CellType::Markdown,
+            source: "## New".into(),
+            metadata: serde_json::json!({}),
+            execution_count: None,
+            outputs: vec![],
+        });
+        app.replace_state(NotebookState::new(snapshot).unwrap());
+
+        assert!(!app.rendered_markdown.contains("code"));
+        assert!(app.rendered_markdown.contains("new-markdown"));
     }
 }

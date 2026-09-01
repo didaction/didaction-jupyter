@@ -24,7 +24,7 @@ behavior. See the [primary-source parity reference](jupyter-frontend-parity-refe
 |    11 | Interrupt/restart/reconnect          | Visual parity    | Familiar stop/restart toolbar position plus Kernel menu; native kernel lifecycle and path-based session reuse.                            |
 |    12 | Browser restart persistence          | Supported        | Notebook on disk plus reusable path-associated Jupyter session.                                                                           |
 |    13 | Keyboard notebook flow               | Supported, basic | Command/edit indicator, Escape, A/B, Cmd/Ctrl+Enter, Tab.                                                                                 |
-|    14 | Markdown rendering                   | Supported, basic | Headings, lists, and paragraphs with edit/render toggle.                                                                                  |
+|    14 | Markdown rendering                   | Visual parity    | Opens rendered by default; double-click enters source editing; headings, lists, and paragraphs are bounded.                               |
 |    15 | Actionable failure/disconnect states | Supported        | Visible status, typed errors, reconnect action.                                                                                           |
 |    16 | Credential and path safety           | Supported        | Same-origin gateway, server-side token, confinement and bounds.                                                                           |
 

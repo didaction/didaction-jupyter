@@ -214,6 +214,7 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 - **Selection:** The active cell receives a 2px blue edge and a barely blue surface; inactive cells use a 1px neutral edge and white surface.
 - **Header:** A compact drag target and monospace execution prompt identify the cell. Notebook actions remain in the stable top toolbar and menus instead of repeating inside every cell.
 - **Editor:** Multiline monospace editing fills the available width, grows within bounded visible lines, and selects its cell on focus or click.
+- **Markdown:** Markdown cells open rendered. Double-clicking rendered content enters source editing; the explicit Render Markdown action returns to the document view.
 - **Commit behavior:** Changed source flushes on focus loss. Run, keyboard Run, insertion, duplication, conversion, movement, and deletion flush the visible source before their serialized mutation or execution commands, keeping actions aligned with the text on screen.
 
 ### Output
