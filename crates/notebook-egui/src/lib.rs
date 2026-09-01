@@ -21,6 +21,7 @@ pub struct NotebookEguiApp {
     dragging_cell: Option<String>,
     rendered_markdown: HashSet<String>,
     edit_mode: bool,
+    pending_editor_focus: Option<String>,
 }
 
 impl NotebookEguiApp {
@@ -43,6 +44,7 @@ impl NotebookEguiApp {
             dragging_cell: None,
             rendered_markdown: HashSet::new(),
             edit_mode: false,
+            pending_editor_focus: None,
         }
     }
     pub fn apply_completion(&mut self, command_id: Uuid, completion: CompletionReply) {
@@ -140,64 +142,296 @@ impl NotebookEguiApp {
             });
         }
     }
-    fn toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
-            ui.heading(
-                RichText::new("didaction notebook")
-                    .size(18.0)
-                    .color(Color32::from_rgb(38, 50, 56)),
-            );
-            ui.separator();
-            let idle = !matches!(
-                self.state.sync_state,
-                SyncState::Dirty | SyncState::Executing
-            );
-            if ui
-                .add_enabled(idle, egui::Button::new("Add code"))
-                .on_hover_text("Insert a code cell")
-                .clicked()
-            {
-                self.insert_cell_after_selection(CellType::Code);
-            }
-            if ui
-                .add_enabled(idle, egui::Button::new("Add Markdown"))
-                .on_hover_text("Insert a Markdown cell")
-                .clicked()
-            {
-                self.insert_cell_after_selection(CellType::Markdown);
-            }
-            if ui.add_enabled(idle, egui::Button::new("Run all")).clicked() {
-                for cell in self.state.snapshot.cells.clone() {
-                    self.flush_editor(&cell);
-                    if cell.cell_type == CellType::Code {
-                        self.emit(NotebookCommandKind::ExecuteCell { cell_id: cell.id });
-                    }
-                }
-            }
-            ui.separator();
-            let can_interrupt = idle || self.state.sync_state == SyncState::Executing;
-            if ui
-                .add_enabled(can_interrupt, egui::Button::new("Interrupt"))
-                .clicked()
-            {
-                self.emit(NotebookCommandKind::InterruptKernel);
-            }
-            if ui.add_enabled(idle, egui::Button::new("Restart")).clicked() {
-                self.emit(NotebookCommandKind::RestartKernel);
-            }
-            ui.separator();
-            ui.label(if self.edit_mode {
-                "Edit mode"
-            } else {
-                "Command mode"
+    fn selected_cell(&self) -> Option<(usize, Cell)> {
+        let selected = self.state.snapshot.selected_cell_id.as_ref()?;
+        self.state
+            .snapshot
+            .cells
+            .iter()
+            .position(|cell| &cell.id == selected)
+            .map(|index| (index, self.state.snapshot.cells[index].clone()))
+    }
+    fn save_visible_edits(&mut self) {
+        for cell in self.state.snapshot.cells.clone() {
+            self.flush_editor(&cell);
+        }
+    }
+    fn execute_selected(&mut self) {
+        if let Some((_, cell)) = self.selected_cell()
+            && cell.cell_type == CellType::Code
+        {
+            self.flush_editor(&cell);
+            self.emit(NotebookCommandKind::ExecuteCell { cell_id: cell.id });
+        }
+    }
+    fn move_selected(&mut self, index: usize) {
+        if let Some((current, cell)) = self.selected_cell()
+            && current != index
+        {
+            self.flush_editor(&cell);
+            self.emit(NotebookCommandKind::ModifyCells {
+                changes: vec![CellMutation::Move {
+                    cell_id: cell.id,
+                    index,
+                }],
             });
-            if self.state.sync_state == SyncState::Disconnected
-                && ui
-                    .add_enabled(idle, egui::Button::new("Reconnect"))
-                    .clicked()
-            {
-                self.emit(NotebookCommandKind::Reconnect);
-            }
+        }
+    }
+    fn set_selected_cell_type(&mut self, cell_type: CellType) {
+        if let Some((_, cell)) = self.selected_cell()
+            && cell.cell_type != cell_type
+        {
+            self.flush_editor(&cell);
+            let source = self.editor_source(&cell);
+            self.emit(NotebookCommandKind::ModifyCells {
+                changes: vec![CellMutation::Update {
+                    cell_id: cell.id,
+                    source: Some(source),
+                    metadata: None,
+                    cell_type: Some(cell_type),
+                }],
+            });
+        }
+    }
+    fn delete_selected(&mut self) {
+        if let Some((_, cell)) = self.selected_cell() {
+            self.flush_editor(&cell);
+            self.emit(NotebookCommandKind::ModifyCells {
+                changes: vec![CellMutation::Delete { cell_id: cell.id }],
+            });
+        }
+    }
+    fn duplicate_selected(&mut self) {
+        if let Some((index, cell)) = self.selected_cell() {
+            self.flush_editor(&cell);
+            self.insert_cell(index + 1, cell.cell_type.clone(), self.editor_source(&cell));
+        }
+    }
+    fn toolbar(&mut self, ui: &mut egui::Ui) {
+        let idle = !matches!(
+            self.state.sync_state,
+            SyncState::Dirty | SyncState::Executing
+        );
+        let selected = self.selected_cell();
+        let selected_type = selected.as_ref().map(|(_, cell)| cell.cell_type.clone());
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
+                ui.heading(
+                    RichText::new(self.state.snapshot.notebook.path.trim_end_matches(".ipynb"))
+                        .size(18.0)
+                        .color(Color32::from_rgb(38, 50, 56)),
+                );
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.menu_button("File", |ui| {
+                    if ui
+                        .add_enabled(idle, egui::Button::new("Save Notebook"))
+                        .clicked()
+                    {
+                        self.save_visible_edits();
+                        ui.close();
+                    }
+                });
+                ui.menu_button("Edit", |ui| {
+                    if ui
+                        .add_enabled(
+                            idle && selected.is_some(),
+                            egui::Button::new("Duplicate Cell"),
+                        )
+                        .clicked()
+                    {
+                        self.duplicate_selected();
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(idle && selected.is_some(), egui::Button::new("Delete Cell"))
+                        .clicked()
+                    {
+                        self.delete_selected();
+                        ui.close();
+                    }
+                });
+                ui.menu_button("View", |ui| {
+                    if ui
+                        .add_enabled(self.edit_mode, egui::Button::new("Command Mode"))
+                        .clicked()
+                    {
+                        self.edit_mode = false;
+                        ui.close();
+                    }
+                });
+                ui.menu_button("Insert", |ui| {
+                    if ui
+                        .add_enabled(idle, egui::Button::new("Insert Cell Above"))
+                        .clicked()
+                    {
+                        let index = selected.as_ref().map_or(0, |(index, _)| *index);
+                        self.insert_cell(index, CellType::Code, String::new());
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(idle, egui::Button::new("Insert Cell Below"))
+                        .clicked()
+                    {
+                        self.insert_cell_after_selection(CellType::Code);
+                        ui.close();
+                    }
+                });
+                ui.menu_button("Cell", |ui| {
+                    ui.menu_button("Cell Type", |ui| {
+                        for (label, cell_type) in [
+                            ("Code", CellType::Code),
+                            ("Markdown", CellType::Markdown),
+                            ("Raw", CellType::Raw),
+                        ] {
+                            if ui
+                                .selectable_label(selected_type.as_ref() == Some(&cell_type), label)
+                                .clicked()
+                            {
+                                self.set_selected_cell_type(cell_type);
+                                ui.close();
+                            }
+                        }
+                    });
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            idle && selected.is_some(),
+                            egui::Button::new("Duplicate Cell"),
+                        )
+                        .clicked()
+                    {
+                        self.duplicate_selected();
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(idle && selected.is_some(), egui::Button::new("Delete Cell"))
+                        .clicked()
+                    {
+                        self.delete_selected();
+                        ui.close();
+                    }
+                });
+                ui.menu_button("Run", |ui| {
+                    if ui
+                        .add_enabled(
+                            idle && selected_type.as_ref() == Some(&CellType::Code),
+                            egui::Button::new("Run Selected Cell"),
+                        )
+                        .clicked()
+                    {
+                        self.execute_selected();
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(idle, egui::Button::new("Run All Cells"))
+                        .clicked()
+                    {
+                        self.save_visible_edits();
+                        for cell in self.state.snapshot.cells.clone() {
+                            if cell.cell_type == CellType::Code {
+                                self.emit(NotebookCommandKind::ExecuteCell { cell_id: cell.id });
+                            }
+                        }
+                        ui.close();
+                    }
+                });
+                ui.menu_button("Kernel", |ui| {
+                    if ui.button("Interrupt Kernel").clicked() {
+                        self.emit(NotebookCommandKind::InterruptKernel);
+                        ui.close();
+                    }
+                    if ui
+                        .add_enabled(idle, egui::Button::new("Restart Kernel"))
+                        .clicked()
+                    {
+                        self.emit(NotebookCommandKind::RestartKernel);
+                        ui.close();
+                    }
+                });
+                ui.menu_button("Help", |ui| {
+                    ui.label("Enter: edit · Esc: command");
+                    ui.label("A/B: insert above/below");
+                    ui.label("Cmd/Ctrl+Enter: run cell");
+                    ui.label("Tab: complete code");
+                });
+            });
+            ui.horizontal_wrapped(|ui| {
+                if toolbar_icon_button(ui, idle, ToolbarIcon::Save, "Save notebook") {
+                    self.save_visible_edits();
+                }
+                if toolbar_icon_button(ui, idle, ToolbarIcon::Add, "Insert cell below") {
+                    self.insert_cell_after_selection(CellType::Code);
+                }
+                ui.separator();
+                let selected_index = selected.as_ref().map(|(index, _)| *index);
+                if toolbar_icon_button(
+                    ui,
+                    idle && selected_index.is_some_and(|index| index > 0),
+                    ToolbarIcon::Up,
+                    "Move selected cell up",
+                ) && let Some(index) = selected_index
+                {
+                    self.move_selected(index - 1);
+                }
+                if toolbar_icon_button(
+                    ui,
+                    idle && selected_index
+                        .is_some_and(|index| index + 1 < self.state.snapshot.cells.len()),
+                    ToolbarIcon::Down,
+                    "Move selected cell down",
+                ) && let Some(index) = selected_index
+                {
+                    self.move_selected(index + 1);
+                }
+                ui.separator();
+                if toolbar_icon_button(
+                    ui,
+                    idle && selected_type.as_ref() == Some(&CellType::Code),
+                    ToolbarIcon::Run,
+                    "Run selected cell",
+                ) {
+                    self.execute_selected();
+                }
+                if toolbar_icon_button(ui, true, ToolbarIcon::Stop, "Interrupt kernel") {
+                    self.emit(NotebookCommandKind::InterruptKernel);
+                }
+                if toolbar_icon_button(ui, idle, ToolbarIcon::Restart, "Restart kernel") {
+                    self.emit(NotebookCommandKind::RestartKernel);
+                }
+                ui.separator();
+                egui::ComboBox::from_id_salt("selected-cell-type")
+                    .selected_text(match selected_type.as_ref() {
+                        Some(CellType::Code) => "Code",
+                        Some(CellType::Markdown) => "Markdown",
+                        Some(CellType::Raw) => "Raw",
+                        None => "Cell type",
+                    })
+                    .show_ui(ui, |ui| {
+                        for (label, cell_type) in [
+                            ("Code", CellType::Code),
+                            ("Markdown", CellType::Markdown),
+                            ("Raw", CellType::Raw),
+                        ] {
+                            if ui
+                                .selectable_label(selected_type.as_ref() == Some(&cell_type), label)
+                                .clicked()
+                            {
+                                self.set_selected_cell_type(cell_type);
+                                ui.close();
+                            }
+                        }
+                    });
+                ui.separator();
+                ui.label(if self.edit_mode { "Edit" } else { "Command" });
+                if self.state.sync_state == SyncState::Disconnected
+                    && ui
+                        .add_enabled(idle, egui::Button::new("Reconnect"))
+                        .clicked()
+                {
+                    self.emit(NotebookCommandKind::Reconnect);
+                }
+            });
         });
     }
     fn insert_cell_after_selection(&mut self, cell_type: CellType) {
@@ -323,110 +557,6 @@ impl NotebookEguiApp {
                     .monospace()
                     .color(Color32::from_rgb(75, 85, 92)),
                 );
-                if cell.cell_type == CellType::Code
-                    && ui.add_enabled(idle, egui::Button::new("Run")).clicked()
-                {
-                    self.flush_editor(&cell);
-                    self.emit(NotebookCommandKind::ExecuteCell {
-                        cell_id: cell.id.clone(),
-                    });
-                }
-                ui.separator();
-                if ui
-                    .add_enabled(idle, egui::Button::new("Add above"))
-                    .clicked()
-                {
-                    self.flush_editor(&cell);
-                    self.insert_cell(index, CellType::Code, String::new());
-                }
-                if ui
-                    .add_enabled(idle, egui::Button::new("Add below"))
-                    .clicked()
-                {
-                    self.flush_editor(&cell);
-                    self.insert_cell(index + 1, CellType::Code, String::new());
-                }
-                if ui
-                    .add_enabled(idle, egui::Button::new("Duplicate"))
-                    .clicked()
-                {
-                    self.flush_editor(&cell);
-                    self.insert_cell(index + 1, cell.cell_type.clone(), self.editor_source(&cell));
-                }
-                ui.separator();
-                if cell.cell_type != CellType::Code
-                    && ui.add_enabled(idle, egui::Button::new("Code")).clicked()
-                {
-                    self.flush_editor(&cell);
-                    self.emit(NotebookCommandKind::ModifyCells {
-                        changes: vec![CellMutation::Update {
-                            cell_id: cell.id.clone(),
-                            source: Some(self.editor_source(&cell)),
-                            metadata: None,
-                            cell_type: Some(CellType::Code),
-                        }],
-                    });
-                }
-                if cell.cell_type != CellType::Markdown
-                    && ui
-                        .add_enabled(idle, egui::Button::new("Markdown"))
-                        .clicked()
-                {
-                    self.flush_editor(&cell);
-                    self.emit(NotebookCommandKind::ModifyCells {
-                        changes: vec![CellMutation::Update {
-                            cell_id: cell.id.clone(),
-                            source: Some(self.editor_source(&cell)),
-                            metadata: None,
-                            cell_type: Some(CellType::Markdown),
-                        }],
-                    });
-                }
-                if cell.cell_type != CellType::Raw
-                    && ui.add_enabled(idle, egui::Button::new("Raw")).clicked()
-                {
-                    self.flush_editor(&cell);
-                    self.emit(NotebookCommandKind::ModifyCells {
-                        changes: vec![CellMutation::Update {
-                            cell_id: cell.id.clone(),
-                            source: Some(self.editor_source(&cell)),
-                            metadata: None,
-                            cell_type: Some(CellType::Raw),
-                        }],
-                    });
-                }
-                ui.separator();
-                if index > 0 && ui.add_enabled(idle, egui::Button::new("Move up")).clicked() {
-                    self.flush_editor(&cell);
-                    self.emit(NotebookCommandKind::ModifyCells {
-                        changes: vec![CellMutation::Move {
-                            cell_id: cell.id.clone(),
-                            index: index - 1,
-                        }],
-                    });
-                }
-                if index + 1 < self.state.snapshot.cells.len()
-                    && ui
-                        .add_enabled(idle, egui::Button::new("Move down"))
-                        .clicked()
-                {
-                    self.flush_editor(&cell);
-                    self.emit(NotebookCommandKind::ModifyCells {
-                        changes: vec![CellMutation::Move {
-                            cell_id: cell.id.clone(),
-                            index: index + 1,
-                        }],
-                    });
-                }
-                ui.separator();
-                if ui.add_enabled(idle, egui::Button::new("Delete")).clicked() {
-                    self.flush_editor(&cell);
-                    self.emit(NotebookCommandKind::ModifyCells {
-                        changes: vec![CellMutation::Delete {
-                            cell_id: cell.id.clone(),
-                        }],
-                    });
-                }
             });
             if cell.cell_type == CellType::Markdown {
                 let rendered = self.rendered_markdown.contains(&cell.id);
@@ -491,6 +621,10 @@ impl NotebookEguiApp {
                     };
                     if response.changed() {
                         self.dirty_editors.insert(cell.id.clone());
+                    }
+                    if self.pending_editor_focus.as_deref() == Some(&cell.id) {
+                        response.request_focus();
+                        self.pending_editor_focus = None;
                     }
                     if response.has_focus() || response.clicked() {
                         self.state.snapshot.selected_cell_id = Some(cell.id.clone());
@@ -656,6 +790,28 @@ impl eframe::App for NotebookEguiApp {
             self.edit_mode = false;
         }
         let command_mode = !self.edit_mode;
+        if command_mode
+            && ctx.input(|input| input.key_pressed(Key::Enter))
+            && let Some((_, cell)) = self.selected_cell()
+        {
+            self.pending_editor_focus = Some(cell.id);
+            self.edit_mode = true;
+        }
+        if command_mode
+            && ctx.input(|input| input.key_pressed(Key::ArrowDown) || input.key_pressed(Key::J))
+            && let Some((index, _)) = self.selected_cell()
+            && let Some(next) = self.state.snapshot.cells.get(index + 1)
+        {
+            self.state.snapshot.selected_cell_id = Some(next.id.clone());
+        }
+        if command_mode
+            && ctx.input(|input| input.key_pressed(Key::ArrowUp) || input.key_pressed(Key::K))
+            && let Some((index, _)) = self.selected_cell()
+            && index > 0
+        {
+            self.state.snapshot.selected_cell_id =
+                Some(self.state.snapshot.cells[index - 1].id.clone());
+        }
         if command_mode && ctx.input(|input| input.key_pressed(Key::A)) {
             let index = self
                 .state
@@ -786,6 +942,116 @@ fn move_index_for_drop(source_index: usize, hovered_index: usize, before: bool) 
         hovered_index + 1
     };
     boundary.saturating_sub(usize::from(source_index < boundary))
+}
+
+#[derive(Clone, Copy)]
+enum ToolbarIcon {
+    Save,
+    Add,
+    Up,
+    Down,
+    Run,
+    Stop,
+    Restart,
+}
+
+fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tooltip: &str) -> bool {
+    let response = ui
+        .add_enabled(
+            enabled,
+            egui::Button::new("").min_size(egui::vec2(30.0, 28.0)),
+        )
+        .on_hover_text(tooltip);
+    let rect = response.rect.shrink(7.0);
+    let color = if enabled {
+        ui.visuals().widgets.inactive.fg_stroke.color
+    } else {
+        ui.visuals().weak_text_color()
+    };
+    let stroke = Stroke::new(1.6, color);
+    let painter = ui.painter();
+    match icon {
+        ToolbarIcon::Save => {
+            painter.rect_stroke(rect, 1.0, stroke, egui::StrokeKind::Inside);
+            painter.line_segment(
+                [
+                    egui::pos2(rect.left() + 3.0, rect.top()),
+                    egui::pos2(rect.left() + 3.0, rect.center().y - 1.0),
+                ],
+                stroke,
+            );
+            painter.rect_stroke(
+                egui::Rect::from_min_max(
+                    egui::pos2(rect.left() + 3.0, rect.center().y + 1.0),
+                    egui::pos2(rect.right() - 3.0, rect.bottom()),
+                ),
+                0.0,
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+        }
+        ToolbarIcon::Add => {
+            painter.line_segment(
+                [
+                    egui::pos2(rect.center().x, rect.top()),
+                    egui::pos2(rect.center().x, rect.bottom()),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(rect.left(), rect.center().y),
+                    egui::pos2(rect.right(), rect.center().y),
+                ],
+                stroke,
+            );
+        }
+        ToolbarIcon::Up | ToolbarIcon::Down => {
+            let direction = if matches!(icon, ToolbarIcon::Up) {
+                -1.0
+            } else {
+                1.0
+            };
+            let tip = egui::pos2(rect.center().x, rect.center().y + direction * 6.0);
+            let base_y = rect.center().y - direction * 2.0;
+            painter.line_segment([tip, egui::pos2(rect.left(), base_y)], stroke);
+            painter.line_segment([tip, egui::pos2(rect.right(), base_y)], stroke);
+            painter.line_segment(
+                [
+                    egui::pos2(rect.center().x, base_y),
+                    egui::pos2(rect.center().x, rect.center().y - direction * 6.0),
+                ],
+                stroke,
+            );
+        }
+        ToolbarIcon::Run => {
+            painter.add(egui::Shape::convex_polygon(
+                vec![
+                    rect.left_top(),
+                    egui::pos2(rect.right(), rect.center().y),
+                    rect.left_bottom(),
+                ],
+                color,
+                Stroke::NONE,
+            ));
+        }
+        ToolbarIcon::Stop => {
+            painter.rect_filled(rect.shrink(2.0), 0.0, color);
+        }
+        ToolbarIcon::Restart => {
+            painter.circle_stroke(rect.center(), rect.width() * 0.38, stroke);
+            painter.add(egui::Shape::convex_polygon(
+                vec![
+                    egui::pos2(rect.left(), rect.top() + 1.0),
+                    egui::pos2(rect.left() + 7.0, rect.top()),
+                    egui::pos2(rect.left() + 3.0, rect.top() + 7.0),
+                ],
+                color,
+                Stroke::NONE,
+            ));
+        }
+    }
+    response.clicked()
 }
 
 fn drag_handle() -> egui::Button<'static> {

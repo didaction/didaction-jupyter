@@ -2,8 +2,10 @@
 
 Status reflects this branch after the direct-Jupyter implementation. Priorities
 are ordered first by what is mandatory for a dependable code-first notebook,
-then by commonly used notebook primitives. “Basic” means deliberately bounded,
-not a claim of JupyterLab completeness.
+then by commonly used notebook primitives. “Supported” covers real behavior;
+“visual parity” additionally means a Jupyter user can find the action in its
+familiar region, recognize its control, and get the expected selected-cell
+behavior. See the [primary-source parity reference](jupyter-frontend-parity-reference.md).
 
 ## Mandatory
 
@@ -12,14 +14,14 @@ not a claim of JupyterLab completeness.
 |     1 | Open/create/save `.ipynb`            | Supported        | Direct Contents REST, nbformat validation, stable cell IDs.                                                                               |
 |     2 | Real kernelspec/session              | Supported        | Direct Sessions/Kernels REST; IPython acceptance kernel.                                                                                  |
 |     3 | Edit code cells                      | Supported        | Python highlighting, line numbers, multiline editing, and committed draft flushing via pinned `egui_code_editor 0.2.17`.                  |
-|     4 | Add above/below                      | Supported        | Code or Markdown toolbar creation; empty cells supported.                                                                                 |
-|     5 | Delete, duplicate, move              | Supported        | Stable-ID mutations, persisted order, buttons, and drag-handle reordering with a visible drop line.                                       |
-|     6 | Code/Markdown/raw conversion         | Supported        | Conversion preserves stable identity and source.                                                                                          |
-|     7 | Run cell and run all                 | Supported        | Real kernel-channel execution; bounded persisted outputs.                                                                                 |
+|     4 | Add above/below                      | Visual parity    | Familiar Insert menu and top-toolbar insert-below control; empty cells supported.                                                         |
+|     5 | Delete, duplicate, move              | Visual parity    | Edit menu, top-toolbar move controls, and optional drag-handle reordering with a visible drop line.                                       |
+|     6 | Code/Markdown/raw conversion         | Visual parity    | Familiar selected-cell type dropdown; conversion preserves stable identity and source.                                                    |
+|     7 | Run cell and run all                 | Visual parity    | Familiar Run menu and play control; real kernel-channel execution with bounded persisted outputs.                                         |
 |     8 | Text, stream, error outputs          | Supported        | Execution count and bounded traceback rendering.                                                                                          |
 |     9 | Basic graphs                         | Supported        | Bounded PNG and SVG output; seeded executable SVG example.                                                                                |
 |    10 | Kernel completion                    | Supported, basic | Tab requests `complete_request`; the editor dropdown supports mouse, ↑/↓, Enter, Tab, Escape, and restores the caret after inserted text. |
-|    11 | Interrupt/restart/reconnect          | Supported        | Native kernel REST lifecycle and path-based session reuse.                                                                                |
+|    11 | Interrupt/restart/reconnect          | Visual parity    | Familiar stop/restart toolbar position plus Kernel menu; native kernel lifecycle and path-based session reuse.                            |
 |    12 | Browser restart persistence          | Supported        | Notebook on disk plus reusable path-associated Jupyter session.                                                                           |
 |    13 | Keyboard notebook flow               | Supported, basic | Command/edit indicator, Escape, A/B, Cmd/Ctrl+Enter, Tab.                                                                                 |
 |    14 | Markdown rendering                   | Supported, basic | Headings, lists, and paragraphs with edit/render toggle.                                                                                  |

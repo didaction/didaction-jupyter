@@ -104,7 +104,8 @@ The visual system is deliberately utilitarian rather than expressive. White work
 
 - Document-led vertical notebook flow.
 - Compact, desktop-IDE chrome that wraps cleanly on narrow screens.
-- Explicit light-mode egui primitives with grouped, text-labeled per-cell actions.
+- Explicit light-mode egui primitives with Jupyter-familiar menus, toolbar icons,
+  cell-type control, and execution prompts.
 - Flat light surfaces separated by thin rules rather than depth effects.
 - Restrained sans-serif interface type paired with monospace code and output.
 - Blue emphasis for focus and cell selection; semantic color only for status and risk.
@@ -202,8 +203,8 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 
 ### Toolbar
 
-- **Character:** Compact, native-feeling controls grouped by separators and allowed to wrap.
-- **Actions:** Cell creation and “Run all” precede kernel recovery actions. Reconnect appears only when disconnected.
+- **Character:** The familiar Jupyter hierarchy: notebook title, menu row, then a compact icon toolbar grouped by separators and allowed to wrap.
+- **Actions:** Save, insert below, move up/down, run selected, interrupt, restart, and selected-cell type appear in Jupyter order. Less frequent supported actions live in File, Edit, View, Insert, Cell, Run, and Kernel menus. Reconnect appears only when disconnected.
 - **State:** Commands are disabled while a mutation or execution makes them unsafe; control availability communicates command validity without noisy animation.
 - **Commit behavior:** “Run all” flushes every visible dirty source before queuing code-cell execution, so the notebook runs what the user can see.
 
@@ -211,7 +212,7 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 
 - **Shape:** A nearly square bordered container with a small inner inset.
 - **Selection:** The active cell receives a 2px blue edge and a barely blue surface; inactive cells use a 1px neutral edge and white surface.
-- **Header:** The monospace prompt or cell type precedes a wrapping row of primitive text controls. Separators group Run; Add above, Add below, and Duplicate; Code/Markdown conversion; Move up/down; and Delete. Only actions valid for the current cell and position appear.
+- **Header:** A compact drag target and monospace execution prompt identify the cell. Notebook actions remain in the stable top toolbar and menus instead of repeating inside every cell.
 - **Editor:** Multiline monospace editing fills the available width, grows within bounded visible lines, and selects its cell on focus or click.
 - **Commit behavior:** Changed source flushes on focus loss. Run, keyboard Run, insertion, duplication, conversion, movement, and deletion flush the visible source before their serialized mutation or execution commands, keeping actions aligned with the text on screen.
 
@@ -248,7 +249,7 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 - **Do** keep the vertical notebook document, its ordered cells, and each output directly adjacent to its source.
 - **Do** reserve blue for focus, selection, and running state; reserve green, orange, and red for explicit system meaning.
 - **Do** preserve visible keyboard focus and touch-sized controls at narrow widths.
-- **Do** keep per-cell primitives text-labeled, grouped by task, and attached to the cell they modify.
+- **Do** keep selected-cell primitives in the stable Jupyter toolbar order, with descriptive hover text and equivalent menu labels.
 - **Do** keep failures bounded, specific, and paired with the next valid recovery action.
 - **Do** show synchronization, kernel state, and revision as quiet persistent metadata.
 
