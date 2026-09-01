@@ -15,6 +15,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 const MAX_EMBEDDED_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+const COMPLETION_KEY_HELP: &str = "Up/Down select · Enter or Tab apply · Esc close";
 
 #[derive(Default)]
 struct DataImageBytesLoader;
@@ -1433,7 +1434,7 @@ impl NotebookEguiApp {
                                     }
                                 }
                             });
-                        ui.label("↑/↓ select · Enter or Tab apply · Esc close");
+                        ui.label(COMPLETION_KEY_HELP);
                     });
                     if let Some(index) = accepted {
                         self.completion_selection.insert(cell.id.clone(), index);
@@ -2827,6 +2828,15 @@ mod tests {
 
         let state = egui::scroll_area::State::load(&context, scroll_id).unwrap();
         assert!(state.offset.y > 0.0);
+    }
+
+    #[test]
+    fn completion_key_help_avoids_unbundled_arrow_glyphs() {
+        assert!(!COMPLETION_KEY_HELP.contains(['↑', '↓']));
+        assert_eq!(
+            COMPLETION_KEY_HELP,
+            "Up/Down select · Enter or Tab apply · Esc close"
+        );
     }
 
     #[test]
