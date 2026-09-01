@@ -1,0 +1,46 @@
+[project]
+name = "didaction-jupyter"
+version = "0.1.0"
+description = "Local-first egui, WebMCP, MCP, and Jupyter notebook environment"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "fastapi==0.116.1",
+  "httpx==0.28.1",
+  "ipykernel==6.30.1",
+  "jupyter-collaboration==4.0.2",
+  "jupyter-kernel-client==0.8.0",
+  "jupyterlab==4.4.5",
+  "mcp-jupyter==2.0.2",
+  "mcp==1.13.1",
+  "pydantic==2.11.7",
+  "uvicorn==0.35.0",
+]
+
+[dependency-groups]
+dev = [
+  "mypy==1.17.1",
+  "pytest-asyncio==1.1.0",
+  "pytest==8.4.1",
+  "ruff==0.12.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["services/gateway/app", "services/gateway/tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["services/gateway/tests", "tests/integration"]

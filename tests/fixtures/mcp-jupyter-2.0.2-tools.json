@@ -1,0 +1,41 @@
+{
+  "endpoint_path": "/mcp/",
+  "protocol_version": "2025-06-18",
+  "server": { "name": "notebook", "version": "1.13.1" },
+  "tools": {
+    "query_notebook": {
+      "required": ["notebook_path", "query_type"],
+      "properties": [
+        "cell_id",
+        "execution_count",
+        "notebook_path",
+        "position_index",
+        "query_type",
+        "server_url"
+      ]
+    },
+    "modify_notebook_cells": {
+      "required": ["notebook_path", "operation"],
+      "properties": [
+        "cell_content",
+        "execute",
+        "notebook_path",
+        "operation",
+        "position_index"
+      ]
+    },
+    "execute_notebook_code": {
+      "required": ["notebook_path", "execution_type"],
+      "properties": [
+        "execution_type",
+        "notebook_path",
+        "package_names",
+        "position_index"
+      ]
+    },
+    "setup_notebook": {
+      "required": ["notebook_path"],
+      "properties": ["notebook_path", "server_url"]
+    }
+  }
+}
