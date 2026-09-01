@@ -114,6 +114,8 @@ pub enum CellMutation {
         cell_id: String,
         source: Option<String>,
         metadata: Option<Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cell_type: Option<CellType>,
     },
     Delete {
         cell_id: String,
@@ -288,6 +290,7 @@ fn validate_mutation(change: &CellMutation) -> Result<(), ProtocolError> {
             cell_id,
             source,
             metadata,
+            cell_type: _,
         } => {
             if cell_id.is_empty() || cell_id.len() > 128 {
                 return Err(bounds("invalid cell id"));

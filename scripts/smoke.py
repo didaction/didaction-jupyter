@@ -60,4 +60,71 @@ for source in ("value = 40 + 2", "value"):
     revision = setup["snapshot"]["revision"]
 query = call(command("query", revision, query="full"))
 assert "42" in json.dumps(query["snapshot"]["cells"]), query
-print("real Jupyter/ipykernel/MCP/gateway smoke: PASS (observed 42)")
+revision = query["snapshot"]["revision"]
+
+# Exercise the ordinary notebook editing primitives through the same real MCP path.
+inserted = call(
+    command(
+        "modify_cells",
+        revision,
+        changes=[
+            {
+                "operation": "insert",
+                "index": 2,
+                "cell": {
+                    "id": str(uuid.uuid4()),
+                    "cell_type": "markdown",
+                    "source": "draft note",
+                    "metadata": {},
+                    "execution_count": None,
+                    "outputs": [],
+                },
+            }
+        ],
+    )
+)
+assert not inserted.get("error"), inserted
+revision = inserted["snapshot"]["revision"]
+
+edited = call(
+    command(
+        "modify_cells",
+        revision,
+        changes=[
+            {
+                "operation": "update",
+                "cell_id": "position-2",
+                "source": "## Verified note",
+                "metadata": None,
+                "cell_type": "markdown",
+            }
+        ],
+    )
+)
+assert not edited.get("error"), edited
+revision = edited["snapshot"]["revision"]
+
+moved = call(
+    command(
+        "modify_cells",
+        revision,
+        changes=[{"operation": "move", "cell_id": "position-2", "index": 0}],
+    )
+)
+assert not moved.get("error"), moved
+assert moved["snapshot"]["cells"][0]["source"] == "## Verified note", moved
+revision = moved["snapshot"]["revision"]
+
+deleted = call(
+    command(
+        "modify_cells",
+        revision,
+        changes=[{"operation": "delete", "cell_id": "position-0"}],
+    )
+)
+assert not deleted.get("error"), deleted
+assert [cell["source"] for cell in deleted["snapshot"]["cells"]] == [
+    "value = 40 + 2",
+    "value",
+], deleted
+print("real Jupyter/ipykernel/MCP/gateway smoke: PASS (observed 42; add/edit/move/delete)")

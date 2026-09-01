@@ -1,6 +1,10 @@
 import json
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -10,6 +14,22 @@ from services.gateway.app.mcp_adapter import AdapterError, McpNotebookTransport,
 from services.gateway.app.models import Command
 from services.gateway.app.normalize import normalize_cells
 from services.gateway.app.redaction import REDACTED, RedactingFilter, redact
+
+
+class FakeSession:
+    def __init__(self, cells: list[dict[str, Any]]):
+        self.cells = cells
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def call_tool(self, tool: str, arguments: dict[str, Any]) -> Any:
+        self.calls.append((tool, arguments))
+        content: Any = self.cells if tool == "query_notebook" else {}
+        return SimpleNamespace(isError=False, structuredContent=content, content=[])
+
+
+@asynccontextmanager
+async def fake_session(session: FakeSession) -> AsyncIterator[FakeSession]:
+    yield session
 
 
 def make_command(kind: str, **values: object) -> Command:
@@ -56,6 +76,73 @@ def test_every_mapping_and_rejections(tmp_path: Path) -> None:
     )
     with pytest.raises(AdapterError, match="Direct code execution"):
         adapter.map_command(make_command("execute_code", code="!pip install bad"), "demo.ipynb")
+
+
+async def test_move_maps_to_bounded_delete_and_reinsert(tmp_path: Path) -> None:
+    adapter = McpNotebookTransport(Settings(workspace=tmp_path))
+    session = FakeSession(
+        [
+            {"cell_type": "code", "source": ["first\n"]},
+            {"cell_type": "markdown", "source": "second"},
+        ]
+    )
+    cast(Any, adapter).session = lambda: fake_session(session)
+    change = {"operation": "move", "cell_id": "position-0", "index": 1}
+
+    await adapter.execute(make_command("modify_cells", changes=[change]), "demo.ipynb")
+
+    assert [call[0] for call in session.calls] == [
+        "query_notebook",
+        "modify_notebook_cells",
+        "modify_notebook_cells",
+    ]
+    assert session.calls[1][1]["operation"] == "delete"
+    assert session.calls[2][1] == {
+        "notebook_path": "demo.ipynb",
+        "operation": "add_code",
+        "cell_content": "first\n",
+        "position_index": 1,
+        "execute": False,
+    }
+
+
+async def test_markdown_edit_uses_typed_operation(tmp_path: Path) -> None:
+    adapter = McpNotebookTransport(Settings(workspace=tmp_path))
+    session = FakeSession([{"cell_type": "markdown", "source": "old"}])
+    cast(Any, adapter).session = lambda: fake_session(session)
+    change = {
+        "operation": "update",
+        "cell_id": "position-0",
+        "source": "new",
+        "cell_type": "markdown",
+    }
+
+    await adapter.execute(make_command("modify_cells", changes=[change]), "demo.ipynb")
+
+    assert session.calls[-1][1]["operation"] == "edit_markdown"
+
+
+async def test_cell_type_conversion_deletes_and_reinserts(tmp_path: Path) -> None:
+    adapter = McpNotebookTransport(Settings(workspace=tmp_path))
+    session = FakeSession([{"cell_type": "code", "source": "print(1)"}])
+    cast(Any, adapter).session = lambda: fake_session(session)
+    change = {
+        "operation": "update",
+        "cell_id": "position-0",
+        "source": "# explanation",
+        "cell_type": "markdown",
+    }
+
+    await adapter.execute(make_command("modify_cells", changes=[change]), "demo.ipynb")
+
+    assert [
+        arguments["operation"]
+        for tool, arguments in session.calls
+        if tool == "modify_notebook_cells"
+    ] == [
+        "delete",
+        "add_markdown",
+    ]
 
 
 @pytest.mark.parametrize(

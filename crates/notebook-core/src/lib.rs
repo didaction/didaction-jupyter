@@ -179,6 +179,7 @@ fn apply_optimistic_changes(
                 cell_id,
                 source,
                 metadata,
+                cell_type,
             } => {
                 let cell = cells
                     .iter_mut()
@@ -189,6 +190,9 @@ fn apply_optimistic_changes(
                 }
                 if let Some(metadata) = metadata {
                     cell.metadata.clone_from(metadata);
+                }
+                if let Some(cell_type) = cell_type {
+                    cell.cell_type = cell_type.clone();
                 }
             }
             CellMutation::Delete { cell_id } => {
@@ -265,6 +269,7 @@ mod tests {
                     cell_id: "a".into(),
                     source: Some("2+2".into()),
                     metadata: None,
+                    cell_type: None,
                 }],
             },
         }

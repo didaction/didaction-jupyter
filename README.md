@@ -37,12 +37,15 @@ The MCP mapping is explicit:
 | ----------------------- | ----------------------- | ------------------------------------------------ |
 | setup/open              | `setup_notebook`        | relative notebook path + server-side Jupyter URL |
 | query/reconnect refresh | `query_notebook`        | `query_type=view_source`                         |
-| insert/update/delete    | `modify_notebook_cells` | one mutation; `execute=false`                    |
+| insert/edit/delete      | `modify_notebook_cells` | typed code/Markdown mutation; `execute=false`    |
+| move/type conversion    | `modify_notebook_cells` | bounded query + delete/reinsert sequence         |
 | execute cell            | `execute_notebook_code` | `execution_type=execute_cell`                    |
 
-Cell move, kernel interrupt/restart, direct code execution, and close are typed
-but return stable `unsupported_operation`/`execution_rejected` errors because
-`mcp-jupyter 2.0.2` does not expose safe compatible operations for them. Package
+Kernel interrupt/restart, direct code execution, and close are typed but return
+stable `unsupported_operation`/`execution_rejected` errors because
+`mcp-jupyter 2.0.2` does not expose safe compatible operations for them. Cell
+move and type conversion are isolated adapter sequences over the discovered
+query/delete/add operations; no arbitrary MCP forwarding is introduced. Package
 installation is always rejected.
 
 ## Install
@@ -139,8 +142,10 @@ exposed.
 ## Current limitations
 
 - The UI targets original Jupyter Notebook ergonomics, not JupyterLab parity.
-- `mcp-jupyter 2.0.2` has positional mutation/execution and no move, interrupt,
-  restart, or close tools; those commands fail explicitly.
+- `mcp-jupyter 2.0.2` has positional mutation/execution but no atomic move tool.
+  Moving or converting a cell preserves its type and source through a bounded
+  delete/reinsert sequence, but existing execution count and outputs are not
+  retained. Interrupt, restart, and close still fail explicitly.
 - WebMCP is an experimental browser API and is unavailable in most browsers.
 - Rich output support is bounded to text/stream/error and a basic text rendering
   of rich MIME data; interactive widgets and binary images are not implemented.

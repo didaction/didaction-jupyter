@@ -62,11 +62,26 @@ class McpNotebookTransport:
         return profile
 
     async def execute(self, command: Command, notebook_path: str | None) -> dict[str, Any]:
+        if command.type == "modify_cells" and command.changes:
+            change = command.changes[0]
+            if change.get("operation") == "move":
+                return await self._move_cell(command, notebook_path, change)
+            if change.get("operation") == "update" and change.get("cell_type"):
+                return await self._update_typed_cell(command, notebook_path, change)
         tool, arguments = self.map_command(command, notebook_path)
         async with self.session() as session:
-            result = await asyncio.wait_for(
-                session.call_tool(tool, arguments=arguments), command.timeout_ms / 1000
-            )
+            return await self._call(session, tool, arguments, command.timeout_ms / 1000)
+
+    async def _call(
+        self,
+        session: ClientSession,
+        tool: str,
+        arguments: dict[str, Any],
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
+        result = await asyncio.wait_for(
+            session.call_tool(tool, arguments=arguments), timeout_seconds
+        )
         if result.isError:
             raise AdapterError("transport_error", "Notebook operation failed", True)
         value = result.structuredContent
@@ -82,6 +97,140 @@ class McpNotebookTransport:
         if len(encoded) > self.settings.response_limit:
             raise AdapterError("bounds_exceeded", "MCP response exceeded the configured limit")
         return value
+
+    async def _move_cell(
+        self, command: Command, notebook_path: str | None, change: dict[str, Any]
+    ) -> dict[str, Any]:
+        path = self._path(notebook_path)
+        source_index = _cell_index(change.get("cell_id"))
+        target_index = change.get("index")
+        if not isinstance(target_index, int) or target_index < 0:
+            raise AdapterError("invalid_input", "Move target is invalid")
+        timeout = command.timeout_ms / 1000
+        async with self.session() as session:
+            cells = await self._query_cells(session, path, timeout)
+            if source_index >= len(cells) or target_index >= len(cells):
+                raise AdapterError("invalid_input", "Move target is outside the notebook")
+            cell = cells[source_index]
+            cell_type = cell.get("cell_type")
+            if cell_type not in {"code", "markdown"}:
+                raise AdapterError("unsupported_operation", "Only code and Markdown cells can move")
+            await self._call(
+                session,
+                "modify_notebook_cells",
+                {
+                    "notebook_path": path,
+                    "operation": "delete",
+                    "position_index": source_index,
+                    "execute": False,
+                },
+                timeout,
+            )
+            source = _source(cell.get("source", ""))
+            try:
+                return await self._add_cell(session, path, cell_type, source, target_index, timeout)
+            except AdapterError as error:
+                await self._add_cell(session, path, cell_type, source, source_index, timeout)
+                raise AdapterError(
+                    "transport_error", "Cell move failed and was rolled back", True
+                ) from error
+
+    async def _update_typed_cell(
+        self, command: Command, notebook_path: str | None, change: dict[str, Any]
+    ) -> dict[str, Any]:
+        path = self._path(notebook_path)
+        index = _cell_index(change.get("cell_id"))
+        target_type = change.get("cell_type")
+        if target_type not in {"code", "markdown"}:
+            raise AdapterError(
+                "unsupported_operation", "Only code and Markdown cells can be edited"
+            )
+        timeout = command.timeout_ms / 1000
+        async with self.session() as session:
+            cells = await self._query_cells(session, path, timeout)
+            if index >= len(cells):
+                raise AdapterError("invalid_input", "Cell identity is stale")
+            current_type = cells[index].get("cell_type")
+            source = change.get("source")
+            if source is None:
+                source = _source(cells[index].get("source", ""))
+            if current_type == target_type:
+                return await self._call(
+                    session,
+                    "modify_notebook_cells",
+                    {
+                        "notebook_path": path,
+                        "operation": f"edit_{target_type}",
+                        "cell_content": source,
+                        "position_index": index,
+                        "execute": False,
+                    },
+                    timeout,
+                )
+            await self._call(
+                session,
+                "modify_notebook_cells",
+                {
+                    "notebook_path": path,
+                    "operation": "delete",
+                    "position_index": index,
+                    "execute": False,
+                },
+                timeout,
+            )
+            try:
+                return await self._add_cell(session, path, target_type, source, index, timeout)
+            except AdapterError as error:
+                if current_type in {"code", "markdown"}:
+                    original_source = _source(cells[index].get("source", ""))
+                    await self._add_cell(
+                        session, path, current_type, original_source, index, timeout
+                    )
+                raise AdapterError(
+                    "transport_error", "Cell conversion failed and was rolled back", True
+                ) from error
+
+    async def _add_cell(
+        self,
+        session: ClientSession,
+        path: str,
+        cell_type: str,
+        source: str,
+        index: int,
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
+        return await self._call(
+            session,
+            "modify_notebook_cells",
+            {
+                "notebook_path": path,
+                "operation": f"add_{cell_type}",
+                "cell_content": source,
+                "position_index": index,
+                "execute": False,
+            },
+            timeout_seconds,
+        )
+
+    async def _query_cells(
+        self, session: ClientSession, path: str, timeout_seconds: float
+    ) -> list[dict[str, Any]]:
+        raw = await self._call(
+            session,
+            "query_notebook",
+            {"notebook_path": path, "query_type": "view_source"},
+            timeout_seconds,
+        )
+        if isinstance(raw, dict) and "result" in raw:
+            raw = raw["result"]
+        if not isinstance(raw, list):
+            raise AdapterError("malformed_response", "Notebook query did not return cells", True)
+        return [cell for cell in raw if isinstance(cell, dict)]
+
+    def _path(self, notebook_path: str | None) -> str:
+        if notebook_path is None:
+            raise AdapterError("invalid_input", "No notebook is open")
+        return self.settings.confined_path(notebook_path)
 
     def map_command(
         self, command: Command, notebook_path: str | None
@@ -114,9 +263,10 @@ class McpNotebookTransport:
             operation = change.get("operation")
             if operation == "move":
                 raise AdapterError("unsupported_operation", "mcp-jupyter 2.0.2 cannot move cells")
+            cell_type = change.get("cell_type", "code")
             mapping = {
                 "insert": f"add_{change.get('cell', {}).get('cell_type', 'code')}",
-                "update": "edit_code",
+                "update": f"edit_{cell_type}",
                 "delete": "delete",
             }
             if operation not in mapping:
@@ -173,3 +323,9 @@ def _cell_index(cell_id: str | None) -> int:
         return int(cell_id.removeprefix("position-"))
     except ValueError as error:
         raise AdapterError("invalid_input", "Cell identity is malformed") from error
+
+
+def _source(value: Any) -> str:
+    if isinstance(value, list):
+        return "".join(str(part) for part in value)
+    return str(value)
