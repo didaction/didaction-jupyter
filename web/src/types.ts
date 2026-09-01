@@ -15,6 +15,7 @@ export type CommandResult = Record<string, unknown> & {
     cursor_start: number;
     cursor_end: number;
   };
+  inspection?: { found: boolean; text: string };
   error?: { code: string; message: string; retryable: boolean };
 };
 export type NotebookSnapshot = Record<string, unknown> & {
@@ -35,7 +36,11 @@ export interface NotebookTransport {
   execute(command: NotebookCommand): Promise<CommandResult>;
   interrupt(command: NotebookCommand): Promise<CommandResult>;
   restart(command: NotebookCommand): Promise<CommandResult>;
+  checkpoint(command: NotebookCommand): Promise<CommandResult>;
+  rename(command: NotebookCommand): Promise<CommandResult>;
+  download(command: NotebookCommand): Promise<CommandResult>;
   reconnect(command: NotebookCommand): Promise<CommandResult>;
   complete(command: NotebookCommand): Promise<CommandResult>;
+  inspect(command: NotebookCommand): Promise<CommandResult>;
   close(): Promise<void>;
 }

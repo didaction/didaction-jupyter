@@ -14,6 +14,7 @@ const bounded = { type: "object", additionalProperties: false } as const;
 export function installWebMcp(
   gateway: CommandGateway,
   revision: () => number,
+  startup: { path: string; kernel: string },
 ): boolean {
   const context = (navigator as Navigator & { modelContext?: ModelContext })
     .modelContext;
@@ -31,6 +32,10 @@ export function installWebMcp(
       inputSchema: { ...bounded, properties, required },
       annotations: { readOnlyHint: readOnly, destructiveHint: !readOnly },
       execute: async (input) => {
+        const values =
+          type === "setup"
+            ? { path: startup.path, kernel: startup.kernel, create: true }
+            : input;
         const command = {
           protocol_version: 1,
           command_id: crypto.randomUUID(),
@@ -38,7 +43,7 @@ export function installWebMcp(
           expected_revision: revision(),
           timeout_ms: 30_000,
           type,
-          ...input,
+          ...values,
         };
         const result = JSON.parse(
           await gateway.execute(JSON.stringify(command)),
@@ -78,16 +83,6 @@ export function installWebMcp(
     ["cell_id"],
     false,
   );
-  register(
-    "notebook_setup",
-    "setup",
-    {
-      path: { type: "string", maxLength: 512 },
-      kernel: { type: "string", maxLength: 128 },
-      create: { type: "boolean" },
-    },
-    ["path"],
-    false,
-  );
+  register("notebook_setup", "setup", {}, [], false);
   return true;
 }

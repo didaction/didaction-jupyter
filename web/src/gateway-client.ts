@@ -33,8 +33,31 @@ export class GatewayNotebookTransport implements NotebookTransport {
   execute = (c: NotebookCommand) => this.call(c);
   interrupt = (c: NotebookCommand) => this.call(c);
   restart = (c: NotebookCommand) => this.call(c);
+  checkpoint = (c: NotebookCommand) => this.call(c);
+  rename = (c: NotebookCommand) => this.call(c);
+  download = async (command: NotebookCommand): Promise<CommandResult> => {
+    const result = await this.call({
+      ...command,
+      type: "query",
+      query: "full",
+    });
+    if (result.error) return result;
+    const response = await fetch("/api/v1/download", {
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error("Notebook download failed");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "notebook.ipynb";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return result;
+  };
   reconnect = (c: NotebookCommand) => this.call(c);
   complete = (c: NotebookCommand) => this.call(c);
+  inspect = (c: NotebookCommand) => this.call(c);
   close = async () => {};
 }
 
@@ -52,8 +75,12 @@ export class MockNotebookTransport extends GatewayNotebookTransport {
   override execute = this.setup;
   override interrupt = this.setup;
   override restart = this.setup;
+  override checkpoint = this.setup;
+  override rename = this.setup;
+  override download = this.setup;
   override reconnect = this.setup;
   override complete = this.setup;
+  override inspect = this.setup;
 }
 
 export type Fault =

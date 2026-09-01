@@ -19,6 +19,8 @@ services:
       DIDACTION_JUPYTER_URL: http://jupyter:8888
       DIDACTION_JUPYTER_TOKEN: ${DIDACTION_JUPYTER_TOKEN:?generate a development token}
       DIDACTION_WORKSPACE: /workspace
+      DIDACTION_NOTEBOOK_PATH: ${DIDACTION_NOTEBOOK_PATH:-notebook-parity-demo.ipynb}
+      DIDACTION_KERNEL_NAME: ${DIDACTION_KERNEL_NAME:-python3}
     ports: ["127.0.0.1:8080:8080"]
     volumes: ["notebooks:/workspace"]
     depends_on: [jupyter]

@@ -45,6 +45,14 @@ def normalize_cells(raw: Any) -> list[dict[str, Any]]:
                     svg = _text(data["image/svg+xml"])
                     encoded = base64.b64encode(svg.encode()).decode()
                     outputs.append({"kind": "rich", "mime": "image/svg+xml", "data": encoded})
+                elif isinstance(data, dict) and "text/html" in data:
+                    outputs.append(
+                        {
+                            "kind": "rich",
+                            "mime": "text/html",
+                            "data": _text(data["text/html"])[:262_144],
+                        }
+                    )
                 else:
                     text = data.get("text/plain", "") if isinstance(data, dict) else ""
                     outputs.append({"kind": "text", "text": _text(text)})

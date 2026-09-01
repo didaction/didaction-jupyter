@@ -22,7 +22,10 @@ class Command(StrictModel):
         "execute_code",
         "interrupt_kernel",
         "restart_kernel",
+        "create_checkpoint",
+        "rename_notebook",
         "complete",
+        "inspect",
         "reconnect",
         "close",
     ]
@@ -45,6 +48,10 @@ class Command(StrictModel):
             raise ValueError("execute_cell requires cell_id")
         if self.type == "complete" and self.code is None:
             raise ValueError("complete requires code")
+        if self.type == "inspect" and self.code is None:
+            raise ValueError("inspect requires code")
+        if self.type == "rename_notebook" and self.path is None:
+            raise ValueError("rename_notebook requires path")
         return self
 
 
@@ -62,4 +69,5 @@ class CommandResult(StrictModel):
     committed_revision: int | None = None
     snapshot: dict[str, Any] | None = None
     completion: dict[str, Any] | None = None
+    inspection: dict[str, Any] | None = None
     error: GatewayError | None = None

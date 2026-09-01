@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     jupyter_url: str = "http://127.0.0.1:8888"
     jupyter_token: str = ""
     workspace: Path = Path(".runtime/notebooks")
+    notebook_path: str = "notebook-parity-demo.ipynb"
+    kernel_name: str = "python3"
     request_limit: int = Field(default=300_000, ge=1, le=4_000_000)
     response_limit: int = Field(default=4_000_000, ge=1, le=8_000_000)
     timeout_seconds: float = Field(default=30.0, ge=0.1, le=120.0)
@@ -26,3 +28,6 @@ class Settings(BaseSettings):
         if root not in candidate.parents:
             raise ValueError("path_rejected")
         return raw
+
+    def startup_notebook(self) -> str:
+        return self.confined_path(self.notebook_path)

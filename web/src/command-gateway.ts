@@ -21,8 +21,12 @@ export class CommandGateway {
       execute_code: "execute",
       interrupt_kernel: "interrupt",
       restart_kernel: "restart",
+      create_checkpoint: "checkpoint",
+      rename_notebook: "rename",
+      download_notebook: "download",
       reconnect: "reconnect",
       complete: "complete",
+      inspect: "inspect",
     };
     const method = route[command.type];
     if (!method || method === "close")

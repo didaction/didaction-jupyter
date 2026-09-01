@@ -164,6 +164,13 @@ impl eframe::App for MountedApp {
                     repaint.request_repaint();
                     return;
                 }
+                if let Some(inspection) = result.inspection.clone() {
+                    app.lock()
+                        .expect("notebook app mutex poisoned")
+                        .apply_inspection(result.command_id, inspection);
+                    repaint.request_repaint();
+                    return;
+                }
                 if let Some(error) = result.error {
                     set_visible_error(&app, error.code, &error.message, error.retryable, &repaint);
                 } else if let Some(snapshot) = result.snapshot {

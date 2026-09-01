@@ -1,5 +1,65 @@
 import { expect, test } from "@playwright/test";
 
+const snapshot = {
+  protocol_version: 1,
+  schema_version: 1,
+  notebook: { path: "notebook-parity-demo.ipynb", workspace: "local" },
+  kernel: {
+    name: "python3",
+    display_name: "Python 3 (ipykernel)",
+    session_id: null,
+    state: "idle",
+  },
+  revision: 1,
+  cells: [
+    {
+      id: "markdown",
+      cell_type: "markdown",
+      source: "# Browser acceptance\n\nRendered **CommonMark**.",
+      metadata: {},
+      execution_count: null,
+      outputs: [],
+    },
+    {
+      id: "code",
+      cell_type: "code",
+      source: "value = 40 + 2\nvalue",
+      metadata: {},
+      execution_count: 1,
+      outputs: [{ kind: "text", text: "42" }],
+    },
+  ],
+  selected_cell_id: "code",
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/v1/config", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        path: "notebook-parity-demo.ipynb",
+        kernel: "python3",
+      }),
+    });
+  });
+  await page.route("**/api/v1/commands", async (route) => {
+    const request = route.request().postDataJSON() as {
+      command_id: string;
+      idempotency_key: string;
+    };
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        command_id: request.command_id,
+        idempotency_key: request.idempotency_key,
+        base_revision: null,
+        committed_revision: 1,
+        snapshot,
+      }),
+    });
+  });
+});
+
 test("WASM mounts a credential-free notebook shell with fallback", async ({
   page,
 }) => {

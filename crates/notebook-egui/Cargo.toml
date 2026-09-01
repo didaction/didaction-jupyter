@@ -8,6 +8,7 @@ license.workspace = true
 base64.workspace = true
 egui.workspace = true
 egui_code_editor.workspace = true
+egui_commonmark.workspace = true
 egui_extras.workspace = true
 eframe.workspace = true
 notebook-core.workspace = true

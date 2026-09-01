@@ -24,11 +24,20 @@ const command = (
 
 async function boot(): Promise<void> {
   await init();
+  const configResponse = await fetch("/api/v1/config", {
+    headers: { Accept: "application/json" },
+  });
+  if (!configResponse.ok)
+    throw new Error("Gateway startup configuration unavailable");
+  const startup = (await configResponse.json()) as {
+    path: string;
+    kernel: string;
+  };
   const transport = new GatewayNotebookTransport();
   const setup = await transport.setup(
     command("setup", {
-      path: "notebook-parity-demo.ipynb",
-      kernel: "python3",
+      path: startup.path,
+      kernel: startup.kernel,
       create: true,
     }),
   );
@@ -50,6 +59,7 @@ async function boot(): Promise<void> {
     () =>
       (JSON.parse(wasm.publicSnapshot()) as { snapshot: NotebookSnapshot })
         .snapshot.revision,
+    startup,
   );
   status.textContent = hasWebMcp
     ? "Connected · WebMCP ready"
@@ -62,9 +72,15 @@ async function boot(): Promise<void> {
     JSON.stringify(snapshot),
     dispatchEguiCommand,
   );
+  const shell = document.querySelector<HTMLElement>("#notebook-shell")!;
+  const resizeObserver = new ResizeObserver(() => {
+    requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+  });
+  resizeObserver.observe(shell);
   window.addEventListener(
     "beforeunload",
     () => {
+      resizeObserver.disconnect();
       wasm.dispose();
       void transport.close();
     },

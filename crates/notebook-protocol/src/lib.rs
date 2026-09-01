@@ -124,6 +124,9 @@ pub enum CellMutation {
         cell_id: String,
         index: usize,
     },
+    ClearOutputs {
+        cell_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -149,7 +152,16 @@ pub enum NotebookCommandKind {
     },
     InterruptKernel,
     RestartKernel,
+    CreateCheckpoint,
+    RenameNotebook {
+        path: String,
+    },
+    DownloadNotebook,
     Complete {
+        code: String,
+        cursor_pos: usize,
+    },
+    Inspect {
         code: String,
         cursor_pos: usize,
     },
@@ -206,6 +218,8 @@ pub struct CommandResult {
     pub snapshot: Option<NotebookSnapshot>,
     #[serde(default)]
     pub completion: Option<CompletionReply>,
+    #[serde(default)]
+    pub inspection: Option<InspectionReply>,
     pub error: Option<ProtocolError>,
 }
 
@@ -215,6 +229,13 @@ pub struct CompletionReply {
     pub matches: Vec<String>,
     pub cursor_start: usize,
     pub cursor_end: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InspectionReply {
+    pub found: bool,
+    pub text: String,
 }
 
 pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> {
@@ -232,6 +253,7 @@ pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> 
                 return Err(bounds("kernel name too long"));
             }
         }
+        NotebookCommandKind::RenameNotebook { path } => validate_relative_path(path)?,
         NotebookCommandKind::ModifyCells { changes } => {
             if changes.is_empty() || changes.len() > 256 {
                 return Err(bounds("invalid mutation count"));
@@ -245,6 +267,12 @@ pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> 
             validate_source(code)?;
             if *cursor_pos > code.len() {
                 return Err(bounds("completion cursor is outside source"));
+            }
+        }
+        NotebookCommandKind::Inspect { code, cursor_pos } => {
+            validate_source(code)?;
+            if *cursor_pos > code.len() {
+                return Err(bounds("inspection cursor is outside source"));
             }
         }
         NotebookCommandKind::ExecuteCell { cell_id }
@@ -322,7 +350,9 @@ fn validate_mutation(change: &CellMutation) -> Result<(), ProtocolError> {
             }
             Ok(())
         }
-        CellMutation::Delete { cell_id } | CellMutation::Move { cell_id, .. } => {
+        CellMutation::Delete { cell_id }
+        | CellMutation::Move { cell_id, .. }
+        | CellMutation::ClearOutputs { cell_id } => {
             if cell_id.is_empty() || cell_id.len() > 128 {
                 Err(bounds("invalid cell id"))
             } else {

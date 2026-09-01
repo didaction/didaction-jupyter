@@ -18,8 +18,9 @@ def command(kind: str, revision: int | None = None, **values: object) -> dict[st
 
 
 def call(payload: dict[str, object]) -> dict[str, object]:
-    request = urllib.request.Request(
-        "http://127.0.0.1:8080/api/v1/commands",
+    gateway_url = os.environ.get("DIDACTION_GATEWAY_URL", "http://127.0.0.1:8080")
+    request = urllib.request.Request(  # noqa: S310 - test URL is supplied by the local harness.
+        f"{gateway_url}/api/v1/commands",
         data=json.dumps(payload).encode(),
         headers={"content-type": "application/json"},
     )

@@ -59,7 +59,7 @@ class JupyterNotebookTransport:
         if command.type == "setup":
             path = self.settings.confined_path(command.path or "")
             await self._ensure_notebook(path, bool(command.create))
-            await self._ensure_kernel(path, command.kernel or "python3")
+            await self._ensure_kernel(path, command.kernel or self.settings.kernel_name)
             return await self._read_notebook(path)
         if notebook_path is None:
             raise AdapterError("invalid_input", "No notebook is open")
@@ -67,7 +67,7 @@ class JupyterNotebookTransport:
         lock = self.locks.setdefault(path, asyncio.Lock())
         async with lock:
             if command.type in {"query", "reconnect"}:
-                await self._ensure_kernel(path, command.kernel or "python3")
+                await self._ensure_kernel(path, command.kernel or self.settings.kernel_name)
             elif command.type == "modify_cells":
                 notebook = await self._read_notebook(path)
                 self._apply_changes(notebook, command.changes or [])
@@ -77,7 +77,9 @@ class JupyterNotebookTransport:
                 cell = self._cell(notebook, command.cell_id)
                 if cell.get("cell_type") != "code":
                     raise AdapterError("invalid_input", "Only code cells can execute")
-                kernel = await self._ensure_kernel(path, command.kernel or "python3")
+                kernel = await self._ensure_kernel(
+                    path, command.kernel or self.settings.kernel_name
+                )
                 try:
                     reply = await asyncio.wait_for(
                         asyncio.to_thread(
@@ -96,7 +98,9 @@ class JupyterNotebookTransport:
                 cell["outputs"] = reply.get("outputs", [])[:128]
                 await self._save_notebook(path, notebook)
             elif command.type == "complete":
-                kernel = await self._ensure_kernel(path, command.kernel or "python3")
+                kernel = await self._ensure_kernel(
+                    path, command.kernel or self.settings.kernel_name
+                )
                 return await asyncio.to_thread(
                     self._complete,
                     kernel,
@@ -106,12 +110,52 @@ class JupyterNotebookTransport:
                     else len(command.code or ""),
                     command.timeout_ms / 1000,
                 )
+            elif command.type == "inspect":
+                kernel = await self._ensure_kernel(
+                    path, command.kernel or self.settings.kernel_name
+                )
+                return await asyncio.to_thread(
+                    self._inspect,
+                    kernel,
+                    command.code or "",
+                    command.cursor_pos
+                    if command.cursor_pos is not None
+                    else len(command.code or ""),
+                    command.timeout_ms / 1000,
+                )
             elif command.type == "interrupt_kernel":
-                kernel = await self._ensure_kernel(path, command.kernel or "python3")
+                kernel = await self._ensure_kernel(
+                    path, command.kernel or self.settings.kernel_name
+                )
                 await asyncio.to_thread(kernel.interrupt)
             elif command.type == "restart_kernel":
-                kernel = await self._ensure_kernel(path, command.kernel or "python3")
+                kernel = await self._ensure_kernel(
+                    path, command.kernel or self.settings.kernel_name
+                )
                 await asyncio.to_thread(kernel.restart)
+            elif command.type == "create_checkpoint":
+                response = await self._request("POST", f"/api/contents/{path}/checkpoints")
+                if response.status_code != 201:
+                    raise AdapterError(
+                        "transport_error", "Notebook checkpoint could not be created", True
+                    )
+            elif command.type == "rename_notebook":
+                new_path = self.settings.confined_path(command.path or "")
+                response = await self._request(
+                    "PATCH", f"/api/contents/{path}", json={"path": new_path}
+                )
+                if response.status_code != 200:
+                    raise AdapterError("transport_error", "Notebook could not be renamed", True)
+                if session_id := self.session_ids.pop(path, None):
+                    await self._request(
+                        "PATCH", f"/api/sessions/{session_id}", json={"path": new_path}
+                    )
+                    self.session_ids[new_path] = session_id
+                if kernel := self.kernels.pop(path, None):
+                    self.kernels[new_path] = kernel
+                if revision := self.revisions.pop(path, None):
+                    self.revisions[new_path] = revision
+                path = new_path
             elif command.type == "close":
                 kernel = self.kernels.pop(path, None)
                 if kernel:
@@ -145,9 +189,20 @@ class JupyterNotebookTransport:
                     nbformat.v4.new_markdown_cell(
                         "# Direct Jupyter notebook\n"
                         "Edit and run real IPython cells. Press Tab at the end of code "
-                        "for kernel completions."
+                        "for kernel completions. Double-click this rendered cell to edit.\n\n"
+                        "## Most-used notebook primitives\n"
+                        "- [x] CommonMark tasks, **emphasis**, and `inline code`\n"
+                        "- [x] Keyboard execution, completion, inspection, and structural edits\n\n"
+                        "| Primitive | Gesture |\n| --- | --- |\n"
+                        "| Complete | Tab |\n| Inspect | Shift+Tab |\n\n"
+                        "Math notation is bounded and readable: $value = 40 + 2$."
                     ),
                     nbformat.v4.new_code_cell("values = [2, 5, 3, 7, 4]\nmax(values)"),
+                    nbformat.v4.new_code_cell(
+                        "from IPython.display import HTML, display\n"
+                        "display(HTML('<table><tr><th>Feature</th><th>Status</th></tr>' "
+                        "+ '<tr><td>HTML table</td><td>bounded</td></tr></table>'))"
+                    ),
                     nbformat.v4.new_code_cell(
                         "from IPython.display import SVG, display\n"
                         "bars = ''.join(\n"
@@ -254,6 +309,19 @@ class JupyterNotebookTransport:
                     "cursor_end": int(content.get("cursor_end", cursor_pos)),
                 }
 
+    def _inspect(
+        self, kernel: KernelClient, code: str, cursor_pos: int, timeout: float
+    ) -> dict[str, Any]:
+        client = kernel._manager.client
+        message_id = client.inspect(code, cursor_pos, detail_level=0)
+        while True:
+            message = client.get_shell_msg(timeout=timeout)
+            if message.get("parent_header", {}).get("msg_id") == message_id:
+                content = message.get("content", {})
+                data = content.get("data", {})
+                text = data.get("text/plain", "") if isinstance(data, dict) else ""
+                return {"found": bool(content.get("found")), "text": str(text)[:32_768]}
+
     @staticmethod
     def _source(value: Any) -> str:
         return "".join(value) if isinstance(value, list) else str(value)
@@ -313,6 +381,11 @@ class JupyterNotebookTransport:
                         )
                         replacement["id"] = cell["id"]
                         notebook.cells[index] = replacement
+                elif operation == "clear_outputs":
+                    if cell.get("cell_type") != "code":
+                        raise AdapterError("invalid_input", "Only code cells have outputs")
+                    cell["outputs"] = []
+                    cell["execution_count"] = None
                 else:
                     raise AdapterError("unsupported_operation", "Unsupported cell mutation")
 

@@ -130,7 +130,8 @@ impl NotebookState {
             next.last_error = Some(error);
             return Ok(next);
         }
-        if result.completion.is_some() && result.snapshot.is_none() {
+        if (result.completion.is_some() || result.inspection.is_some()) && result.snapshot.is_none()
+        {
             next.sync_state = if next.pending.is_empty() {
                 SyncState::Synchronized
             } else {
@@ -217,6 +218,14 @@ fn apply_optimistic_changes(
                     .ok_or_else(invalid_cell)?;
                 let cell = cells.remove(current);
                 cells.insert((*index).min(cells.len()), cell);
+            }
+            CellMutation::ClearOutputs { cell_id } => {
+                let cell = cells
+                    .iter_mut()
+                    .find(|cell| &cell.id == cell_id)
+                    .ok_or_else(invalid_cell)?;
+                cell.outputs.clear();
+                cell.execution_count = None;
             }
         }
     }
@@ -314,6 +323,7 @@ mod tests {
             committed_revision: Some(2),
             snapshot: Some(snapshot(2)),
             completion: None,
+            inspection: None,
             error: None,
         };
         let applied = state.apply_result(result.clone()).unwrap();
@@ -335,6 +345,7 @@ mod tests {
             committed_revision: Some(2),
             snapshot: None,
             completion: None,
+            inspection: None,
             error: None,
         };
         assert!(state.apply_result(result).is_err());
@@ -371,10 +382,43 @@ mod tests {
                 cursor_start: 6,
                 cursor_end: 8,
             }),
+            inspection: None,
             error: None,
         };
         let applied = state.apply_result(result).unwrap();
         assert_eq!(applied.snapshot, snapshot(1));
         assert_eq!(applied.sync_state, SyncState::Synchronized);
+    }
+
+    #[test]
+    fn clear_outputs_is_optimistic_and_resets_execution_count() {
+        let mut initial = snapshot(1);
+        initial.cells[0].execution_count = Some(4);
+        initial.cells[0].outputs = vec![notebook_protocol::CellOutput::Text { text: "2".into() }];
+        let state = NotebookState::new(initial).unwrap();
+        let command = NotebookCommand {
+            protocol_version: 1,
+            command_id: Uuid::from_u128(3),
+            idempotency_key: "clear".into(),
+            expected_revision: Some(1),
+            timeout_ms: 1000,
+            kind: NotebookCommandKind::ModifyCells {
+                changes: vec![CellMutation::ClearOutputs {
+                    cell_id: "a".into(),
+                }],
+            },
+        };
+
+        let prepared = state.prepare(command).unwrap();
+
+        assert!(
+            prepared.optimistic_state.snapshot.cells[0]
+                .outputs
+                .is_empty()
+        );
+        assert_eq!(
+            prepared.optimistic_state.snapshot.cells[0].execution_count,
+            None
+        );
     }
 }

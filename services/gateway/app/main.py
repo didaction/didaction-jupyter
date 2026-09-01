@@ -2,10 +2,11 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .config import Settings
 from .jupyter_adapter import AdapterError, JupyterNotebookTransport
@@ -60,6 +61,12 @@ async def ready() -> JSONResponse:
     )
 
 
+@app.get("/api/v1/config")
+async def public_config() -> dict[str, str]:
+    """Return only the immutable, non-secret notebook startup selection."""
+    return {"path": settings.startup_notebook(), "kernel": settings.kernel_name}
+
+
 @app.post("/api/v1/commands", response_model=CommandResult)
 async def command_endpoint(command: Command) -> CommandResult:
     global current_notebook
@@ -71,7 +78,12 @@ async def command_endpoint(command: Command) -> CommandResult:
         if not transport.ready:
             await transport.discover()
         if command.type == "setup":
-            current_notebook = settings.confined_path(command.path or "")
+            requested_path = settings.confined_path(command.path or "")
+            if requested_path != settings.startup_notebook():
+                raise AdapterError("unsupported_operation", "Notebook path is fixed at startup")
+            if command.kernel and command.kernel != settings.kernel_name:
+                raise AdapterError("unsupported_operation", "Kernel is fixed at startup")
+            current_notebook = requested_path
         if current_notebook and current_notebook in transport.revisions:
             base_revision = transport.revisions[current_notebook][1]
         if (
@@ -83,13 +95,16 @@ async def command_endpoint(command: Command) -> CommandResult:
                 "stale_revision", "Notebook revision changed; refresh and retry", True
             )
         raw = await transport.execute(command, current_notebook)
-        if command.type == "complete":
+        if command.type == "rename_notebook":
+            current_notebook = settings.confined_path(command.path or "")
+        if command.type in {"complete", "inspect"}:
             result = CommandResult(
                 command_id=command.command_id,
                 idempotency_key=command.idempotency_key,
                 base_revision=base_revision,
                 committed_revision=base_revision,
-                completion=raw,
+                completion=raw if command.type == "complete" else None,
+                inspection=raw if command.type == "inspect" else None,
             )
             result_cache[command.idempotency_key] = result
             return result
@@ -104,8 +119,8 @@ async def command_endpoint(command: Command) -> CommandResult:
             "schema_version": 1,
             "notebook": {"path": current_notebook, "workspace": "local"},
             "kernel": {
-                "name": command.kernel or "python3",
-                "display_name": command.kernel or "Python 3 (ipykernel)",
+                "name": settings.kernel_name,
+                "display_name": settings.kernel_name,
                 "session_id": None,
                 "state": "idle",
             },
@@ -129,6 +144,16 @@ async def command_endpoint(command: Command) -> CommandResult:
         )
     result_cache[command.idempotency_key] = result
     return result
+
+
+@app.get("/api/v1/download")
+async def download_notebook() -> FileResponse:
+    if current_notebook is None:
+        raise ValueError("No notebook is open")
+    path = (settings.workspace / current_notebook).resolve()
+    return FileResponse(
+        path, filename=Path(current_notebook).name, media_type="application/x-ipynb+json"
+    )
 
 
 @app.exception_handler(json.JSONDecodeError)

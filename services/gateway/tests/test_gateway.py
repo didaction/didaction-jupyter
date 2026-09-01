@@ -34,6 +34,17 @@ def test_path_confinement(path: str, tmp_path: Path) -> None:
         Settings(workspace=tmp_path).confined_path(path)
 
 
+def test_startup_notebook_and_kernel_are_configuration(tmp_path: Path) -> None:
+    settings = Settings(
+        workspace=tmp_path,
+        notebook_path="course/week-1.ipynb",
+        kernel_name="python-custom",
+    )
+
+    assert settings.startup_notebook() == "course/week-1.ipynb"
+    assert settings.kernel_name == "python-custom"
+
+
 def test_direct_mutations_preserve_stable_identity(tmp_path: Path) -> None:
     adapter = JupyterNotebookTransport(Settings(workspace=tmp_path))
     notebook = nbformat.v4.new_notebook(cells=[nbformat.v4.new_code_cell("first", id="stable")])
@@ -73,6 +84,18 @@ def test_delete_and_type_conversion(tmp_path: Path) -> None:
     assert len(notebook.cells) == 1
 
 
+def test_clear_outputs_resets_execution_state(tmp_path: Path) -> None:
+    adapter = JupyterNotebookTransport(Settings(workspace=tmp_path))
+    cell = nbformat.v4.new_code_cell("1 + 1", id="a", execution_count=4)
+    cell.outputs = [nbformat.v4.new_output("execute_result", data={"text/plain": "2"})]
+    notebook = nbformat.v4.new_notebook(cells=[cell])
+
+    adapter._apply_changes(notebook, [{"operation": "clear_outputs", "cell_id": "a"}])
+
+    assert notebook.cells[0].outputs == []
+    assert notebook.cells[0].execution_count is None
+
+
 def test_stale_cell_is_typed_error(tmp_path: Path) -> None:
     adapter = JupyterNotebookTransport(Settings(workspace=tmp_path))
     notebook = nbformat.v4.new_notebook()
@@ -100,11 +123,42 @@ def test_normalizes_text_errors_and_png() -> None:
     assert cells[0]["outputs"][1] == {"kind": "rich", "mime": "image/png", "data": "abc"}
 
 
+def test_normalizes_bounded_html_table_as_rich_output() -> None:
+    cells = normalize_cells(
+        [
+            {
+                "id": "a",
+                "cell_type": "code",
+                "source": "table",
+                "outputs": [
+                    {
+                        "output_type": "display_data",
+                        "data": {"text/html": "<table><tr><td>42</td></tr></table>"},
+                    }
+                ],
+            }
+        ]
+    )
+
+    assert cells[0]["outputs"][0] == {
+        "kind": "rich",
+        "mime": "text/html",
+        "data": "<table><tr><td>42</td></tr></table>",
+    }
+
+
 def test_completion_bounds_model() -> None:
     command = make_command("complete", code="value.bi", cursor_pos=8)
     assert command.cursor_pos == 8
     with pytest.raises(ValueError):
         make_command("complete")
+
+
+def test_inspection_bounds_model() -> None:
+    command = make_command("inspect", code="value", cursor_pos=5)
+    assert command.cursor_pos == 5
+    with pytest.raises(ValueError):
+        make_command("inspect")
 
 
 def test_redacts_sensitive_data(caplog: pytest.LogCaptureFixture) -> None:
