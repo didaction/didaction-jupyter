@@ -589,10 +589,9 @@ impl NotebookEguiApp {
             if cell.cell_type == CellType::Markdown {
                 let rendered = self.rendered_markdown.contains(&cell.id);
                 if rendered {
-                    let rendered_response = ui
-                        .scope(|ui| render_markdown(ui, &self.editor_source(&cell)))
-                        .response
-                        .on_hover_text("Double-click to edit Markdown");
+                    let rendered_response =
+                        rendered_markdown_response(ui, &self.editor_source(&cell))
+                            .on_hover_text("Double-click to edit Markdown");
                     if rendered_response.double_clicked() {
                         self.rendered_markdown.remove(&cell.id);
                         self.state.snapshot.selected_cell_id = Some(cell.id.clone());
@@ -961,6 +960,12 @@ fn render_markdown(ui: &mut egui::Ui, source: &str) {
     }
 }
 
+fn rendered_markdown_response(ui: &mut egui::Ui, source: &str) -> egui::Response {
+    ui.scope(|ui| render_markdown(ui, source))
+        .response
+        .interact(egui::Sense::click())
+}
+
 fn move_index_for_drop(source_index: usize, hovered_index: usize, before: bool) -> usize {
     let boundary = if before {
         hovered_index
@@ -1199,5 +1204,20 @@ mod tests {
 
         assert!(!app.rendered_markdown.contains("code"));
         assert!(app.rendered_markdown.contains("new-markdown"));
+    }
+
+    #[test]
+    fn rendered_markdown_senses_double_clicks() {
+        let context = egui::Context::default();
+        let mut senses_click = false;
+        let _ = context.run(egui::RawInput::default(), |context| {
+            egui::CentralPanel::default().show(context, |ui| {
+                senses_click = rendered_markdown_response(ui, "# Hello")
+                    .sense
+                    .senses_click();
+            });
+        });
+
+        assert!(senses_click);
     }
 }
