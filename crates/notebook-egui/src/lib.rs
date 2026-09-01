@@ -696,7 +696,11 @@ impl eframe::App for NotebookEguiApp {
             .frame(
                 egui::Frame::new()
                     .fill(Color32::from_rgb(247, 247, 247))
-                    .inner_margin(Margin::symmetric(16, 12)),
+                    .inner_margin(if compact_controls {
+                        Margin::symmetric(8, 8)
+                    } else {
+                        Margin::symmetric(16, 12)
+                    }),
             )
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical()

@@ -10,12 +10,15 @@
 html,
 body {
   margin: 0;
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
 }
 body {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr auto;
+  overflow: hidden;
 }
 ::selection {
   background: #c7e2f3;
@@ -65,12 +68,14 @@ body {
 #notebook-shell {
   min-height: 0;
   position: relative;
+  overflow: hidden;
 }
 #notebook-canvas {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 540px;
+  min-width: 0;
+  min-height: 0;
 }
 .fatal-error {
   max-width: 640px;
@@ -105,9 +110,6 @@ button:hover {
   }
   .shell-header span {
     display: none;
-  }
-  #notebook-canvas {
-    min-height: 620px;
   }
   .privacy-note {
     padding-inline: 12px;

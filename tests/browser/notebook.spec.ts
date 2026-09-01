@@ -24,3 +24,29 @@ test("WASM mounts a credential-free notebook shell with fallback", async ({
     /authorization|mcp-session-id|jupyter.*token/i,
   );
 });
+
+test("notebook canvas follows window resizing", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  const canvas = page.locator("#notebook-canvas");
+  await expect(canvas).toBeVisible({ timeout: 30_000 });
+
+  const desktop = await canvas.boundingBox();
+  expect(desktop).not.toBeNull();
+  expect(desktop!.width).toBe(1280);
+  expect(desktop!.y + desktop!.height).toBeLessThanOrEqual(900);
+
+  await page.setViewportSize({ width: 520, height: 640 });
+  await expect
+    .poll(async () => canvas.boundingBox())
+    .toMatchObject({ width: 520 });
+  const compact = await canvas.boundingBox();
+  expect(compact).not.toBeNull();
+  expect(compact!.height).toBeLessThan(desktop!.height);
+  expect(compact!.y + compact!.height).toBeLessThanOrEqual(640);
+
+  const pageOverflow = await page.evaluate(
+    () => document.documentElement.scrollHeight > window.innerHeight,
+  );
+  expect(pageOverflow).toBe(false);
+});
