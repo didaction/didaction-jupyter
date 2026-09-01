@@ -42,7 +42,7 @@ behavior. See the [primary-source parity reference](jupyter-frontend-parity-refe
 |     8 | Full Markdown + math        | Supported      | `$…$` and `$$…$$` LaTeX are locally typeset with MiTeX, Typst, and embedded math fonts.          |
 |     9 | Table/HTML rich display     | Supported      | Markdown tables plus sanitized, script-free readable HTML/table output; arbitrary DOM is denied. |
 |    10 | Notebook rename/download    | Supported      | Confined rename and a human-triggered `.ipynb` download.                                         |
-|    11 | Cell/output collapse        | Supported      | Separate per-cell and per-output collapse, including command-mode `O`; output data is preserved. |
+|    11 | Cell/output collapse        | Supported      | Icon controls select full, latest-pinned scroll window, or hidden output; `O` cycles all three.  |
 |    12 | Line-number visibility      | Supported      | Per-code-cell line-number toggles for the current browser session.                               |
 |    13 | Autosave/checkpoints        | Supported      | Debounced autosave status and explicit Jupyter Contents checkpoints.                             |
 

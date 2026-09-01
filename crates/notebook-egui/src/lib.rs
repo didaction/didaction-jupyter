@@ -109,6 +109,24 @@ fn cell_has_completed_execution(cell: &Cell) -> bool {
     cell.cell_type == CellType::Code && cell.execution_count.is_some()
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum OutputViewMode {
+    #[default]
+    Expanded,
+    Windowed,
+    Collapsed,
+}
+
+impl OutputViewMode {
+    fn next(self) -> Self {
+        match self {
+            Self::Expanded => Self::Windowed,
+            Self::Windowed => Self::Collapsed,
+            Self::Collapsed => Self::Expanded,
+        }
+    }
+}
+
 pub struct NotebookEguiApp {
     pub state: NotebookState,
     outbound: VecDeque<NotebookCommand>,
@@ -132,7 +150,7 @@ pub struct NotebookEguiApp {
     redo_stack: Vec<Vec<CellMutation>>,
     suppress_history: bool,
     collapsed_cells: HashSet<String>,
-    collapsed_outputs: HashSet<String>,
+    output_views: HashMap<String, OutputViewMode>,
     hidden_line_numbers: HashSet<String>,
     find_open: bool,
     find_query: String,
@@ -184,7 +202,7 @@ impl NotebookEguiApp {
             redo_stack: Vec::new(),
             suppress_history: false,
             collapsed_cells: HashSet::new(),
-            collapsed_outputs: HashSet::new(),
+            output_views: HashMap::new(),
             hidden_line_numbers: HashSet::new(),
             find_open: false,
             find_query: String::new(),
@@ -259,8 +277,8 @@ impl NotebookEguiApp {
             .iter()
             .map(|cell| cell.id.as_str())
             .collect::<HashSet<_>>();
-        self.collapsed_outputs
-            .retain(|cell_id| current_cells.contains(cell_id.as_str()));
+        self.output_views
+            .retain(|cell_id, _| current_cells.contains(cell_id.as_str()));
         self.editors = self
             .state
             .snapshot
@@ -600,15 +618,30 @@ impl NotebookEguiApp {
             self.emit(NotebookCommandKind::ModifyCells { changes });
         }
     }
-    fn toggle_selected_output(&mut self) {
+    fn cycle_selected_output_view(&mut self) {
         let Some((_, cell)) = self.selected_cell() else {
             return;
         };
         if cell.cell_type != CellType::Code || cell.outputs.is_empty() {
             return;
         }
-        if !self.collapsed_outputs.remove(&cell.id) {
-            self.collapsed_outputs.insert(cell.id);
+        let next = self.output_view(&cell.id).next();
+        if next == OutputViewMode::Expanded {
+            self.output_views.remove(&cell.id);
+        } else {
+            self.output_views.insert(cell.id, next);
+        }
+    }
+
+    fn output_view(&self, cell_id: &str) -> OutputViewMode {
+        self.output_views.get(cell_id).copied().unwrap_or_default()
+    }
+
+    fn set_output_view(&mut self, cell_id: &str, mode: OutputViewMode) {
+        if mode == OutputViewMode::Expanded {
+            self.output_views.remove(cell_id);
+        } else {
+            self.output_views.insert(cell_id.to_owned(), mode);
         }
     }
     fn find_next(&mut self) {
@@ -789,19 +822,22 @@ impl NotebookEguiApp {
                             ui.close();
                         }
                         if cell.cell_type == CellType::Code {
-                            let output_collapsed = self.collapsed_outputs.contains(&cell.id);
-                            if ui
-                                .add_enabled(
-                                    !cell.outputs.is_empty(),
-                                    egui::Button::new(if output_collapsed {
-                                        "Expand Output"
-                                    } else {
-                                        "Collapse Output"
-                                    }),
-                                )
-                                .clicked()
-                            {
-                                self.toggle_selected_output();
+                            let output_view = self.output_view(&cell.id);
+                            ui.add_enabled_ui(!cell.outputs.is_empty(), |ui| {
+                                ui.label("Output View");
+                                for (mode, label) in [
+                                    (OutputViewMode::Expanded, "Fully Open"),
+                                    (OutputViewMode::Windowed, "Scroll Latest"),
+                                    (OutputViewMode::Collapsed, "Collapsed"),
+                                ] {
+                                    if ui.selectable_label(output_view == mode, label).clicked() {
+                                        self.set_output_view(&cell.id, mode);
+                                        ui.close();
+                                    }
+                                }
+                            });
+                            if ui.button("Cycle Output View (O)").clicked() {
+                                self.cycle_selected_output_view();
                                 ui.close();
                             }
                             let hidden = self.hidden_line_numbers.contains(&cell.id);
@@ -1170,7 +1206,7 @@ impl NotebookEguiApp {
         let selected = self.selected_cells.contains(&cell.id)
             || self.state.snapshot.selected_cell_id.as_deref() == Some(cell.id.as_str());
         let collapsed = self.collapsed_cells.contains(&cell.id);
-        let output_collapsed = self.collapsed_outputs.contains(&cell.id);
+        let output_view = self.output_view(&cell.id);
         let frame = egui::Frame::new()
             .fill(if selected {
                 Color32::from_rgb(250, 253, 255)
@@ -1245,22 +1281,18 @@ impl NotebookEguiApp {
                         self.collapsed_cells.insert(cell.id.clone());
                     }
                 }
-                if cell.cell_type == CellType::Code
-                    && !cell.outputs.is_empty()
-                    && ui
-                        .small_button(if output_collapsed {
-                            "Expand output"
-                        } else {
-                            "Collapse output"
-                        })
-                        .on_hover_text("Toggle this cell's output (command mode: O)")
-                        .clicked()
-                {
-                    if output_collapsed {
-                        self.collapsed_outputs.remove(&cell.id);
-                    } else {
-                        self.collapsed_outputs.insert(cell.id.clone());
-                    }
+                if cell.cell_type == CellType::Code && !cell.outputs.is_empty() {
+                    ui.horizontal(|ui| {
+                        for mode in [
+                            OutputViewMode::Expanded,
+                            OutputViewMode::Windowed,
+                            OutputViewMode::Collapsed,
+                        ] {
+                            if output_view_button(ui, mode, output_view == mode).clicked() {
+                                self.set_output_view(&cell.id, mode);
+                            }
+                        }
+                    });
                 }
             });
             if !collapsed {
@@ -1425,31 +1457,46 @@ impl NotebookEguiApp {
                             });
                     });
                 }
-                if output_collapsed && !cell.outputs.is_empty() {
-                    let summary = output_collapse_summary(cell.outputs.len());
-                    let response = egui::Frame::new()
-                        .fill(Color32::from_rgb(248, 250, 251))
-                        .inner_margin(Margin::symmetric(8, 6))
-                        .show(ui, |ui| {
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(summary)
-                                        .monospace()
-                                        .color(Color32::from_rgb(83, 99, 107)),
+                match output_view {
+                    OutputViewMode::Collapsed if !cell.outputs.is_empty() => {
+                        let summary = output_collapse_summary(cell.outputs.len());
+                        let response = egui::Frame::new()
+                            .fill(Color32::from_rgb(248, 250, 251))
+                            .inner_margin(Margin::symmetric(8, 6))
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(summary)
+                                            .monospace()
+                                            .color(Color32::from_rgb(83, 99, 107)),
+                                    )
+                                    .sense(egui::Sense::click()),
                                 )
-                                .sense(egui::Sense::click()),
-                            )
-                        })
-                        .inner;
-                    if response
-                        .on_hover_text("Click to expand this cell's output")
-                        .clicked()
-                    {
-                        self.collapsed_outputs.remove(&cell.id);
+                            })
+                            .inner;
+                        if response
+                            .on_hover_text("Click to show this output in a scroll window")
+                            .clicked()
+                        {
+                            self.set_output_view(&cell.id, OutputViewMode::Windowed);
+                        }
                     }
-                } else {
-                    for output in &cell.outputs {
-                        render_output(ui, output);
+                    OutputViewMode::Windowed => {
+                        egui::ScrollArea::vertical()
+                            .id_salt(("output-window", &cell.id))
+                            .max_height(220.0)
+                            .auto_shrink([false, false])
+                            .stick_to_bottom(true)
+                            .show(ui, |ui| {
+                                for output in &cell.outputs {
+                                    render_output(ui, output);
+                                }
+                            });
+                    }
+                    OutputViewMode::Expanded | OutputViewMode::Collapsed => {
+                        for output in &cell.outputs {
+                            render_output(ui, output);
+                        }
                     }
                 }
             }
@@ -1696,7 +1743,7 @@ impl eframe::App for NotebookEguiApp {
             self.set_selected_cell_type(CellType::Raw);
         }
         if command_mode && ctx.input(|input| input.key_pressed(Key::O)) {
-            self.toggle_selected_output();
+            self.cycle_selected_output_view();
         }
         if ctx.input(|input| input.modifiers.command && input.key_pressed(Key::Enter))
             && let Some(id) = self.state.snapshot.selected_cell_id.clone()
@@ -2310,6 +2357,74 @@ fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tool
     response.clicked()
 }
 
+fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -> egui::Response {
+    let tooltip = match mode {
+        OutputViewMode::Expanded => "Show full output",
+        OutputViewMode::Windowed => "Show scrollable output pinned to latest",
+        OutputViewMode::Collapsed => "Hide output",
+    };
+    let response = ui
+        .add(
+            egui::Button::new("")
+                .selected(selected)
+                .min_size(egui::vec2(28.0, 24.0)),
+        )
+        .on_hover_text(tooltip);
+    let rect = response.rect.shrink2(egui::vec2(7.0, 6.0));
+    let color = ui.style().interact(&response).fg_stroke.color;
+    let stroke = Stroke::new(1.4, color);
+    match mode {
+        OutputViewMode::Expanded => {
+            for fraction in [0.0, 0.5, 1.0] {
+                let y = egui::lerp(rect.top()..=rect.bottom(), fraction);
+                ui.painter().line_segment(
+                    [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+                    stroke,
+                );
+            }
+        }
+        OutputViewMode::Windowed => {
+            ui.painter()
+                .rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);
+            let track_x = rect.right() - 2.5;
+            ui.painter().line_segment(
+                [
+                    egui::pos2(track_x, rect.top() + 2.0),
+                    egui::pos2(track_x, rect.bottom() - 2.0),
+                ],
+                Stroke::new(1.0, color),
+            );
+            ui.painter().line_segment(
+                [
+                    egui::pos2(track_x, rect.center().y),
+                    egui::pos2(track_x, rect.bottom() - 2.0),
+                ],
+                Stroke::new(2.2, color),
+            );
+        }
+        OutputViewMode::Collapsed => {
+            let center = rect.center();
+            ui.painter().line_segment(
+                [rect.left_top(), egui::pos2(center.x, center.y - 1.0)],
+                stroke,
+            );
+            ui.painter().line_segment(
+                [rect.right_top(), egui::pos2(center.x, center.y - 1.0)],
+                stroke,
+            );
+            ui.painter().line_segment(
+                [rect.left_bottom(), egui::pos2(center.x, center.y + 1.0)],
+                stroke,
+            );
+            ui.painter().line_segment(
+                [rect.right_bottom(), egui::pos2(center.x, center.y + 1.0)],
+                stroke,
+            );
+        }
+    }
+    response
+}
+
 fn drag_handle() -> egui::Button<'static> {
     egui::Button::new(RichText::new("Drag").small())
         .sense(egui::Sense::drag())
@@ -2497,16 +2612,19 @@ mod tests {
     }
 
     #[test]
-    fn output_collapse_is_local_and_preserves_outputs() {
+    fn output_view_cycles_three_local_states_and_preserves_outputs() {
         let mut app = app();
         app.state.snapshot.cells[0].outputs = vec![CellOutput::Text { text: "42".into() }];
 
-        app.toggle_selected_output();
-        assert!(app.collapsed_outputs.contains("code"));
+        assert_eq!(app.output_view("code"), OutputViewMode::Expanded);
+        app.cycle_selected_output_view();
+        assert_eq!(app.output_view("code"), OutputViewMode::Windowed);
         assert_eq!(app.state.snapshot.cells[0].outputs.len(), 1);
 
-        app.toggle_selected_output();
-        assert!(!app.collapsed_outputs.contains("code"));
+        app.cycle_selected_output_view();
+        assert_eq!(app.output_view("code"), OutputViewMode::Collapsed);
+        app.cycle_selected_output_view();
+        assert_eq!(app.output_view("code"), OutputViewMode::Expanded);
         assert_eq!(app.state.snapshot.cells[0].outputs.len(), 1);
     }
 
