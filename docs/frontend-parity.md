@@ -7,24 +7,24 @@ not a claim of JupyterLab completeness.
 
 ## Mandatory
 
-| Order | Primitive                            | Status           | Notes                                                                                                                    |
-| ----: | ------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
-|     1 | Open/create/save `.ipynb`            | Supported        | Direct Contents REST, nbformat validation, stable cell IDs.                                                              |
-|     2 | Real kernelspec/session              | Supported        | Direct Sessions/Kernels REST; IPython acceptance kernel.                                                                 |
-|     3 | Edit code cells                      | Supported        | Python highlighting, line numbers, multiline editing, and committed draft flushing via pinned `egui_code_editor 0.2.17`. |
-|     4 | Add above/below                      | Supported        | Code or Markdown toolbar creation; empty cells supported.                                                                |
-|     5 | Delete, duplicate, move              | Supported        | Stable-ID mutations and persisted order.                                                                                 |
-|     6 | Code/Markdown/raw conversion         | Supported        | Conversion preserves stable identity and source.                                                                         |
-|     7 | Run cell and run all                 | Supported        | Real kernel-channel execution; bounded persisted outputs.                                                                |
-|     8 | Text, stream, error outputs          | Supported        | Execution count and bounded traceback rendering.                                                                         |
-|     9 | Basic graphs                         | Supported        | Bounded PNG and SVG output; seeded executable SVG example.                                                               |
-|    10 | Kernel completion                    | Supported, basic | Tab requests `complete_request`; an editor dropdown supports mouse, ↑/↓, Enter, Tab, and Escape.                         |
-|    11 | Interrupt/restart/reconnect          | Supported        | Native kernel REST lifecycle and path-based session reuse.                                                               |
-|    12 | Browser restart persistence          | Supported        | Notebook on disk plus reusable path-associated Jupyter session.                                                          |
-|    13 | Keyboard notebook flow               | Supported, basic | Command/edit indicator, Escape, A/B, Cmd/Ctrl+Enter, Tab.                                                                |
-|    14 | Markdown rendering                   | Supported, basic | Headings, lists, and paragraphs with edit/render toggle.                                                                 |
-|    15 | Actionable failure/disconnect states | Supported        | Visible status, typed errors, reconnect action.                                                                          |
-|    16 | Credential and path safety           | Supported        | Same-origin gateway, server-side token, confinement and bounds.                                                          |
+| Order | Primitive                            | Status           | Notes                                                                                                                                     |
+| ----: | ------------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+|     1 | Open/create/save `.ipynb`            | Supported        | Direct Contents REST, nbformat validation, stable cell IDs.                                                                               |
+|     2 | Real kernelspec/session              | Supported        | Direct Sessions/Kernels REST; IPython acceptance kernel.                                                                                  |
+|     3 | Edit code cells                      | Supported        | Python highlighting, line numbers, multiline editing, and committed draft flushing via pinned `egui_code_editor 0.2.17`.                  |
+|     4 | Add above/below                      | Supported        | Code or Markdown toolbar creation; empty cells supported.                                                                                 |
+|     5 | Delete, duplicate, move              | Supported        | Stable-ID mutations, persisted order, buttons, and drag-handle reordering with a visible drop line.                                       |
+|     6 | Code/Markdown/raw conversion         | Supported        | Conversion preserves stable identity and source.                                                                                          |
+|     7 | Run cell and run all                 | Supported        | Real kernel-channel execution; bounded persisted outputs.                                                                                 |
+|     8 | Text, stream, error outputs          | Supported        | Execution count and bounded traceback rendering.                                                                                          |
+|     9 | Basic graphs                         | Supported        | Bounded PNG and SVG output; seeded executable SVG example.                                                                                |
+|    10 | Kernel completion                    | Supported, basic | Tab requests `complete_request`; the editor dropdown supports mouse, ↑/↓, Enter, Tab, Escape, and restores the caret after inserted text. |
+|    11 | Interrupt/restart/reconnect          | Supported        | Native kernel REST lifecycle and path-based session reuse.                                                                                |
+|    12 | Browser restart persistence          | Supported        | Notebook on disk plus reusable path-associated Jupyter session.                                                                           |
+|    13 | Keyboard notebook flow               | Supported, basic | Command/edit indicator, Escape, A/B, Cmd/Ctrl+Enter, Tab.                                                                                 |
+|    14 | Markdown rendering                   | Supported, basic | Headings, lists, and paragraphs with edit/render toggle.                                                                                  |
+|    15 | Actionable failure/disconnect states | Supported        | Visible status, typed errors, reconnect action.                                                                                           |
+|    16 | Credential and path safety           | Supported        | Same-origin gateway, server-side token, confinement and bounds.                                                                           |
 
 ## Most-used primitives after the mandatory tier
 

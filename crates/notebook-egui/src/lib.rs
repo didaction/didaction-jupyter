@@ -1,3 +1,4 @@
+use egui::text::{CCursor, CCursorRange};
 use egui::{Color32, CornerRadius, Key, Margin, RichText, Stroke, TextEdit};
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 use notebook_core::{NotebookState, SyncState};
@@ -15,7 +16,9 @@ pub struct NotebookEguiApp {
     dirty_editors: HashSet<String>,
     completion_suggestions: HashMap<String, CompletionReply>,
     completion_selection: HashMap<String, usize>,
+    pending_caret_positions: HashMap<String, usize>,
     pending_completions: BTreeMap<Uuid, String>,
+    dragging_cell: Option<String>,
     rendered_markdown: HashSet<String>,
     edit_mode: bool,
 }
@@ -35,7 +38,9 @@ impl NotebookEguiApp {
             dirty_editors: HashSet::new(),
             completion_suggestions: HashMap::new(),
             completion_selection: HashMap::new(),
+            pending_caret_positions: HashMap::new(),
             pending_completions: BTreeMap::new(),
+            dragging_cell: None,
             rendered_markdown: HashSet::new(),
             edit_mode: false,
         }
@@ -109,6 +114,9 @@ impl NotebookEguiApp {
             let end = completion.cursor_end.min(editor.len()).max(start);
             if editor.is_char_boundary(start) && editor.is_char_boundary(end) {
                 editor.replace_range(start..end, value);
+                let caret = editor[..start + value.len()].chars().count();
+                self.pending_caret_positions
+                    .insert(cell_id.to_owned(), caret);
                 self.dirty_editors.insert(cell_id.to_owned());
             }
         }
@@ -284,8 +292,23 @@ impl NotebookEguiApp {
             ))
             .corner_radius(CornerRadius::same(3))
             .inner_margin(Margin::same(10));
-        frame.show(ui, |ui| {
+        let frame_response = frame.show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
+                let idle = !matches!(
+                    self.state.sync_state,
+                    SyncState::Dirty | SyncState::Executing
+                );
+                let drag = ui.add_enabled(
+                    idle,
+                    egui::Label::new(RichText::new("Drag").small()).sense(egui::Sense::drag()),
+                );
+                if drag.drag_started() {
+                    self.dragging_cell = Some(cell.id.clone());
+                    self.state.snapshot.selected_cell_id = Some(cell.id.clone());
+                }
+                if drag.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                }
                 ui.label(
                     RichText::new(match cell.cell_type {
                         CellType::Code => format!(
@@ -297,10 +320,6 @@ impl NotebookEguiApp {
                     })
                     .monospace()
                     .color(Color32::from_rgb(75, 85, 92)),
-                );
-                let idle = !matches!(
-                    self.state.sync_state,
-                    SyncState::Dirty | SyncState::Executing
                 );
                 if cell.cell_type == CellType::Code
                     && ui.add_enabled(idle, egui::Button::new("Run")).clicked()
@@ -438,7 +457,7 @@ impl NotebookEguiApp {
                         .map(|(_, source)| source)
                         .unwrap();
                     let response = if cell.cell_type == CellType::Code {
-                        CodeEditor::default()
+                        let mut output = CodeEditor::default()
                             .id_source(format!("code-editor-{}", cell.id))
                             .with_rows(editor.lines().count().clamp(2, 18))
                             .with_fontsize(14.0)
@@ -446,8 +465,16 @@ impl NotebookEguiApp {
                             .with_syntax(Syntax::python())
                             .with_numlines(true)
                             .vscroll(false)
-                            .show(ui, editor)
-                            .response
+                            .show(ui, editor);
+                        if let Some(caret) = self.pending_caret_positions.remove(&cell.id) {
+                            output
+                                .state
+                                .cursor
+                                .set_char_range(Some(CCursorRange::one(CCursor::new(caret))));
+                            output.state.store(ui.ctx(), output.response.id);
+                            output.response.request_focus();
+                        }
+                        output.response
                     } else {
                         ui.add_sized(
                             [
@@ -522,6 +549,48 @@ impl NotebookEguiApp {
                 render_output(ui, output);
             }
         });
+        if let Some(dragged_id) = self.dragging_cell.clone()
+            && dragged_id != cell.id
+            && ui.rect_contains_pointer(frame_response.response.rect)
+            && let Some(pointer) = ui.ctx().pointer_latest_pos()
+        {
+            let before = pointer.y < frame_response.response.rect.center().y;
+            let line_y = if before {
+                frame_response.response.rect.top()
+            } else {
+                frame_response.response.rect.bottom()
+            };
+            ui.painter().line_segment(
+                [
+                    egui::pos2(frame_response.response.rect.left(), line_y),
+                    egui::pos2(frame_response.response.rect.right(), line_y),
+                ],
+                Stroke::new(3.0, Color32::from_rgb(45, 105, 145)),
+            );
+            if ui.input(|input| input.pointer.any_released()) {
+                let source_index = self
+                    .state
+                    .snapshot
+                    .cells
+                    .iter()
+                    .position(|candidate| candidate.id == dragged_id);
+                if let Some(source_index) = source_index {
+                    let target_index = move_index_for_drop(source_index, index, before);
+                    if target_index != source_index {
+                        if let Some(source) = self.state.snapshot.cells.get(source_index).cloned() {
+                            self.flush_editor(&source);
+                        }
+                        self.emit(NotebookCommandKind::ModifyCells {
+                            changes: vec![CellMutation::Move {
+                                cell_id: dragged_id,
+                                index: target_index,
+                            }],
+                        });
+                    }
+                }
+                self.dragging_cell = None;
+            }
+        }
     }
 }
 
@@ -645,6 +714,9 @@ impl eframe::App for NotebookEguiApp {
                             self.cell(ui, index, cell);
                             ui.add_space(10.0);
                         }
+                        if ui.input(|input| input.pointer.any_released()) {
+                            self.dragging_cell = None;
+                        }
                     });
             });
     }
@@ -701,6 +773,15 @@ fn render_markdown(ui: &mut egui::Ui, source: &str) {
     }
 }
 
+fn move_index_for_drop(source_index: usize, hovered_index: usize, before: bool) -> usize {
+    let boundary = if before {
+        hovered_index
+    } else {
+        hovered_index + 1
+    };
+    boundary.saturating_sub(usize::from(source_index < boundary))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -755,5 +836,14 @@ mod tests {
         assert_eq!(app.editors[0].1, "value.bit_length");
         assert!(app.dirty_editors.contains("code"));
         assert!(!app.completion_suggestions.contains_key("code"));
+        assert_eq!(app.pending_caret_positions.get("code"), Some(&16));
+    }
+
+    #[test]
+    fn drop_index_accounts_for_removing_the_dragged_cell() {
+        assert_eq!(move_index_for_drop(0, 2, true), 1);
+        assert_eq!(move_index_for_drop(0, 2, false), 2);
+        assert_eq!(move_index_for_drop(3, 1, true), 1);
+        assert_eq!(move_index_for_drop(3, 1, false), 2);
     }
 }
