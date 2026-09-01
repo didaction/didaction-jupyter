@@ -2079,7 +2079,7 @@ fn render_math_formula(latex: &str, inline: bool) -> Result<egui::ColorImage, St
         format!("$ {typst_math} $")
     };
     let source = format!(
-        "{MATH_PREAMBLE}\n#set page(width: auto, height: auto, margin: 0pt, fill: none)\n#set text(size: 16pt, fill: black)\n{equation}"
+        "{MATH_PREAMBLE}\n#set page(width: auto, height: auto, margin: 8pt, fill: none)\n#set text(size: 16pt, fill: black)\n{equation}"
     );
     let engine = typst_as_lib::TypstEngine::builder()
         .main_file(source)
@@ -2594,6 +2594,45 @@ mod tests {
         assert!(
             !(top || bottom || left || right),
             "math glyphs touch bitmap boundary: top={top}, bottom={bottom}, left={left}, right={right}"
+        );
+        let padding = (MATH_RASTER_PADDING_POINTS * MATH_PIXELS_PER_POINT).ceil() as usize;
+        let inner_top =
+            (padding..width - padding).any(|x| image.pixels[padding * width + x].a() > 0);
+        let inner_bottom = (padding..width - padding)
+            .any(|x| image.pixels[(height - padding - 1) * width + x].a() > 0);
+        assert!(
+            !(inner_top || inner_bottom),
+            "typeset math is already clipped before raster padding"
+        );
+    }
+
+    #[test]
+    fn rendered_markdown_does_not_clip_math_texture() {
+        let context = egui::Context::default();
+        let output = context.run(egui::RawInput::default(), |context| {
+            egui::CentralPanel::default().show(context, |ui| {
+                let mut cache = CommonMarkCache::default();
+                let math_cache = Arc::new(Mutex::new(MathRenderCache::default()));
+                rendered_markdown_response(
+                    ui,
+                    "math",
+                    r"$H = \frac{1}{\sqrt{2}} \begin{pmatrix} 1 & 1 \\ 1 & -1 \end{pmatrix}$",
+                    &mut cache,
+                    &math_cache,
+                );
+            });
+        });
+        let clipped_math = output.shapes.iter().any(|clipped| {
+            matches!(&clipped.shape, egui::Shape::Mesh(mesh) if {
+                let bounds = clipped.shape.visual_bounding_rect();
+                !clipped.clip_rect.contains_rect(bounds)
+                    && mesh.texture_id != egui::TextureId::default()
+            })
+        });
+
+        assert!(
+            !clipped_math,
+            "rendered math exceeds its egui clip rectangle"
         );
     }
 
