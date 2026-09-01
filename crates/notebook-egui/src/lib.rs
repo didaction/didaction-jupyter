@@ -1,5 +1,5 @@
-use egui::text::{CCursor, CCursorRange};
-use egui::{Color32, CornerRadius, Key, Margin, RichText, Stroke, TextEdit};
+use egui::text::{CCursor, CCursorRange, LayoutJob, TextFormat};
+use egui::{Color32, CornerRadius, FontId, Key, Margin, RichText, Stroke, TextEdit};
 use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 use notebook_core::{NotebookState, SyncState};
 use notebook_protocol::{
@@ -954,8 +954,104 @@ fn render_output(ui: &mut egui::Ui, output: &CellOutput) {
         .fill(Color32::from_rgb(248, 250, 251))
         .inner_margin(Margin::same(8))
         .show(ui, |ui| {
-            ui.add(egui::Label::new(RichText::new(text).monospace()).wrap());
+            ui.add(egui::Label::new(ansi_layout_job(&text, Color32::from_rgb(38, 50, 56))).wrap());
         });
+}
+
+fn ansi_layout_job(text: &str, base_color: Color32) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    let mut color = base_color;
+    let mut buffer = String::new();
+    let mut characters = text.chars().peekable();
+
+    while let Some(character) = characters.next() {
+        if character == '\u{1b}' {
+            append_output_run(&mut job, &mut buffer, color);
+            match characters.next() {
+                Some('[') => {
+                    let mut parameters = String::new();
+                    for sequence_character in characters.by_ref() {
+                        if ('@'..='~').contains(&sequence_character) {
+                            if sequence_character == 'm' {
+                                color = ansi_foreground(&parameters, color, base_color);
+                            }
+                            break;
+                        }
+                        if parameters.len() < 64 {
+                            parameters.push(sequence_character);
+                        }
+                    }
+                }
+                Some(']') => {
+                    while let Some(sequence_character) = characters.next() {
+                        if sequence_character == '\u{7}' {
+                            break;
+                        }
+                        if sequence_character == '\u{1b}' && characters.next_if_eq(&'\\').is_some()
+                        {
+                            break;
+                        }
+                    }
+                }
+                Some(_) | None => {}
+            }
+        } else if character == '\n' || character == '\t' || !character.is_control() {
+            buffer.push(character);
+        }
+    }
+    append_output_run(&mut job, &mut buffer, color);
+    job
+}
+
+fn append_output_run(job: &mut LayoutJob, buffer: &mut String, color: Color32) {
+    if buffer.is_empty() {
+        return;
+    }
+    job.append(
+        buffer,
+        0.0,
+        TextFormat {
+            font_id: FontId::monospace(14.0),
+            color,
+            ..Default::default()
+        },
+    );
+    buffer.clear();
+}
+
+fn ansi_foreground(parameters: &str, current: Color32, base: Color32) -> Color32 {
+    let mut color = current;
+    let parameters = if parameters.is_empty() {
+        vec![0]
+    } else {
+        parameters
+            .split(';')
+            .filter_map(|parameter| parameter.parse::<u8>().ok())
+            .collect()
+    };
+    for parameter in parameters {
+        color = match parameter {
+            0 | 39 => base,
+            30 => Color32::from_rgb(38, 50, 56),
+            31 => Color32::from_rgb(198, 40, 40),
+            32 => Color32::from_rgb(46, 125, 50),
+            33 => Color32::from_rgb(154, 103, 0),
+            34 => Color32::from_rgb(21, 101, 192),
+            35 => Color32::from_rgb(123, 31, 162),
+            36 => Color32::from_rgb(0, 121, 107),
+            37 => Color32::from_rgb(83, 99, 107),
+            90 => Color32::from_rgb(97, 112, 119),
+            91 => Color32::from_rgb(211, 47, 47),
+            92 => Color32::from_rgb(56, 142, 60),
+            93 => Color32::from_rgb(175, 112, 0),
+            94 => Color32::from_rgb(25, 118, 210),
+            95 => Color32::from_rgb(142, 36, 170),
+            96 => Color32::from_rgb(0, 137, 123),
+            97 => Color32::from_rgb(38, 50, 56),
+            _ => color,
+        };
+    }
+    color
 }
 
 fn render_markdown(ui: &mut egui::Ui, source: &str) {
@@ -1291,5 +1387,18 @@ mod tests {
 
         let state = egui::scroll_area::State::load(&context, scroll_id).unwrap();
         assert!(state.offset.y > 0.0);
+    }
+
+    #[test]
+    fn ansi_kernel_output_is_styled_without_control_glyphs() {
+        let base = Color32::from_rgb(38, 50, 56);
+        let job = ansi_layout_job("\u{1b}[31mSyntaxError\u{1b}[0m", base);
+
+        assert_eq!(job.text, "SyntaxError");
+        assert!(job.text.chars().all(|character| !character.is_control()));
+        assert!(job.sections.iter().any(|section| {
+            section.format.color == Color32::from_rgb(198, 40, 40)
+                && &job.text[section.byte_range.clone()] == "SyntaxError"
+        }));
     }
 }
