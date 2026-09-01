@@ -6,7 +6,7 @@ __pycache__/
 /.mypy_cache/
 /.ruff_cache/
 /dist/
-/node_modules/
+node_modules/
 /target/
 /test-results/
 /playwright-report/
