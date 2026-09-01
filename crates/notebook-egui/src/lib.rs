@@ -2013,6 +2013,7 @@ impl MathRenderCache {
 }
 
 const MATH_PIXELS_PER_POINT: f32 = 2.0;
+const MATH_RASTER_PADDING_POINTS: f32 = 4.0;
 
 const MATH_PREAMBLE: &str = r#"
 #let mitexmathbf(it) = math.bold(math.upright(it))
@@ -2077,9 +2078,8 @@ fn render_math_formula(latex: &str, inline: bool) -> Result<egui::ColorImage, St
     } else {
         format!("$ {typst_math} $")
     };
-    let margin = if inline { "(x: 0pt, y: 2pt)" } else { "8pt" };
     let source = format!(
-        "{MATH_PREAMBLE}\n#set page(width: auto, height: auto, margin: {margin}, fill: none)\n#set text(size: 16pt, fill: black)\n{equation}"
+        "{MATH_PREAMBLE}\n#set page(width: auto, height: auto, margin: 0pt, fill: none)\n#set text(size: 16pt, fill: black)\n{equation}"
     );
     let engine = typst_as_lib::TypstEngine::builder()
         .main_file(source)
@@ -2094,16 +2094,26 @@ fn render_math_formula(latex: &str, inline: bool) -> Result<egui::ColorImage, St
         .first()
         .ok_or_else(|| "typesetter returned no page".to_owned())?;
     let pixmap = typst_render::render(page, MATH_PIXELS_PER_POINT);
-    let width = pixmap.width() as usize;
-    let height = pixmap.height() as usize;
-    if width == 0 || height == 0 {
+    let rendered_width = pixmap.width() as usize;
+    let rendered_height = pixmap.height() as usize;
+    if rendered_width == 0 || rendered_height == 0 {
         return Err("typesetter returned an empty image".into());
     }
-    let pixels = pixmap
+    let rendered_pixels: Vec<_> = pixmap
         .data()
         .chunks_exact(4)
         .map(|rgba| Color32::from_rgba_premultiplied(rgba[0], rgba[1], rgba[2], rgba[3]))
         .collect();
+    let padding = (MATH_RASTER_PADDING_POINTS * MATH_PIXELS_PER_POINT).ceil() as usize;
+    let width = rendered_width + padding * 2;
+    let height = rendered_height + padding * 2;
+    let mut pixels = vec![Color32::TRANSPARENT; width * height];
+    for row in 0..rendered_height {
+        let source_start = row * rendered_width;
+        let target_start = (row + padding) * width + padding;
+        pixels[target_start..target_start + rendered_width]
+            .copy_from_slice(&rendered_pixels[source_start..source_start + rendered_width]);
+    }
     Ok(egui::ColorImage {
         size: [width, height],
         pixels,
@@ -2565,6 +2575,26 @@ mod tests {
             assert!(image.height() > 1);
             assert!(image.pixels.iter().any(|pixel| pixel.a() > 0));
         }
+    }
+
+    #[test]
+    fn markdown_math_preserves_padding_around_matrix_glyphs() {
+        let image = render_math_formula(
+            r"H = \frac{1}{\sqrt{2}} \begin{pmatrix} 1 & 1 \\ 1 & -1 \end{pmatrix}",
+            true,
+        )
+        .unwrap();
+        let width = image.width();
+        let height = image.height();
+        let top = (0..width).any(|x| image.pixels[x].a() > 0);
+        let bottom = (0..width).any(|x| image.pixels[(height - 1) * width + x].a() > 0);
+        let left = (0..height).any(|y| image.pixels[y * width].a() > 0);
+        let right = (0..height).any(|y| image.pixels[y * width + width - 1].a() > 0);
+
+        assert!(
+            !(top || bottom || left || right),
+            "math glyphs touch bitmap boundary: top={top}, bottom={bottom}, left={left}, right={right}"
+        );
     }
 
     #[test]
