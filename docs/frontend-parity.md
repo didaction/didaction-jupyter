@@ -12,7 +12,7 @@ behavior. See the [primary-source parity reference](jupyter-frontend-parity-refe
 | Order | Primitive                            | Status           | Notes                                                                                                                                     |
 | ----: | ------------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 |     1 | Open/create/save `.ipynb`            | Supported        | Direct Contents REST, nbformat validation, stable cell IDs.                                                                               |
-|     2 | Real kernelspec/session              | Supported        | Direct Sessions/Kernels REST; IPython acceptance kernel.                                                                                  |
+|     2 | Real kernelspec/session              | Supported        | Direct Sessions/Kernels REST; the kernelspec is fixed by `DIDACTION_KERNEL_NAME` at startup and IPython is the acceptance kernel.         |
 |     3 | Edit code cells                      | Supported        | Python highlighting, line numbers, multiline editing, and committed draft flushing via pinned `egui_code_editor 0.2.17`.                  |
 |     4 | Add above/below                      | Visual parity    | Familiar Insert menu and top-toolbar insert-below control; empty cells supported.                                                         |
 |     5 | Delete, duplicate, move              | Visual parity    | Edit menu, top-toolbar move controls, and optional drag-handle reordering with a visible drop line.                                       |
@@ -21,29 +21,29 @@ behavior. See the [primary-source parity reference](jupyter-frontend-parity-refe
 |     8 | Text, stream, error outputs          | Supported        | Execution count and bounded traceback rendering.                                                                                          |
 |     9 | Basic graphs                         | Supported        | Bounded PNG and SVG output; seeded executable SVG example.                                                                                |
 |    10 | Kernel completion                    | Supported, basic | Tab requests `complete_request`; the editor dropdown supports mouse, ↑/↓, Enter, Tab, Escape, and restores the caret after inserted text. |
-|    11 | Interrupt/restart/reconnect          | Visual parity    | Familiar stop/restart toolbar position plus Kernel menu; native kernel lifecycle and path-based session reuse.                            |
+|    11 | Interrupt/restart/reconnect          | Visual parity    | Familiar stop/restart toolbar position plus Kernel menu; restart confirmation, native lifecycle, and path-based session reuse.            |
 |    12 | Browser restart persistence          | Supported        | Notebook on disk plus reusable path-associated Jupyter session.                                                                           |
-|    13 | Keyboard notebook flow               | Supported, basic | Command/edit indicator, Escape, A/B, Cmd/Ctrl+Enter, Tab.                                                                                 |
-|    14 | Markdown rendering                   | Visual parity    | Opens rendered by default; double-click enters source editing; headings, lists, and paragraphs are bounded.                               |
+|    13 | Keyboard notebook flow               | Supported        | Command/edit indicator, Escape, Enter, A/B, M/Y/R, Shift+Enter, Alt+Enter, Cmd/Ctrl+Enter, Tab, and edit-history shortcuts.               |
+|    14 | Markdown rendering                   | Visual parity    | CommonMark opens rendered by default; double-click or Enter edits; headings, links, lists, tasks, tables, fenced code, and math notation. |
 |    15 | Actionable failure/disconnect states | Supported        | Visible status, typed errors, reconnect action.                                                                                           |
 |    16 | Credential and path safety           | Supported        | Same-origin gateway, server-side token, confinement and bounds.                                                                           |
 
 ## Most-used primitives after the mandatory tier
 
-| Order | Primitive                   | Current status | Next parity step                                               |
-| ----: | --------------------------- | -------------- | -------------------------------------------------------------- |
-|     1 | Shift+Enter run-and-advance | Partial        | Add exact focus/selection advance semantics.                   |
-|     2 | Cut/copy/paste cells        | Not yet        | Bounded internal cell clipboard and multi-cell selection.      |
-|     3 | Undo/redo structure         | Not yet        | Deterministic command history in `notebook-core`.              |
-|     4 | Clear outputs               | Not yet        | Add typed one-cell/all-cells mutations.                        |
-|     5 | Continuous completion       | Not yet        | Cursor-aware debounce, cancellation, selection popup.          |
-|     6 | Signature/object help       | Not yet        | Bounded `inspect_request` UI.                                  |
-|     7 | Find/replace                | Not yet        | Notebook and active-editor scopes.                             |
-|     8 | Full Markdown + math        | Partial        | CommonMark, links, fenced code, safe HTML, MathJax-equivalent. |
-|     9 | Table/HTML rich display     | Not yet        | Sanitized renderer with strict MIME allowlist.                 |
-|    10 | Notebook rename/download    | Not yet        | Confined Contents operations and browser download.             |
-|    11 | Cell collapse/line numbers  | Not yet        | Persisted view metadata and editor gutters.                    |
-|    12 | Autosave/checkpoints        | Not yet        | Debounced save status and Contents checkpoints.                |
+| Order | Primitive                   | Current status | Next parity step                                                                                 |
+| ----: | --------------------------- | -------------- | ------------------------------------------------------------------------------------------------ |
+|     1 | Shift+Enter run-and-advance | Supported      | Runs the selected code cell and selects the next cell; Alt+Enter inserts below.                  |
+|     2 | Cut/copy/paste cells        | Supported      | Bounded internal clipboard; Shift-click prompts select multiple cells.                           |
+|     3 | Undo/redo structure         | Supported      | Reversible insert, update, delete, and move history; failed commands preserve the prior state.   |
+|     4 | Clear outputs               | Supported      | Typed selected-cell and all-cell output clearing.                                                |
+|     5 | Continuous completion       | Supported      | Cursor-aware 300 ms debounce plus bounded, auto-scrolling keyboard/mouse dropdown.               |
+|     6 | Signature/object help       | Supported      | Shift+Tab sends a bounded kernel `inspect_request` and shows an in-cell help panel.              |
+|     7 | Find/replace                | Supported      | Notebook-wide next-match and replace-all controls.                                               |
+|     8 | Full Markdown + math        | Supported      | Pinned CommonMark renderer; math notation is styled and bounded, not full MathJax typesetting.   |
+|     9 | Table/HTML rich display     | Supported      | Markdown tables plus sanitized, script-free readable HTML/table output; arbitrary DOM is denied. |
+|    10 | Notebook rename/download    | Supported      | Confined rename and a human-triggered `.ipynb` download.                                         |
+|    11 | Cell collapse/line numbers  | Supported      | Per-cell collapse and line-number toggles for the current browser session.                       |
+|    12 | Autosave/checkpoints        | Supported      | Debounced autosave status and explicit Jupyter Contents checkpoints.                             |
 
 ## Intentionally deferred
 
@@ -52,6 +52,11 @@ JupyterLab extensions, arbitrary HTML/JavaScript, package installation, notebook
 trust/signing UI, slideshow tooling, and full JupyterLab workbench parity. Each
 requires a separate security and protocol design; none falls through to generic
 Jupyter calls.
+
+Kernel selection and the notebook workspace are intentionally not in-notebook
+primitives. `DIDACTION_KERNEL_NAME`, `DIDACTION_NOTEBOOK_WORKSPACE`, and
+`DIDACTION_NOTEBOOK_PATH` fix them at process startup; browser and WebMCP callers
+cannot change them.
 
 ## Examples
 

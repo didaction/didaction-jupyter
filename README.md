@@ -43,8 +43,19 @@ Open `http://127.0.0.1:5173`. The generated Jupyter token remains in the service
 environment and is never printed. The default `notebook-parity-demo.ipynb`
 contains executable completion and SVG graph examples.
 
-To select another installed kernelspec, change `kernel` in
-`web/src/bootstrap.ts`; list kernels with:
+The workspace folder, opened notebook, and kernelspec are immutable startup
+configuration. For example:
+
+```bash
+DIDACTION_NOTEBOOK_WORKSPACE=/absolute/notebooks \
+DIDACTION_NOTEBOOK_PATH=course/week-1.ipynb \
+DIDACTION_KERNEL_NAME=python3 \
+scripts/dev.sh
+```
+
+The path is relative to the configured workspace and cannot contain traversal.
+Browser and WebMCP callers cannot select a different path or kernel. List
+installed kernelspecs with:
 
 ```bash
 uv run jupyter kernelspec list
@@ -97,10 +108,11 @@ bounded; SVG is decoded only by egui's image loader.
 ## Current limitations
 
 - Single-writer notebook saves; simultaneous edits from JupyterLab can conflict.
-- Basic Markdown rendering rather than Jupyter's complete CommonMark/math stack.
-- Completion requests currently target the end of the active source and present
-  a bounded editor dropdown with keyboard and mouse selection; signature help
-  and continuous completion are future work.
+- Math notation is rendered as bounded styled text, not full MathJax/LaTeX
+  typesetting. Arbitrary HTML is reduced to safe readable text/table output.
+- Structural undo does not restore cleared kernel outputs; rerun the cell instead.
+- Cell collapse and line-number preferences last for the browser session and are
+  not yet persisted in notebook metadata.
 - `egui_code_editor` is pinned to `0.2.17`, the release compatible with this
   workspace's egui `0.32`; its newer egui `0.35` line cannot be mixed in directly.
 - No ipywidgets/comms, debugger, terminal, file browser, nbextensions, or trust UI.

@@ -33,6 +33,8 @@ second mutation path or a generic Jupyter forwarding method.
   Trusted human-authored cells may use the pinned kernel `pip`; never expose that
   capability as a WebMCP or generic gateway operation.
 - Jupyter, gateway, and frontend bind to loopback in non-container startup.
+- Workspace root, notebook path, and kernelspec are immutable startup settings;
+  never add browser-controlled kernel or filesystem selection.
 - `jupyter-server`, `jupyter-kernel-client`, `ipykernel`, `nbformat`, and `pip` stay
   exactly pinned; protocol upgrades require real integration verification.
 
