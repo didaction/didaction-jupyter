@@ -444,6 +444,7 @@ class FollowViewInput(BaseModel):
     protocol_version: int = Field(ge=1, le=1)
     notebook_path: str = Field(min_length=1, max_length=512)
     scroll_fraction: float = Field(ge=0, le=1, allow_inf_nan=False)
+    selected_cell_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 @app.post("/api/v1/collaboration/view")
@@ -454,6 +455,7 @@ async def publish_view(view: FollowViewInput, request: Request) -> dict[str, boo
         settings.confined_path(view.notebook_path),
         request.headers.get("x-notebook-target-client", ""),
         view.scroll_fraction,
+        view.selected_cell_id,
     )
     return {"ok": True}
 

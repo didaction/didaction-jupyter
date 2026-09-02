@@ -1703,6 +1703,20 @@ impl NotebookEguiApp {
         }
     }
 
+    /// Follow presentation only: never focus an editor or emit a notebook command.
+    pub fn follow_selection(&mut self, cell_id: Option<&str>) {
+        if !self.read_only {
+            return;
+        }
+        if let Some(id) = cell_id
+            && !self.state.snapshot.cells.iter().any(|cell| cell.id == id)
+        {
+            return;
+        }
+        self.selected_cells.clear();
+        self.state.snapshot.selected_cell_id = cell_id.map(str::to_owned);
+    }
+
     fn apply_rendered_markdown_interaction(
         &mut self,
         cell_id: &str,
@@ -2943,6 +2957,22 @@ mod tests {
             selected_cell_id: Some("code".into()),
         };
         NotebookEguiApp::new(NotebookState::new(snapshot).unwrap())
+    }
+
+    #[test]
+    fn followed_selection_is_read_only_bounded_to_existing_cells_and_command_free() {
+        let mut app = app();
+        app.follow_selection(None);
+        assert_eq!(app.state.snapshot.selected_cell_id.as_deref(), Some("code"));
+        app.read_only = true;
+        app.follow_selection(None);
+        assert!(app.state.snapshot.selected_cell_id.is_none());
+        app.follow_selection(Some("missing"));
+        assert!(app.state.snapshot.selected_cell_id.is_none());
+        app.follow_selection(Some("code"));
+        assert_eq!(app.state.snapshot.selected_cell_id.as_deref(), Some("code"));
+        assert_eq!(app.state.snapshot.revision, 1);
+        assert!(app.drain_commands().is_empty());
     }
 
     #[test]

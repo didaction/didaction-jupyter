@@ -18,10 +18,16 @@ async def test_follow_presence_is_authorized_and_separate_from_notebook_updates(
     revision_events = hub.rooms["a.ipynb"].sequence
     waiter = asyncio.create_task(hub.wait_view("a.ipynb", observer["token"], 0))
     await asyncio.sleep(0)
-    hub.publish_view("a.ipynb", driver["token"], "b.ipynb", target["token"], 0.75)
+    hub.publish_view("a.ipynb", driver["token"], "b.ipynb", target["token"], 0.75, "cell-2")
     event = await waiter
     assert event["view"]["notebook_path"] == "b.ipynb"
     assert event["view"]["scroll_fraction"] == 0.75
+    assert event["view"]["selected_cell_id"] == "cell-2"
+    sequence = event["sequence"]
+    hub.publish_view("a.ipynb", driver["token"], "b.ipynb", target["token"], 0.75, "cell-3")
+    assert (await hub.wait_view("a.ipynb", observer["token"], sequence))["view"][
+        "selected_cell_id"
+    ] == "cell-3"
     assert "snapshot" not in event and "token" not in str(event)
     assert hub.rooms["a.ipynb"].sequence == revision_events
     for source_token, target_token, fraction in [
@@ -53,6 +59,14 @@ async def test_follow_http_input_is_confined_and_bounded(monkeypatch: pytest.Mon
         assert (
             await client.post("/api/v1/collaboration/view", headers=headers, json=body)
         ).status_code == 200
+        for invalid_id in ["", "x" * 129, 42]:
+            assert (
+                await client.post(
+                    "/api/v1/collaboration/view",
+                    headers=headers,
+                    json={**body, "selected_cell_id": invalid_id},
+                )
+            ).status_code == 422
         assert (
             await client.post(
                 "/api/v1/collaboration/view", headers=headers, json={**body, "scroll_fraction": 2}

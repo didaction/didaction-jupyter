@@ -401,6 +401,23 @@ impl MountedNotebook {
         }
         Ok(())
     }
+    #[wasm_bindgen(js_name = setFollowSelection)]
+    pub fn set_follow_selection(&self, cell_id: Option<String>) -> Result<(), JsError> {
+        if cell_id
+            .as_ref()
+            .is_some_and(|id| id.is_empty() || id.len() > 128)
+        {
+            return Err(JsError::new("Invalid followed cell ID"));
+        }
+        self.app
+            .lock()
+            .expect("app mutex")
+            .follow_selection(cell_id.as_deref());
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
     #[wasm_bindgen(js_name = assertExternalReady)]
     pub fn assert_external_ready(&self) -> Result<(), JsError> {
         if self

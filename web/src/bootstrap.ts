@@ -15,6 +15,7 @@ import { FollowController } from "./follow";
 interface NotebookContext extends OpenNotebook {
   connection: NotebookCollaboration;
   scrollFraction(): number;
+  followSelection(cellId: string | null): void;
   followScroll(fraction: number | null): void;
   isActive(): boolean;
 }
@@ -288,6 +289,7 @@ async function createContext(
     connection: collaboration,
     isActive: () => mounted !== undefined,
     scrollFraction: () => mounted?.scrollFraction() ?? 0,
+    followSelection: (cellId) => mounted?.setFollowSelection(cellId),
     followScroll: (fraction) => mounted?.setFollowScroll(fraction),
     canWrite: () => !readOnly,
     collaboration: () => ({
@@ -390,6 +392,8 @@ async function boot(): Promise<void> {
         throw new Error("Follow target cannot be selected");
       if (allowed()) {
         activeContext()?.followScroll(view.scroll_fraction);
+        if (view.selected_cell_id !== undefined)
+          activeContext()?.followSelection(view.selected_cell_id);
         followStatus.textContent = "";
         followButton.title = `Following ${view.notebook_path}. Click to browse independently.`;
       }
@@ -442,6 +446,8 @@ async function boot(): Promise<void> {
           protocol_version: 1,
           notebook_path: active.path!(),
           scroll_fraction: active.scrollFraction(),
+          selected_cell_id:
+            (active.activeContext?.()?.cell_id as string | null) ?? null,
         });
   }, 250);
   updateFollowButton();

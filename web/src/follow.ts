@@ -3,6 +3,7 @@ export interface FollowView {
   protocol_version: 1;
   notebook_path: string;
   scroll_fraction: number;
+  selected_cell_id?: string | null;
   driver_id: string;
 }
 export interface FollowTransport {
@@ -10,7 +11,7 @@ export interface FollowTransport {
 }
 export type FollowPosition = Pick<
   FollowView,
-  "protocol_version" | "notebook_path" | "scroll_fraction"
+  "protocol_version" | "notebook_path" | "scroll_fraction" | "selected_cell_id"
 >;
 export interface FollowPublisher {
   publish(view: FollowPosition): Promise<void>;
@@ -32,7 +33,11 @@ export function validateFollowView(value: unknown): FollowView {
     view.driver_id.length > 128 ||
     !Number.isFinite(view.scroll_fraction) ||
     view.scroll_fraction < 0 ||
-    view.scroll_fraction > 1
+    view.scroll_fraction > 1 ||
+    (view.selected_cell_id != null &&
+      (typeof view.selected_cell_id !== "string" ||
+        view.selected_cell_id.length < 1 ||
+        view.selected_cell_id.length > 128))
   )
     throw new Error("Invalid follow viewport");
   return view;

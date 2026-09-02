@@ -10,6 +10,7 @@ const view: FollowView = {
   notebook_path: "a.ipynb",
   scroll_fraction: 0.75,
   driver_id: "driver",
+  selected_cell_id: "cell-2",
 };
 it("rejects unsafe paths, versions and unbounded positions", () => {
   expect(validateFollowView(view)).toEqual(view);
@@ -19,6 +20,9 @@ it("rejects unsafe paths, versions and unbounded positions", () => {
     { notebook_path: "/a.ipynb" },
     { scroll_fraction: NaN },
     { scroll_fraction: 1.1 },
+    { selected_cell_id: "" },
+    { selected_cell_id: "x".repeat(129) },
+    { selected_cell_id: 3 },
   ])
     expect(() => validateFollowView({ ...view, ...change })).toThrow();
 });

@@ -121,7 +121,13 @@ class Collaboration:
         room.view_changed = asyncio.Event()
 
     def publish_view(
-        self, path: str, token: str, target: str, target_token: str, fraction: float
+        self,
+        path: str,
+        token: str,
+        target: str,
+        target_token: str,
+        fraction: float,
+        selected_cell_id: str | None = None,
     ) -> None:
         """Transport-neutral presence; neither notebook contents nor revisions change.
 
@@ -132,11 +138,16 @@ class Collaboration:
         self.require_driver(target, target_token)
         if not math.isfinite(fraction) or not 0 <= fraction <= 1:
             raise AdapterError("invalid_input", "Scroll fraction must be between zero and one")
+        if selected_cell_id is not None and (
+            not isinstance(selected_cell_id, str) or not 1 <= len(selected_cell_id) <= 128
+        ):
+            raise AdapterError("invalid_input", "Invalid followed cell ID")
         room = self.room(path)
         view = {
             "protocol_version": 1,
             "notebook_path": target,
             "scroll_fraction": fraction,
+            "selected_cell_id": selected_cell_id,
             "driver_id": room.driver,
         }
         if room.view == view:

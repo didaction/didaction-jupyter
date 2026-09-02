@@ -113,6 +113,18 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
                 outputs: [],
               },
             },
+            {
+              operation: "insert",
+              index: 1,
+              cell: {
+                id: "tail-note",
+                cell_type: "markdown",
+                source: "Final section",
+                metadata: {},
+                execution_count: null,
+                outputs: [],
+              },
+            },
           ],
         })
       ).error,
@@ -154,6 +166,19 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   await expect
     .poll(async () => Math.abs((await scroll(page)) - (await scroll(observer))))
     .toBeLessThan(0.02);
+  await page
+    .locator("#notebook-canvas")
+    .click({ position: { x: 400, y: 350 } });
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("ArrowDown");
+  const selected = async (target: Page) =>
+    (
+      (await call(target, "get_active_context")).structuredContent.context as {
+        cell_id: string;
+      }
+    ).cell_id;
+  await expect.poll(() => selected(page)).toBe("tail-note");
+  await expect.poll(() => selected(observer)).toBe("tail-note");
   expect(
     (await call(page, "open_notebook", { notebook_path: names[1] })).isError,
   ).toBe(false);

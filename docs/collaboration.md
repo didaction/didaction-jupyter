@@ -71,10 +71,14 @@ publishes their active notebook to the notebooks they control; switching into a
 notebook they do not control does not publish a new follow position.
 
 Follow uses a bounded `FollowView` (`protocol_version: 1`, `notebook_path`,
-`scroll_fraction` in `[0,1]`, public `driver_id`). Fractions are relative to the
+`scroll_fraction` in `[0,1]`, optional `selected_cell_id`, public `driver_id`).
+Followers mirror the driver's selected-cell highlight using the stable cell ID;
+unknown/deleted IDs are ignored and no editor focus or editing rights are granted.
+Selection-only changes are streamed even when the viewport stays still.
+Fractions are relative to the
 scrollable document length, not browser pixels. Collapsed cells and different
 layout widths can therefore produce approximate rather than pixel-identical
-reading positions. Selection, output collapse and notebook edits are not changed
+reading positions. Output collapse and notebook edits are not changed
 by follow. Unsaved work or becoming driver prevents automatic navigation.
 
 `web/src/follow.ts` is the transport-independent opt-in/cancellation controller;
