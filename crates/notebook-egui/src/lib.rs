@@ -1231,19 +1231,10 @@ impl NotebookEguiApp {
                     self.state.sync_state,
                     SyncState::Dirty | SyncState::Executing
                 );
-                let running = self
-                    .pending_execution_cells
-                    .values()
-                    .any(|cell_id| cell_id == &cell.id);
-                if cell.cell_type == CellType::Code
-                    && cell_run_button(ui, idle && !running, running).clicked()
-                {
-                    self.execute_cell(index, &cell);
-                }
-                execution_status_icon(ui, cell_has_completed_execution(&cell), running);
                 let drag = ui
                     .add_enabled(idle, drag_handle())
                     .on_hover_text("Drag to reorder cell");
+                paint_drag_hand(ui, &drag);
                 if drag.hovered() {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
                 }
@@ -1254,6 +1245,16 @@ impl NotebookEguiApp {
                 if drag.dragged() {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
                 }
+                let running = self
+                    .pending_execution_cells
+                    .values()
+                    .any(|cell_id| cell_id == &cell.id);
+                if cell.cell_type == CellType::Code
+                    && cell_run_button(ui, idle && !running, running).clicked()
+                {
+                    self.execute_cell(index, &cell);
+                }
+                execution_status_icon(ui, cell_has_completed_execution(&cell), running);
                 let prompt = ui.add(
                     egui::Label::new(
                         RichText::new(match cell.cell_type {
@@ -2427,9 +2428,60 @@ fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -
 }
 
 fn drag_handle() -> egui::Button<'static> {
-    egui::Button::new(RichText::new("Drag").small())
+    egui::Button::new("")
         .sense(egui::Sense::drag())
-        .min_size(egui::vec2(52.0, 28.0))
+        .min_size(egui::vec2(28.0, 28.0))
+}
+
+fn paint_drag_hand(ui: &egui::Ui, response: &egui::Response) {
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::Button,
+            response.enabled(),
+            "Drag to reorder cell",
+        )
+    });
+    let origin = response.rect.center() - egui::vec2(10.0, 10.0);
+    // Open-hand outline in a 20-point square; independent of font glyph coverage.
+    let outline = [
+        (5.0, 11.0),
+        (5.0, 5.0),
+        (6.0, 4.0),
+        (7.0, 5.0),
+        (7.0, 9.0),
+        (7.0, 2.0),
+        (8.0, 1.0),
+        (9.0, 2.0),
+        (9.0, 8.0),
+        (9.0, 1.0),
+        (10.0, 0.5),
+        (11.0, 1.0),
+        (11.0, 8.0),
+        (11.0, 3.0),
+        (12.0, 2.0),
+        (13.0, 3.0),
+        (13.0, 10.0),
+        (14.0, 7.0),
+        (15.0, 6.0),
+        (16.0, 7.0),
+        (16.0, 12.0),
+        (14.0, 17.0),
+        (12.0, 19.0),
+        (8.0, 19.0),
+        (5.0, 16.0),
+        (2.0, 11.0),
+        (2.0, 10.0),
+        (3.0, 9.0),
+        (5.0, 11.0),
+    ];
+    let color = ui.style().interact(response).fg_stroke.color;
+    ui.painter().add(egui::Shape::line(
+        outline
+            .into_iter()
+            .map(|(x, y)| origin + egui::vec2(x, y))
+            .collect(),
+        Stroke::new(1.3, color),
+    ));
 }
 
 fn cell_run_button(ui: &mut egui::Ui, enabled: bool, running: bool) -> egui::Response {
@@ -2590,9 +2642,20 @@ mod tests {
 
     #[test]
     fn drag_handle_is_a_non_selectable_button() {
-        fn assert_button(_: egui::Button<'static>) {}
-
-        assert_button(drag_handle());
+        let context = egui::Context::default();
+        let _ = context.run(egui::RawInput::default(), |context| {
+            egui::CentralPanel::default().show(context, |ui| {
+                ui.horizontal(|ui| {
+                    let drag = ui.add(drag_handle());
+                    paint_drag_hand(ui, &drag);
+                    let run = cell_run_button(ui, true, false);
+                    assert!(drag.sense.senses_drag());
+                    assert!(!drag.sense.senses_click());
+                    assert_eq!(drag.rect.size(), egui::vec2(28.0, 28.0));
+                    assert!(drag.rect.right() < run.rect.left());
+                });
+            });
+        });
     }
 
     #[test]
