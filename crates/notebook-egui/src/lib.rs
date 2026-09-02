@@ -1206,7 +1206,7 @@ impl NotebookEguiApp {
     fn cell(&mut self, ui: &mut egui::Ui, index: usize, cell: Cell) {
         let selected = self.selected_cells.contains(&cell.id)
             || self.state.snapshot.selected_cell_id.as_deref() == Some(cell.id.as_str());
-        let collapsed = self.collapsed_cells.contains(&cell.id);
+        let mut collapsed = self.collapsed_cells.contains(&cell.id);
         let output_view = self.output_view(&cell.id);
         let frame = egui::Frame::new()
             .fill(if selected {
@@ -1231,6 +1231,23 @@ impl NotebookEguiApp {
                     self.state.sync_state,
                     SyncState::Dirty | SyncState::Executing
                 );
+                let (toggle, output_choice) = cell_visibility_control(
+                    ui,
+                    collapsed,
+                    cell.cell_type == CellType::Code && !cell.outputs.is_empty(),
+                    output_view,
+                );
+                if toggle {
+                    collapsed = !collapsed;
+                    if collapsed {
+                        self.collapsed_cells.insert(cell.id.clone());
+                    } else {
+                        self.collapsed_cells.remove(&cell.id);
+                    }
+                }
+                if let Some(mode) = output_choice {
+                    self.set_output_view(&cell.id, mode);
+                }
                 let drag = ui
                     .add_enabled(idle, drag_handle())
                     .on_hover_text("Drag to reorder cell");
@@ -1272,22 +1289,6 @@ impl NotebookEguiApp {
                 );
                 if prompt.clicked() {
                     self.select_cell(index, ui.input(|input| input.modifiers.shift));
-                }
-                if ui
-                    .small_button(if collapsed { "Expand" } else { "Collapse" })
-                    .clicked()
-                {
-                    if collapsed {
-                        self.collapsed_cells.remove(&cell.id);
-                    } else {
-                        self.collapsed_cells.insert(cell.id.clone());
-                    }
-                }
-                if cell.cell_type == CellType::Code
-                    && !cell.outputs.is_empty()
-                    && let Some(mode) = output_view_control(ui, output_view)
-                {
-                    self.set_output_view(&cell.id, mode);
                 }
             });
             if !collapsed {
@@ -2352,40 +2353,101 @@ fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tool
     response.clicked()
 }
 
-fn output_view_control(ui: &mut egui::Ui, selected: OutputViewMode) -> Option<OutputViewMode> {
+fn cell_visibility_control(
+    ui: &mut egui::Ui,
+    collapsed: bool,
+    has_outputs: bool,
+    selected: OutputViewMode,
+) -> (bool, Option<OutputViewMode>) {
+    let mut toggle = false;
     let mut chosen = None;
     let divider = ui.visuals().widgets.noninteractive.bg_stroke;
     egui::Frame::new()
         .fill(ui.visuals().widgets.inactive.weak_bg_fill)
         .stroke(divider)
         .corner_radius(CornerRadius::same(3))
-        .inner_margin(Margin::same(2))
+        .inner_margin(Margin::ZERO)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                for mode in [
-                    OutputViewMode::Expanded,
-                    OutputViewMode::Windowed,
-                    OutputViewMode::Collapsed,
-                ] {
-                    let response = output_view_button(ui, mode, selected == mode);
-                    if response.clicked() {
-                        chosen = Some(mode);
-                    }
-                    if mode != OutputViewMode::Collapsed {
-                        let rect = response.rect;
-                        ui.painter().line_segment(
-                            [
-                                egui::pos2(rect.right(), rect.top() + 3.0),
-                                egui::pos2(rect.right(), rect.bottom() - 3.0),
-                            ],
-                            divider,
-                        );
-                    }
+                let collapse = cell_collapse_button(ui, collapsed);
+                toggle = collapse.clicked();
+                if !has_outputs {
+                    return;
                 }
+                ui.painter().line_segment(
+                    [collapse.rect.right_top(), collapse.rect.right_bottom()],
+                    divider,
+                );
+                ui.add_space(4.0);
+                ui.add_enabled_ui(!(collapsed ^ toggle), |ui| {
+                    for mode in [
+                        OutputViewMode::Expanded,
+                        OutputViewMode::Windowed,
+                        OutputViewMode::Collapsed,
+                    ] {
+                        let response = output_view_button(ui, mode, selected == mode);
+                        if response.clicked() {
+                            chosen = Some(mode);
+                        }
+                        if mode != OutputViewMode::Collapsed {
+                            let rect = response.rect;
+                            ui.painter().line_segment(
+                                [
+                                    egui::pos2(rect.right(), rect.top() + 3.0),
+                                    egui::pos2(rect.right(), rect.bottom() - 3.0),
+                                ],
+                                divider,
+                            );
+                        }
+                    }
+                });
             });
         });
-    chosen
+    (toggle, chosen)
+}
+
+fn cell_collapse_button(ui: &mut egui::Ui, collapsed: bool) -> egui::Response {
+    let label = if collapsed {
+        "Expand entire cell"
+    } else {
+        "Collapse entire cell"
+    };
+    let response = ui
+        .add(
+            egui::Button::new("")
+                .selected(collapsed)
+                .stroke(Stroke::NONE)
+                .corner_radius(CornerRadius::ZERO)
+                .min_size(egui::vec2(28.0, 28.0)),
+        )
+        .on_hover_text(label);
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            response.enabled(),
+            collapsed,
+            label,
+        )
+    });
+    let rect = egui::Rect::from_center_size(response.rect.center(), egui::vec2(18.0, 18.0));
+    let stroke = Stroke::new(1.4, ui.style().interact(&response).fg_stroke.color);
+    ui.painter()
+        .rect_stroke(rect, 1.0, stroke, egui::StrokeKind::Inside);
+    let center = rect.center();
+    for direction in [-1.0, 1.0] {
+        let edge = if collapsed { 2.0 } else { 5.0 };
+        let tip = if collapsed { 5.0 } else { 2.0 };
+        ui.painter().add(egui::Shape::line(
+            vec![
+                center + egui::vec2(-4.0, direction * edge),
+                center + egui::vec2(0.0, direction * tip),
+                center + egui::vec2(4.0, direction * edge),
+            ],
+            stroke,
+        ));
+    }
+    response
 }
 
 fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -> egui::Response {
@@ -2400,7 +2462,7 @@ fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -
                 .selected(selected)
                 .stroke(Stroke::NONE)
                 .corner_radius(CornerRadius::ZERO)
-                .min_size(egui::vec2(28.0, 24.0)),
+                .min_size(egui::vec2(28.0, 28.0)),
         )
         .on_hover_text(tooltip);
     response.widget_info(|| {
@@ -2411,7 +2473,7 @@ fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -
             tooltip,
         )
     });
-    let rect = response.rect.shrink2(egui::vec2(7.0, 6.0));
+    let rect = egui::Rect::from_center_size(response.rect.center(), egui::vec2(18.0, 18.0));
     let color = ui.style().interact(&response).fg_stroke.color;
     let stroke = Stroke::new(1.4, color);
     match mode {
@@ -2693,6 +2755,39 @@ mod tests {
                     assert_eq!(drag.rect.size(), egui::vec2(28.0, 28.0));
                     assert!(drag.rect.right() < run.rect.left());
                 });
+            });
+        });
+    }
+
+    #[test]
+    fn collapsed_visibility_control_keeps_output_segments_and_alignment() {
+        let context = egui::Context::default();
+        let _ = context.run(egui::RawInput::default(), |context| {
+            egui::CentralPanel::default().show(context, |ui| {
+                let expanded = ui
+                    .horizontal(|ui| {
+                        cell_visibility_control(ui, false, true, OutputViewMode::Windowed);
+                    })
+                    .response
+                    .rect;
+                let collapsed = ui
+                    .horizontal(|ui| {
+                        assert_eq!(
+                            cell_visibility_control(ui, true, true, OutputViewMode::Windowed),
+                            (false, None)
+                        );
+                    })
+                    .response
+                    .rect;
+                assert_eq!(expanded.size(), collapsed.size());
+                ui.add_enabled_ui(false, |ui| {
+                    let mode = output_view_button(ui, OutputViewMode::Windowed, true);
+                    assert!(!mode.enabled());
+                    assert!(!mode.clicked());
+                    assert_eq!(mode.rect.size(), egui::vec2(28.0, 28.0));
+                });
+                let collapse = cell_collapse_button(ui, false);
+                assert_eq!(collapse.rect.size(), egui::vec2(28.0, 28.0));
             });
         });
     }
