@@ -200,6 +200,10 @@ async function createContext(
   };
   return {
     tools,
+    activeContext: () =>
+      mounted
+        ? (JSON.parse(mounted.activeContext()) as Record<string, unknown>)
+        : null,
     path: () =>
       JSON.parse(wasm.publicSnapshot()).snapshot.notebook.path as string,
     ready: () => mounted?.assertExternalReady(),

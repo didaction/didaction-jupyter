@@ -341,6 +341,14 @@ pub struct MountedNotebook {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 impl MountedNotebook {
+    #[wasm_bindgen(js_name = activeContext)]
+    pub fn active_context(&self) -> String {
+        self.app
+            .lock()
+            .expect("app mutex")
+            .active_context()
+            .to_string()
+    }
     #[wasm_bindgen(js_name = cellView)]
     pub fn cell_view(&self, id: &str, action: &str, value: &str) -> Result<(), JsError> {
         self.app

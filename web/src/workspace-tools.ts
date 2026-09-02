@@ -7,6 +7,7 @@ import type {
 export interface OpenNotebook {
   tools: NotebookToolInvoker;
   path?(): string;
+  activeContext?(): Record<string, unknown> | null;
   ready(): void;
   activate(): Promise<void>;
   deactivate(): void;
@@ -67,13 +68,14 @@ export class WorkspaceTools implements NotebookToolInvoker {
       },
     }));
     for (const name of [
+      "get_active_context",
       "list_open_notebooks",
       "list_notebooks",
       "open_notebook",
       "close_notebook",
     ]) {
       const properties: ToolDefinition["inputSchema"]["properties"] =
-        name === "list_open_notebooks"
+        name === "list_open_notebooks" || name === "get_active_context"
           ? {}
           : name === "list_notebooks"
             ? { directory: { ...pathField, minLength: 0 } }
@@ -81,6 +83,8 @@ export class WorkspaceTools implements NotebookToolInvoker {
       scoped.push({
         name,
         description: {
+          get_active_context:
+            "Read this frontend's active notebook, selected cell ID, zero-based cell index and edit/command mode. Local UI state only; no kernel request.",
           list_open_notebooks:
             "List notebooks open in this frontend workspace (not other browser tabs).",
           list_notebooks:
@@ -97,7 +101,8 @@ export class WorkspaceTools implements NotebookToolInvoker {
           required: Object.keys(properties),
         },
         annotations: {
-          readOnlyHint: name.startsWith("list"),
+          readOnlyHint:
+            name.startsWith("list") || name === "get_active_context",
           destructiveHint: false,
           idempotentHint: true,
           openWorldHint: false,
@@ -136,6 +141,12 @@ export class WorkspaceTools implements NotebookToolInvoker {
       definition.inputSchema.required.some((key) => !Object.hasOwn(args, key))
     )
       throw new Error("Missing or unknown arguments");
+    if (name === "get_active_context")
+      return result({
+        ok: true,
+        context:
+          this.notebooks.get(this.active ?? "")?.activeContext?.() ?? null,
+      });
     if (name === "list_open_notebooks")
       return result({
         ok: true,
@@ -225,7 +236,8 @@ export class WorkspaceTools implements NotebookToolInvoker {
           true,
         ),
       );
-    if (name === "interrupt_kernel") return run();
+    if (name === "interrupt_kernel" || name === "get_active_context")
+      return run();
     const task = this.tail.then(run);
     this.tail = task;
     return task;

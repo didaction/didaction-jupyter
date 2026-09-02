@@ -15,6 +15,12 @@ it("requires explicit notebook addresses and routes only to open notebooks", asy
         })),
       },
       ready: vi.fn(),
+      activeContext: () => ({
+        notebook_path: path,
+        cell_id: "selected",
+        cell_index: 2,
+        mode: "edit",
+      }),
       activate: vi.fn(),
       deactivate: vi.fn(),
       dispose: vi.fn(),
@@ -63,6 +69,23 @@ it("requires explicit notebook addresses and routes only to open notebooks", asy
   contexts.get("two.ipynb")!.ready = () => {
     throw new Error("dirty");
   };
+  expect(
+    (await workspace.callTool("get_active_context", {})).structuredContent
+      .context,
+  ).toEqual({
+    notebook_path: "two.ipynb",
+    cell_id: "selected",
+    cell_index: 2,
+    mode: "edit",
+  });
+  expect(contexts.get("two.ipynb")!.tools.callTool).not.toHaveBeenCalled();
+  expect(
+    (
+      await workspace.callTool("get_active_context", {
+        notebook_path: "one.ipynb",
+      })
+    ).isError,
+  ).toBe(true);
   expect(
     (await workspace.callTool("close_notebook", { notebook_path: "two.ipynb" }))
       .isError,

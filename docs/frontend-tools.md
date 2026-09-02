@@ -16,6 +16,10 @@ WebMCP-unavailable browsers remain fully usable by humans.
 
 ## Tools
 
+- get_active_context(): one local call returning `context` with notebook_path,
+  cell_id, zero-based cell_index, and mode (edit/command). Null context means no
+  active view; null cell ID/index means no valid selected cell. Reads live mounted
+  egui state, not the transport snapshot, including while dirty or executing.
 - list_notebooks(directory): confined folders/notebooks; empty string means root
 - list_open_notebooks(): this frontend workspace's open notebooks and active view
 - open_notebook(notebook_path): open an existing notebook and select its egui view
@@ -91,6 +95,20 @@ modelContext registration shim and invoke its real handlers against real WASM,
 gateway and ipykernel. This does not claim native browser-agent support everywhere.
 
 ## Verification and review
+
+### Multiple clients
+
+Execution NDJSON streams are request-local, not broadcast subscriptions. Other
+tabs do not receive edits, outputs, selections, or kernel-status updates pushed
+from the initiating tab. Refresh/reconnect retrieves persisted notebook state;
+queries may wait behind the notebook's execution lock. Open views and selections
+are page-local. This is not real-time collaborative editing.
+
+Per-notebook locks serialize adapter work, but expected revisions are checked
+before acquiring that lock. Concurrent writers can both pass the same revision
+check; do not treat this as atomic conflict prevention. A shared subscription
+stream, revision validation inside the mutation lock, and explicit dirty-editor
+conflict handling are prerequisites for reliable multi-client synchronization.
 
 Run `pnpm test`, `pnpm typecheck`, `scripts/check.sh`, and, after building the
 gateway image, `bash scripts/container-check.sh`. The latter uses an isolated

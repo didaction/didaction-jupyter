@@ -475,6 +475,15 @@ impl NotebookEguiApp {
             });
         }
     }
+    pub fn active_context(&self) -> serde_json::Value {
+        let selected = self.selected_cell();
+        serde_json::json!({
+            "notebook_path": self.state.snapshot.notebook.path,
+            "cell_id": selected.as_ref().map(|(_, cell)| &cell.id),
+            "cell_index": selected.as_ref().map(|(index, _)| index),
+            "mode": if self.edit_mode { "edit" } else { "command" },
+        })
+    }
     fn selected_cell(&self) -> Option<(usize, Cell)> {
         let selected = self.state.snapshot.selected_cell_id.as_ref()?;
         self.state
@@ -2835,6 +2844,21 @@ fn output_collapse_summary(count: usize) -> String {
 mod tests {
     use super::*;
     use notebook_protocol::{KernelIdentity, KernelState, NotebookIdentity, NotebookSnapshot};
+    #[test]
+    fn active_context_tracks_live_selection_and_mode() {
+        let mut app = app();
+        app.state.snapshot.selected_cell_id = Some("code".into());
+        app.edit_mode = true;
+        let context = app.active_context();
+        assert_eq!(context["cell_id"], "code");
+        assert_eq!(context["cell_index"], 0);
+        assert_eq!(context["mode"], "edit");
+        app.state.snapshot.selected_cell_id = None;
+        app.edit_mode = false;
+        assert!(app.active_context()["cell_id"].is_null());
+        assert_eq!(app.active_context()["mode"], "command");
+        assert!(app.drain_commands().is_empty());
+    }
 
     fn app() -> NotebookEguiApp {
         let snapshot = NotebookSnapshot {

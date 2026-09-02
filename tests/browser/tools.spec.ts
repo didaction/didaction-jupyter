@@ -50,7 +50,7 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
           }
         ).registeredNotebookTools;
         return tools[name]!.execute({
-          ...(name.startsWith("list_")
+          ...(name.startsWith("list_") || name === "get_active_context"
             ? {}
             : {
                 notebook_path: new URL(location.href).searchParams.get(
@@ -141,6 +141,10 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
   expect(Date.now() - began).toBeLessThan(15000);
   expect((await call("delete_cell", { cell_id: sleeper })).isError).toBe(false);
   const notebook_path = new URL(page.url()).searchParams.get("notebook")!;
+  const context = (await call("get_active_context")).structuredContent
+    .context as Record<string, unknown>;
+  expect(context.notebook_path).toBe(notebook_path);
+  expect(["edit", "command"]).toContain(context.mode);
   expect(
     (await call("read_notebook", { notebook_path: "not-open.ipynb" })).isError,
   ).toBe(true);
@@ -150,6 +154,9 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
   ).toHaveLength(1);
   expect((await call("close_notebook", { notebook_path })).isError).toBe(false);
   await expect(page.locator("#notebook-shell")).toBeHidden();
+  expect(
+    (await call("get_active_context")).structuredContent.context,
+  ).toBeNull();
   expect(
     (await call("list_open_notebooks")).structuredContent.notebooks,
   ).toHaveLength(0);
