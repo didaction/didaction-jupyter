@@ -50,6 +50,35 @@ class Collaboration:
         self.redirects: dict[tuple[str, str], str] = {}
         self.elect = elect
         self.clock = clock
+        self.members: dict[str, Member] = {}
+        self.driver: str | None = None
+        self.presence = Room()
+
+    def refresh_members(self) -> None:
+        if any(room.active for room in self.rooms.values()):
+            return
+        expired = [
+            token
+            for token, member in self.members.items()
+            if member.departed or self.clock() - member.touched > 45
+        ]
+        for token in expired:
+            del self.members[token]
+            for room in self.rooms.values():
+                room.members.pop(token, None)
+        clients = [member.client_id for member in self.members.values()]
+        elected = self.driver if self.driver in clients else self.elect(clients)
+        if expired or elected != self.driver:
+            self.set_driver(elected)
+
+    def set_driver(self, client_id: str | None) -> None:
+        changed = self.driver != client_id
+        self.driver = client_id
+        if changed:
+            self.clear_view(self.presence)
+        for room in self.rooms.values():
+            room.driver = client_id
+            self.notify(room)
 
     def notify(self, room: Room) -> None:
         room.sequence += 1
@@ -57,36 +86,26 @@ class Collaboration:
         room.changed = asyncio.Event()
 
     def room(self, path: str) -> Room:
+        self.refresh_members()
         if path not in self.rooms and len(self.rooms) >= 256:
             raise AdapterError("bounds_exceeded", "Gateway session limit reached; restart gateway")
-        room = self.rooms.setdefault(path, Room())
-        # Never transfer ownership while an accepted command is running.
-        if not room.active:
-            expired = [
-                k for k, m in room.members.items() if m.departed or self.clock() - m.touched > 45
-            ]
-            for token in expired:
-                del room.members[token]
-            clients = [m.client_id for m in room.members.values()]
-            if room.driver not in clients:
-                elected = self.elect(clients)
-                if elected != room.driver:
-                    room.driver = elected
-                    self.clear_view(room)
-            if expired:
-                self.notify(room)
-        return room
+        return self.rooms.setdefault(path, Room(driver=self.driver))
 
-    def join(self, path: str) -> dict[str, Any]:
+    def join(self, path: str, token: str = "") -> dict[str, Any]:
         room = self.room(path)
-        if len(room.members) >= 32:
-            raise AdapterError("bounds_exceeded", "Notebook collaborator limit reached")
-        token = secrets.token_urlsafe(32)
-        member = Member(secrets.token_hex(12), self.clock())
+        if token:
+            member = self.members.get(token)
+            if member is None or member.departed:
+                raise AdapterError("not_driver", "Workspace session expired; reconnect", True)
+            member.touched = self.clock()
+        else:
+            if len(self.members) >= 32:
+                raise AdapterError("bounds_exceeded", "Workspace collaborator limit reached")
+            token = secrets.token_urlsafe(32)
+            member = Member(secrets.token_hex(12), self.clock())
+            self.members[token] = member
         room.members[token] = member
-        if room.driver is None:
-            room.driver = self.elect([m.client_id for m in room.members.values()])
-        self.notify(room)
+        self.set_driver(self.driver or self.elect([m.client_id for m in self.members.values()]))
         return {"token": token, **self.state(path, token)}
 
     def member(self, path: str, token: str) -> Member:
@@ -103,16 +122,14 @@ class Collaboration:
 
     def change_driver(self, path: str, client_id: str) -> None:
         """Policy-neutral handoff. The calling adapter must authorize the caller."""
-        room = self.room(path)
-        if room.active:
+        self.room(path)
+        if any(room.active for room in self.rooms.values()):
             raise AdapterError(
                 "execution_rejected", "Wait for the active command before handoff", True
             )
-        if client_id not in [m.client_id for m in room.members.values()]:
+        if client_id not in [m.client_id for m in self.members.values() if not m.departed]:
             raise AdapterError("invalid_input", "Target collaborator is not connected")
-        room.driver = client_id
-        self.clear_view(room)
-        self.notify(room)
+        self.set_driver(client_id)
 
     def clear_view(self, room: Room) -> None:
         room.view = None
@@ -142,13 +159,13 @@ class Collaboration:
             not isinstance(selected_cell_id, str) or not 1 <= len(selected_cell_id) <= 128
         ):
             raise AdapterError("invalid_input", "Invalid followed cell ID")
-        room = self.room(path)
+        room = self.presence
         view = {
             "protocol_version": 1,
             "notebook_path": target,
             "scroll_fraction": fraction,
             "selected_cell_id": selected_cell_id,
-            "driver_id": room.driver,
+            "driver_id": self.driver,
         }
         if room.view == view:
             return
@@ -159,7 +176,7 @@ class Collaboration:
 
     async def wait_view(self, path: str, token: str, after: int) -> dict[str, Any]:
         self.member(path, token)
-        room = self.room(path)
+        room = self.presence
         if room.view_sequence <= after:
             try:
                 await asyncio.wait_for(room.view_changed.wait(), 10)
@@ -185,7 +202,9 @@ class Collaboration:
 
     def leave(self, path: str, token: str) -> None:
         member = self.member(path, token)
-        member.departed = True
+        self.rooms[path].members.pop(token, None)
+        if not any(token in room.members for room in self.rooms.values()):
+            member.departed = True
         self.room(path)
 
     def publish(self, path: str, token: str, snapshot: dict[str, Any]) -> None:
@@ -206,7 +225,7 @@ class Collaboration:
             "client_id": member.client_id,
             "driver_id": room.driver,
             "is_driver": room.driver == member.client_id,
-            "clients": [m.client_id for m in room.members.values()],
+            "clients": [m.client_id for m in self.members.values() if not m.departed],
             "sequence": room.sequence,
             "origin": room.origin,
             "snapshot": room.snapshot,

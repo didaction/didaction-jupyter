@@ -139,7 +139,7 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   );
   const observer = await context.newPage();
   await installTools(observer);
-  await observer.goto(`/?notebook=${names[0]}`);
+  await observer.goto(`/?notebook=${names[1]}`);
   await expect(observer.locator("#connection-status")).toContainText(
     "WebMCP ready",
     { timeout: 60000 },
@@ -163,6 +163,7 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   await expect.poll(() => scroll(page)).toBeGreaterThan(0.2);
   expect(await scroll(observer)).toBeLessThan(0.01);
   await observer.locator("#follow-driver").click();
+  await expect(observer).toHaveURL(new RegExp(names[0]!));
   await expect
     .poll(async () => Math.abs((await scroll(page)) - (await scroll(observer))))
     .toBeLessThan(0.02);
@@ -212,4 +213,39 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
     "aria-pressed",
     "false",
   );
+  const observerRole = (
+    await call(observer, "get_collaboration", {
+      notebook_path: names[1],
+    })
+  ).structuredContent;
+  expect(
+    (
+      await call(page, "change_workspace_driver", {
+        notebook_path: names[0],
+        client_id: observerRole.client_id,
+      })
+    ).isError,
+  ).toBe(false);
+  await expect(observer.locator("#driver-status")).toBeVisible();
+  await expect(page.locator("#driver-status")).toBeHidden();
+  expect(
+    (
+      await call(page, "overwrite_cell_source", {
+        notebook_path: names[0],
+        cell_id: "tail-note",
+        source: "Must be blocked",
+      })
+    ).isError,
+  ).toBe(true);
+  for (const notebook_path of names) {
+    expect(
+      (
+        await call(observer, "overwrite_cell_source", {
+          notebook_path,
+          cell_id: "tail-note",
+          source: "New workspace driver",
+        })
+      ).isError,
+    ).toBe(false);
+  }
 });

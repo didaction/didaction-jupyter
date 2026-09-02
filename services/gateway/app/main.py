@@ -435,7 +435,8 @@ async def collaboration_error(_: Request, error: AdapterError) -> JSONResponse:
 @app.post("/api/v1/collaboration/join")
 async def join_notebook(request: Request) -> JSONResponse:
     return JSONResponse(
-        collaboration.join(request_notebook(request)), headers={"Cache-Control": "no-store"}
+        collaboration.join(request_notebook(request), client_token(request)),
+        headers={"Cache-Control": "no-store"},
     )
 
 

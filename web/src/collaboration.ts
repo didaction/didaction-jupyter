@@ -18,6 +18,11 @@ export interface CollaborationState {
   snapshot: NotebookSnapshot | null;
 }
 
+// One private workspace capability per page, shared across notebook subscriptions.
+// Serialize joins so concurrent opens/reconnects cannot create competing identities.
+let workspaceToken = "";
+let joinTail: Promise<unknown> = Promise.resolve();
+
 /** HTTP adapter; ownership policy and fanout live in the gateway, not here. */
 export class NotebookCollaboration implements FollowTransport, FollowPublisher {
   private token = "";
@@ -123,16 +128,32 @@ export class NotebookCollaboration implements FollowTransport, FollowPublisher {
     return () => controller.abort();
   }
   async join(): Promise<void> {
-    const response = await fetch("/api/v1/collaboration/join", {
-      method: "POST",
-      headers: this.headers(),
-      signal: this.controller.signal,
-    });
-    if (!response.ok) throw new Error("Unable to join notebook collaboration");
-    const { token, ...state } =
-      (await response.json()) as CollaborationState & { token: string };
-    this.token = token;
-    this.state = state;
+    const run = async () => {
+      const request = () =>
+        fetch("/api/v1/collaboration/join", {
+          method: "POST",
+          headers: {
+            "x-notebook-path": encodeURIComponent(this.path),
+            "x-notebook-client": workspaceToken,
+          },
+          signal: this.controller.signal,
+        });
+      let response = await request();
+      if (response.status === 403 && workspaceToken) {
+        workspaceToken = "";
+        response = await request();
+      }
+      if (!response.ok)
+        throw new Error("Unable to join notebook collaboration");
+      const { token, ...state } =
+        (await response.json()) as CollaborationState & { token: string };
+      this.token = token;
+      workspaceToken = token;
+      this.state = state;
+    };
+    const task = joinTail.then(run);
+    joinTail = task.catch(() => undefined);
+    await task;
   }
   async changeDriver(clientId: string): Promise<void> {
     const response = await fetch(

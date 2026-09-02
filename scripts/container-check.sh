@@ -25,4 +25,13 @@ curl -fsS "$DIDACTION_GATEWAY_URL/readyz"
 uv run python scripts/smoke.py
 curl -fsS "$DIDACTION_GATEWAY_URL/api/v1/download" >/dev/null
 node scripts/container-browser.mjs
-DIDACTION_BROWSER_GATEWAY="$DIDACTION_GATEWAY_URL" pnpm exec playwright test tests/browser/tools.spec.ts tests/browser/explorer.spec.ts tests/browser/collaboration.spec.ts tests/browser/follow.spec.ts --workers=1
+# Each file owns an isolated workspace lease; closed headless browser processes
+# may leave a valid 45-second lease. Never weaken production ownership for tests.
+for spec in collaboration explorer follow tools; do
+  docker compose -p didaction-check restart gateway
+  for attempt in {1..90}; do
+    if curl -fsS "$DIDACTION_GATEWAY_URL/readyz" >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+  DIDACTION_BROWSER_GATEWAY="$DIDACTION_GATEWAY_URL" pnpm exec playwright test "tests/browser/$spec.spec.ts" --workers=1
+done

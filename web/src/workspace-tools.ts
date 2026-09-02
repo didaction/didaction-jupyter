@@ -78,13 +78,16 @@ export class WorkspaceTools implements NotebookToolInvoker {
       "close_notebook",
       "get_collaboration",
       "change_notebook_driver",
+      "change_workspace_driver",
     ]) {
       const properties: ToolDefinition["inputSchema"]["properties"] =
         name === "list_open_notebooks" || name === "get_active_context"
           ? {}
           : name === "list_notebooks"
             ? { directory: { ...pathField, minLength: 0 } }
-            : name === "change_notebook_driver"
+            : ["change_notebook_driver", "change_workspace_driver"].includes(
+                  name,
+                )
               ? {
                   notebook_path: pathField,
                   client_id: { type: "string", minLength: 1, maxLength: 128 },
@@ -104,9 +107,11 @@ export class WorkspaceTools implements NotebookToolInvoker {
           close_notebook:
             "Close this workspace's notebook view without deleting the file or stopping its kernel. Pending edits prevent closing.",
           get_collaboration:
-            "Get this client's role, current driver and connected client IDs for a notebook. No credentials are returned.",
+            "Get this page's workspace-wide role, driver and connected client IDs through an open notebook. No credentials are returned.",
           change_notebook_driver:
-            "Hand notebook control to a connected client. Only the current driver may hand off, while idle with saved edits.",
+            "Compatibility alias for change_workspace_driver: transfers control of ALL notebooks in this gateway workspace, not just the addressed notebook.",
+          change_workspace_driver:
+            "Transfer control of ALL notebooks in this gateway workspace to a connected client. Address any open notebook. Only the driver may hand off, with all edits saved and no running commands.",
         }[name]!,
         inputSchema: {
           type: "object",
@@ -251,7 +256,7 @@ export class WorkspaceTools implements NotebookToolInvoker {
         },
         true,
       );
-    if (name === "change_notebook_driver") {
+    if (["change_notebook_driver", "change_workspace_driver"].includes(name)) {
       if (
         typeof args.client_id !== "string" ||
         args.client_id.length > 128 ||
@@ -259,7 +264,7 @@ export class WorkspaceTools implements NotebookToolInvoker {
       )
         throw new Error("Invalid client ID");
       if (!context.changeDriver) throw new Error("Driver handoff unavailable");
-      context.ready();
+      for (const notebook of this.notebooks.values()) notebook.ready();
       await context.changeDriver(args.client_id);
       return result({
         ok: true,

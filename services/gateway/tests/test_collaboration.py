@@ -16,15 +16,21 @@ def test_driver_handoff_lease_and_notebook_scope() -> None:
     first = hub.join("one.ipynb")
     second = hub.join("one.ipynb")
     other = hub.join("two.ipynb")
-    assert first["is_driver"] and not second["is_driver"] and other["is_driver"]
+    assert first["is_driver"] and not second["is_driver"] and not other["is_driver"]
     with pytest.raises(AdapterError):
         hub.require_driver("one.ipynb", second["token"])
     with pytest.raises(AdapterError):
         hub.require_driver("two.ipynb", first["token"])
+    joined = hub.join("two.ipynb", first["token"])
+    assert joined["client_id"] == first["client_id"] and joined["is_driver"]
     hub.change_driver("one.ipynb", second["client_id"])
     hub.require_driver("one.ipynb", second["token"])
     with pytest.raises(AdapterError):
         hub.require_driver("one.ipynb", first["token"])
+    with pytest.raises(AdapterError):
+        hub.require_driver("two.ipynb", first["token"])
+    hub.join("two.ipynb", second["token"])
+    hub.require_driver("two.ipynb", second["token"])
     now[0] = 40
     hub.member("one.ipynb", first["token"])
     now[0] = 46
@@ -39,6 +45,37 @@ def test_policy_is_replaceable_and_handoff_waits_for_commands() -> None:
     hub.rooms["one.ipynb"].active = 1
     with pytest.raises(AdapterError):
         hub.change_driver("one.ipynb", first["client_id"])
+
+
+def test_workspace_identity_survives_partial_close_and_handoff_checks_all_commands() -> None:
+    hub = Collaboration()
+    driver = hub.join("a.ipynb")
+    hub.join("b.ipynb", driver["token"])
+    observer = hub.join("c.ipynb")
+    assert not observer["is_driver"]
+    assert observer["driver_id"] == driver["client_id"]
+    with pytest.raises(AdapterError):
+        hub.join("d.ipynb", "forged")
+    hub.leave("a.ipynb", driver["token"])
+    hub.require_driver("b.ipynb", driver["token"])
+    hub.rooms["b.ipynb"].active = 1
+    with pytest.raises(AdapterError):
+        hub.change_driver("c.ipynb", observer["client_id"])
+    hub.rooms["b.ipynb"].active = 0
+    hub.change_driver("b.ipynb", observer["client_id"])
+    hub.require_driver("c.ipynb", observer["token"])
+    assert not hub.state("b.ipynb", driver["token"])["is_driver"]
+
+
+@pytest.mark.asyncio
+async def test_follow_is_workspace_wide_even_without_shared_notebooks() -> None:
+    hub = Collaboration()
+    driver = hub.join("a.ipynb")
+    observer = hub.join("b.ipynb")
+    hub.publish_view("a.ipynb", driver["token"], "a.ipynb", driver["token"], 0.5, "cell")
+    view = (await hub.wait_view("b.ipynb", observer["token"], -1))["view"]
+    assert view["notebook_path"] == "a.ipynb"
+    assert view["selected_cell_id"] == "cell"
 
 
 @pytest.mark.asyncio

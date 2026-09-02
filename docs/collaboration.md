@@ -1,7 +1,10 @@
 # Single-driver collaboration
 
-Open the same notebook from two browser pages connected to the **same gateway**.
-The first page to join is Driver; subsequent pages are read-only Observers.
+Open any notebooks from browser pages connected to the **same gateway workspace**.
+The first page to join is Driver for the entire workspace; subsequent pages are
+read-only Observers, even if they start on different notebooks. Each page shares
+one private identity across its notebook subscriptions. Separate gateways remain
+separate workspaces.
 Selection, scrolling and cell/output collapse remain local view preferences.
 Saved edits, structural changes and execution output reach all joined pages.
 Unsaved keystrokes are not broadcast: normal autosave commits them first.
@@ -21,10 +24,14 @@ Transport-neutral frontend workspace tools expose:
 
 ```json
 {"tool":"get_collaboration","arguments":{"notebook_path":"lesson.ipynb"}}
-{"tool":"change_notebook_driver","arguments":{"notebook_path":"lesson.ipynb","client_id":"<connected public client ID>"}}
+{"tool":"change_workspace_driver","arguments":{"notebook_path":"lesson.ipynb","client_id":"<connected public client ID>"}}
 ```
 
-The latter also refuses unsaved frontend edits. Browser clients are connections,
+The addressed notebook must be open, but handoff transfers all notebooks at once,
+including notebooks only open in the target page. `change_notebook_driver` remains
+a compatibility alias with the same workspace-wide semantics. Handoff refuses
+unsaved edits in any open frontend notebook and accepted commands in any room.
+Browser clients are connections,
 not authenticated people: another tab is another collaborator. There is no
 remote user identity system or permission to seize control as an observer.
 
@@ -34,12 +41,16 @@ All calls are same-origin and scoped with `x-notebook-path` (URI-encoded relativ
 path). `POST /api/v1/collaboration/join` returns a public role/client list and a
 private random capability. Subsequent calls carry it in `x-notebook-client`.
 The capability stays in browser memory, never storage, URLs or WebMCP results.
+To subscribe to another notebook as the same workspace client, send the existing
+capability to `join`. Invalid capabilities fail closed; frontend reconnect creates
+a new identity only after an expired-session rejection. Joins are serialized.
 
 - `GET /api/v1/collaboration/events?after=<sequence>` waits for a new snapshot or
   membership event, with a 10-second heartbeat. It returns immediately when
   changes arrive; this is HTTP long-poll fanout, not periodic notebook querying.
-- `POST /api/v1/collaboration/driver/<public-client-id>` transfers control.
-- `POST /api/v1/collaboration/leave` releases the connection.
+- `POST /api/v1/collaboration/driver/<public-client-id>` transfers workspace control.
+- `POST /api/v1/collaboration/leave` releases one notebook subscription; leaving
+  the last subscription releases workspace membership.
 - Existing commands and execution NDJSON routes are unchanged except for the
   required capability on writes. Missing/observer credentials return `not_driver`,
   before cache lookup or Jupyter operations. Human and WebMCP mutations remain on
@@ -61,14 +72,13 @@ use the lease. Brief interruptions fail the UI closed while reconnecting.
 
 Observers can enable **Follow driver** in the header. It is off by default and
 drivers see an orange **Driver** status badge instead of the follow button. Roles
-are notebook-specific and the header updates when switching notebooks or handing
+are workspace-wide and the header updates when handing
 off control. Follow mode
 resets on reload. **Stop following** immediately releases scroll control and
 cancels pending automatic notebook selection. The notebook where follow was
-enabled anchors the session, so opening another notebook does not silently pick
-a different driver. The anchor must remain open in both workspaces. A driver
-publishes their active notebook to the notebooks they control; switching into a
-notebook they do not control does not publish a new follow position.
+enabled supplies its subscription; keep it open in the follower workspace.
+The driver need not have that notebook open. Presence is workspace-wide, so a
+follower starting on another notebook still receives the driver's current view.
 
 Follow uses a bounded `FollowView` (`protocol_version: 1`, `notebook_path`,
 `scroll_fraction` in `[0,1]`, optional `selected_cell_id`, public `driver_id`).
@@ -110,7 +120,7 @@ trusted. A malicious local process can join; this is not remote authentication.
 Driver control governs submitted notebook commands, not what arbitrary executed
 code can do. Kernel/Jupyter credentials still remain entirely server-side.
 
-Limits: 32 clients per notebook and 256 notebook rooms per gateway lifetime.
+Limits: 32 clients per workspace and 256 notebook rooms per gateway lifetime.
 One latest snapshot per room bounds slow-reader buffering. Restarting the gateway
 resets leases and revision bookkeeping; reload browser pages after a gateway
 restart. Renaming requires a sole connected driver; its event subscription follows

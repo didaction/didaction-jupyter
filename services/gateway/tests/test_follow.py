@@ -14,9 +14,11 @@ async def test_follow_presence_is_authorized_and_separate_from_notebook_updates(
     hub = Collaboration()
     driver = hub.join("a.ipynb")
     observer = hub.join("a.ipynb")
-    target = hub.join("b.ipynb")
+    target = hub.join("b.ipynb", driver["token"])
     revision_events = hub.rooms["a.ipynb"].sequence
-    waiter = asyncio.create_task(hub.wait_view("a.ipynb", observer["token"], 0))
+    waiter = asyncio.create_task(
+        hub.wait_view("a.ipynb", observer["token"], hub.presence.view_sequence)
+    )
     await asyncio.sleep(0)
     hub.publish_view("a.ipynb", driver["token"], "b.ipynb", target["token"], 0.75, "cell-2")
     event = await waiter
