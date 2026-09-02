@@ -65,6 +65,15 @@ test("workspace explorer opens notebooks without redirecting another tab", async
   ).toBe(400);
   await page.screenshot({ path: ".impeccable/review/desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Files", exact: true }).click();
+  const toggle = page.getByRole("button", {
+    name: "Toggle workspace explorer",
+  });
+  await toggle.click();
+  await expect(page.locator("#file-explorer")).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await page.screenshot({ path: ".impeccable/review/mobile.png" });
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#file-explorer")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
 });

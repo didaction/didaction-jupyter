@@ -28,8 +28,13 @@
           type="button"
           aria-expanded="true"
           aria-controls="file-explorer"
+          aria-label="Toggle workspace explorer"
+          title="Hide workspace explorer"
         >
-          Files</button
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 4h18v16H3Z M9 4v16" />
+            <path class="explorer-chevron" d="m16 9-3 3 3 3" />
+          </svg></button
         ><strong>didaction</strong><span>local notebook</span>
       </div>
       <output id="connection-status" role="status" aria-live="polite"

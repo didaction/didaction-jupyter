@@ -15,6 +15,9 @@ export function installExplorer(
   toggle.onclick = () => {
     panel.hidden = !panel.hidden;
     toggle.setAttribute("aria-expanded", String(!panel.hidden));
+    toggle.title = panel.hidden
+      ? "Show workspace explorer"
+      : "Hide workspace explorer";
     window.dispatchEvent(new Event("resize"));
   };
   async function load(path: string) {

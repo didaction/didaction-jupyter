@@ -52,8 +52,27 @@ body {
 }
 .shell-header div {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
+}
+#explorer-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  flex-shrink: 0;
+}
+#explorer-toggle svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+#explorer-toggle[aria-expanded="false"] .explorer-chevron {
+  transform: translateX(29px) scaleX(-1);
 }
 .shell-header strong {
   color: #d66b2c;
