@@ -28,6 +28,17 @@ WebMCP when available, including stable-ID cell editing and execution. See
 [frontend tools](docs/frontend-tools.md) for schemas, architecture, limits, and
 real-browser verification. This does not add an MCP backend or hosted dependency.
 
+The **Files** sidebar browses folders and notebooks inside the configured Jupyter
+workspace. Opening another notebook preserves saved files and existing kernel
+sessions; save pending edits and finish execution before switching. Each browser
+tab scopes its commands to its selected notebook. Traversal, hidden paths and
+symlinks outside the workspace are rejected. This confines notebook/file access,
+not arbitrary code executed by a trusted kernel.
+
+For the KIT control-systems notebooks, use the pinned
+[Julia course runtime](docs/julia-course.md): `bash scripts/julia-course.sh up`.
+It runs separately on port 5174 and leaves the default deployment intact.
+
 Cell execution uses `/api/v1/commands/stream`. Each bounded NDJSON event is a
 normalized notebook snapshot derived from an IOPub update; `clear_output` and
 `update_display_data` replace prior state before the idle final result. Partial

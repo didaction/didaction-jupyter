@@ -3,6 +3,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
+from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -21,6 +22,13 @@ logger = logging.getLogger("didaction.gateway")
 logger.addFilter(RedactingFilter())
 current_notebook: str | None = None
 result_cache: dict[str, CommandResult] = {}
+
+
+def request_notebook(request: Request) -> str:
+    raw = request.headers.get("x-notebook-path")
+    return settings.confined_path(
+        unquote(raw, errors="strict") if raw else current_notebook or settings.startup_notebook()
+    )
 
 
 def snapshot_result(
@@ -105,24 +113,30 @@ async def public_config() -> dict[str, str]:
 
 
 @app.post("/api/v1/commands", response_model=CommandResult)
-async def command_endpoint(command: Command) -> CommandResult:
+async def command_endpoint(command: Command, request: Request) -> CommandResult:
     global current_notebook
-    cached = result_cache.get(command.idempotency_key)
+    notebook_path = request_notebook(request)
+    if command.type == "setup" and not request.headers.get("x-notebook-path"):
+        notebook_path = settings.confined_path(command.path or "")
+    cache_key = f"{notebook_path}:{command.idempotency_key}"
+    cached = result_cache.get(cache_key)
     if cached is not None:
         return cached
     base_revision = None
     try:
+        if command.kernel and command.kernel != settings.kernel_name:
+            raise AdapterError("unsupported_operation", "Kernel is fixed at startup")
         if not transport.ready:
             await transport.discover()
         if command.type == "setup":
             requested_path = settings.confined_path(command.path or "")
-            if requested_path != settings.startup_notebook():
-                raise AdapterError("unsupported_operation", "Notebook path is fixed at startup")
-            if command.kernel and command.kernel != settings.kernel_name:
-                raise AdapterError("unsupported_operation", "Kernel is fixed at startup")
-            current_notebook = requested_path
-        if current_notebook and current_notebook in transport.revisions:
-            base_revision = transport.revisions[current_notebook][1]
+            if request.headers.get("x-notebook-path") and requested_path != notebook_path:
+                raise AdapterError(
+                    "invalid_input", "Notebook identity does not match request scope"
+                )
+            notebook_path = requested_path
+        if notebook_path in transport.revisions:
+            base_revision = transport.revisions[notebook_path][1]
         if (
             command.expected_revision is not None
             and base_revision is not None
@@ -131,9 +145,11 @@ async def command_endpoint(command: Command) -> CommandResult:
             raise AdapterError(
                 "stale_revision", "Notebook revision changed; refresh and retry", True
             )
-        raw = await transport.execute(command, current_notebook)
+        raw = await transport.execute(command, notebook_path)
+        if command.type == "setup" and not request.headers.get("x-notebook-path"):
+            current_notebook = notebook_path
         if command.type == "rename_notebook":
-            current_notebook = settings.confined_path(command.path or "")
+            notebook_path = settings.confined_path(command.path or "")
         if command.type in {"complete", "inspect"}:
             result = CommandResult(
                 command_id=command.command_id,
@@ -143,14 +159,12 @@ async def command_endpoint(command: Command) -> CommandResult:
                 completion=raw if command.type == "complete" else None,
                 inspection=raw if command.type == "inspect" else None,
             )
-            result_cache[command.idempotency_key] = result
+            result_cache[cache_key] = result
             return result
-        if current_notebook is None:
-            raise AdapterError("invalid_input", "No notebook is open")
         if command.type != "interrupt_kernel":
             query = command.model_copy(update={"type": "query", "query": "full"})
-            raw = await transport.execute(query, current_notebook)
-        result = snapshot_result(command, raw, current_notebook, base_revision)
+            raw = await transport.execute(query, notebook_path)
+        result = snapshot_result(command, raw, notebook_path, base_revision)
     except AdapterError as error:
         result = CommandResult(
             command_id=command.command_id,
@@ -158,12 +172,15 @@ async def command_endpoint(command: Command) -> CommandResult:
             base_revision=base_revision,
             error=GatewayError(code=error.code, message=error.message, retryable=error.retryable),
         )
-    result_cache[command.idempotency_key] = result
+    result_cache[cache_key] = result
     return result
 
 
 @app.post("/api/v1/commands/stream")
-async def command_stream(command: Command) -> StreamingResponse:
+async def command_stream(command: Command, request: Request) -> StreamingResponse:
+    notebook_path = request_notebook(request)
+    cache_key = f"{notebook_path}:{command.idempotency_key}"
+
     async def events() -> AsyncIterator[str]:
         if command.type != "execute_cell":
             error = CommandResult(
@@ -177,7 +194,7 @@ async def command_stream(command: Command) -> StreamingResponse:
             )
             yield f"{error.model_dump_json()}\n"
             return
-        cached = result_cache.get(command.idempotency_key)
+        cached = result_cache.get(cache_key)
         if cached is not None:
             yield f"{cached.model_dump_json()}\n"
             return
@@ -185,10 +202,8 @@ async def command_stream(command: Command) -> StreamingResponse:
         try:
             if not transport.ready:
                 await transport.discover()
-            if current_notebook is None:
-                raise AdapterError("invalid_input", "No notebook is open")
-            if current_notebook in transport.revisions:
-                base_revision = transport.revisions[current_notebook][1]
+            if notebook_path in transport.revisions:
+                base_revision = transport.revisions[notebook_path][1]
             if (
                 command.expected_revision is not None
                 and base_revision is not None
@@ -198,15 +213,15 @@ async def command_stream(command: Command) -> StreamingResponse:
                     "stale_revision", "Notebook revision changed; refresh and retry", True
                 )
             final: CommandResult | None = None
-            async for raw in transport.execute_stream(command, current_notebook):
+            async for raw in transport.execute_stream(command, notebook_path):
                 final = snapshot_result(
-                    command, raw, current_notebook, base_revision, kernel_state="busy"
+                    command, raw, notebook_path, base_revision, kernel_state="busy"
                 )
                 yield f"{final.model_dump_json()}\n"
             if final is None or final.snapshot is None:
                 raise AdapterError("malformed_response", "Execution returned no notebook state")
             final.snapshot["kernel"]["state"] = "idle"
-            result_cache[command.idempotency_key] = final
+            result_cache[cache_key] = final
             yield f"{final.model_dump_json()}\n"
         except AdapterError as error:
             result = CommandResult(
@@ -227,9 +242,8 @@ async def command_stream(command: Command) -> StreamingResponse:
 
 
 @app.get("/api/v1/download")
-async def download_notebook() -> Response:
-    if current_notebook is None:
-        raise ValueError("No notebook is open")
+async def download_notebook(request: Request) -> Response:
+    notebook_path = request_notebook(request)
     notebook = await transport.execute(
         Command(
             type="query",
@@ -239,7 +253,7 @@ async def download_notebook() -> Response:
             timeout_ms=30000,
             query="full",
         ),
-        current_notebook,
+        notebook_path,
     )
     encoded = json.dumps(notebook).encode()
     if len(encoded) > settings.response_limit:
@@ -256,6 +270,25 @@ async def malformed(_: Request, __: json.JSONDecodeError) -> JSONResponse:
     return JSONResponse(
         status_code=400, content={"code": "invalid_input", "message": "Malformed JSON"}
     )
+
+
+@app.exception_handler(ValueError)
+async def invalid_path(_: Request, __: ValueError) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "code": "path_rejected",
+            "message": "Choose a notebook inside the configured workspace",
+        },
+    )
+
+
+@app.get("/api/v1/notebooks")
+async def notebooks(directory: str = "") -> JSONResponse:
+    try:
+        return JSONResponse(await transport.list_notebooks(directory))
+    except AdapterError as error:
+        return JSONResponse(status_code=400, content={"code": error.code, "message": error.message})
 
 
 if settings.static_dir is not None:

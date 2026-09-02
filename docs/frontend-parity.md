@@ -54,10 +54,10 @@ trust/signing UI, slideshow tooling, and full JupyterLab workbench parity. Each
 requires a separate security and protocol design; none falls through to generic
 Jupyter calls.
 
-Kernel selection and the notebook workspace are intentionally not in-notebook
-primitives. `DIDACTION_KERNEL_NAME`, `DIDACTION_NOTEBOOK_WORKSPACE`, and
-`DIDACTION_NOTEBOOK_PATH` fix them at process startup; browser and WebMCP callers
-cannot change them.
+Kernel selection and the notebook workspace are fixed at startup by
+`DIDACTION_KERNEL_NAME` and `DIDACTION_NOTEBOOK_WORKSPACE`. The Files sidebar
+browses notebooks inside that workspace; `DIDACTION_NOTEBOOK_PATH` is the default.
+Each tab scopes its commands and WebMCP tools to the selected notebook.
 
 ## Examples
 

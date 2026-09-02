@@ -6,14 +6,25 @@ import type {
 } from "./types";
 
 export class GatewayNotebookTransport implements NotebookTransport {
-  constructor(private readonly endpoint = "/api/v1/commands") {}
+  constructor(
+    private readonly endpoint = "/api/v1/commands",
+    private notebookPath?: string,
+  ) {}
+  private headers(): Record<string, string> {
+    return {
+      "content-type": "application/json",
+      ...(this.notebookPath
+        ? { "x-notebook-path": encodeURIComponent(this.notebookPath) }
+        : {}),
+    };
+  }
   private async call(command: NotebookCommand): Promise<CommandResult> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), command.timeout_ms);
     try {
       const response = await fetch(this.endpoint, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: this.headers(),
         body: JSON.stringify(command),
         signal: controller.signal,
         credentials: "same-origin",
@@ -37,7 +48,7 @@ export class GatewayNotebookTransport implements NotebookTransport {
     try {
       const response = await fetch(`${this.endpoint}/stream`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: this.headers(),
         body: JSON.stringify(command),
         signal: controller.signal,
         credentials: "same-origin",
@@ -80,7 +91,19 @@ export class GatewayNotebookTransport implements NotebookTransport {
   interrupt = (c: NotebookCommand) => this.call(c);
   restart = (c: NotebookCommand) => this.call(c);
   checkpoint = (c: NotebookCommand) => this.call(c);
-  rename = (c: NotebookCommand) => this.call(c);
+  rename = async (c: NotebookCommand) => {
+    const result = await this.call(c);
+    const notebook = result.snapshot?.notebook as
+      | { path?: unknown }
+      | undefined;
+    if (!result.error && typeof notebook?.path === "string") {
+      this.notebookPath = notebook.path;
+      const url = new URL(location.href);
+      url.searchParams.set("notebook", this.notebookPath);
+      history.replaceState(null, "", url);
+    }
+    return result;
+  };
   download = async (command: NotebookCommand): Promise<CommandResult> => {
     const result = await this.call({
       ...command,
@@ -89,6 +112,7 @@ export class GatewayNotebookTransport implements NotebookTransport {
     });
     if (result.error) return result;
     const response = await fetch("/api/v1/download", {
+      headers: this.headers(),
       credentials: "same-origin",
     });
     if (!response.ok) throw new Error("Notebook download failed");

@@ -93,6 +93,8 @@ async def test_download_uses_jupyter_not_local_workspace(monkeypatch: pytest.Mon
 
     monkeypatch.setattr(main, "current_notebook", "remote.ipynb")
     monkeypatch.setattr(main.transport, "execute", execute)
-    response = await main.download_notebook()
+    from starlette.requests import Request
+
+    response = await main.download_notebook(Request({"type": "http", "headers": []}))
     assert response.status_code == 200
     assert b'"nbformat": 4' in response.body

@@ -208,6 +208,14 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 - **State:** Commands are disabled while a mutation or execution makes them unsafe; control availability communicates command validity without noisy animation.
 - **Commit behavior:** “Run all” flushes every visible dirty source before queuing code-cell execution, so the notebook runs what the user can see.
 
+### Notebook Explorer
+
+- **Structure:** A flat white sidebar beside the notebook canvas, separated by a hairline divider, with a 12px inset and independent vertical scrolling. Its expanded width is 248px, reducing to 180px at viewport widths of 640px or less; collapsing it returns that space to the document.
+- **Controls:** The header’s “Files” button toggles the sidebar and exposes its expanded state. The sidebar shows a “Notebooks” heading, a wrapping workspace-relative folder path, and explicit Up and Refresh actions; Up is disabled at the workspace root.
+- **Rows:** Full-width, left-aligned buttons pair small outlined SVG folder or notebook icons with wrapping names. The current notebook uses the existing blue selection surface and an accessible current-page marker; icons are decorative, while names and path tooltips identify entries.
+- **Navigation:** Folders open in the sidebar without replacing the notebook. Opening another notebook is guarded: unsaved edits or active execution keep the current document open and show guidance to save and wait before switching.
+- **Feedback:** Quiet status text reports loading, entry counts, empty folders, or actionable recovery through Up or Refresh. Controls retain the existing square form, restrained hover treatment, and visible keyboard focus.
+
 ### Notebook Cell
 
 - **Shape:** A nearly square bordered container with a small inner inset.

@@ -64,6 +64,35 @@ class JupyterNotebookTransport:
             await asyncio.to_thread(client.stop, False)
         self.ready = False
 
+    async def list_notebooks(self, directory: str) -> dict[str, Any]:
+        path = self.settings.confined_directory(directory)
+        response = await self._request(
+            "GET", f"/api/contents/{path}", params={"content": 1, "type": "directory"}
+        )
+        if response.status_code != 200:
+            raise AdapterError(
+                "path_rejected", "Folder is unavailable inside the configured workspace"
+            )
+        entries = []
+        for item in response.json().get("content", []):
+            if item.get("type") not in {"directory", "notebook"}:
+                continue
+            try:
+                candidate = self.settings.confined_directory(item["path"], allow_root=False)
+            except (ValueError, KeyError):
+                continue
+            if candidate.rpartition("/")[0] != path:
+                continue
+            entries.append(
+                {"path": candidate, "name": candidate.rsplit("/", 1)[-1], "type": item["type"]}
+            )
+            if len(entries) > 1000:
+                raise AdapterError(
+                    "bounds_exceeded", "Folder has too many notebooks; use subfolders"
+                )
+        entries.sort(key=lambda item: (item["type"] != "directory", item["name"].casefold()))
+        return {"directory": path, "entries": entries}
+
     async def execute(self, command: Command, notebook_path: str | None) -> Any:
         if command.type == "setup":
             path = self.settings.confined_path(command.path or "")
@@ -268,15 +297,31 @@ class JupyterNotebookTransport:
     async def _request(self, method: str, route: str, **kwargs: Any) -> httpx.Response:
         try:
             async with httpx.AsyncClient(timeout=self.settings.timeout_seconds) as client:
-                response = await client.request(
+                async with client.stream(
                     method,
                     f"{self.settings.jupyter_url}{route}",
                     headers=self.headers,
                     **kwargs,
-                )
+                ) as response:
+                    content = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        content.extend(chunk)
+                        if len(content) > self.settings.response_limit:
+                            raise AdapterError(
+                                "bounds_exceeded", "Jupyter response exceeded the configured limit"
+                            )
+                    return httpx.Response(
+                        response.status_code,
+                        headers={
+                            key: value
+                            for key, value in response.headers.items()
+                            if key.lower() not in {"content-encoding", "content-length"}
+                        },
+                        content=bytes(content),
+                        request=response.request,
+                    )
         except httpx.HTTPError as error:
             raise AdapterError("disconnected", "Jupyter Server is disconnected", True) from error
-        return response
 
     async def _ensure_notebook(self, path: str, create: bool) -> None:
         response = await self._request("GET", f"/api/contents/{path}", params={"content": 1})

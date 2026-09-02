@@ -38,13 +38,21 @@ class Settings(BaseSettings):
         return self
 
     def confined_path(self, raw: str) -> str:
-        if not raw or len(raw) > 512 or raw.startswith(("/", "\\")):
-            raise ValueError("path_rejected")
-        parts = raw.replace("\\", "/").split("/")
-        if any(part in {"", ".", ".."} for part in parts):
-            raise ValueError("path_rejected")
+        raw = self.confined_directory(raw, allow_root=False)
         if not raw.endswith(".ipynb"):
             raw += ".ipynb"
+        return raw
+
+    def confined_directory(self, raw: str, *, allow_root: bool = True) -> str:
+        if raw == "" and allow_root:
+            return ""
+        if not raw or len(raw) > 512 or raw.startswith(("/", "\\")):
+            raise ValueError("path_rejected")
+        if any(ord(char) < 32 or char in "\\%?#:" for char in raw):
+            raise ValueError("path_rejected")
+        parts = raw.split("/")
+        if any(not part or part.startswith(".") for part in parts):
+            raise ValueError("path_rejected")
         root = self.workspace.resolve()
         candidate = (root / raw).resolve()
         if root not in candidate.parents:

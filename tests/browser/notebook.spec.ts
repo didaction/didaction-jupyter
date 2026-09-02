@@ -93,13 +93,13 @@ test("notebook canvas follows window resizing", async ({ page }) => {
 
   const desktop = await canvas.boundingBox();
   expect(desktop).not.toBeNull();
-  expect(desktop!.width).toBe(1280);
+  expect(desktop!.width).toBe(1280 - 248);
   expect(desktop!.y + desktop!.height).toBeLessThanOrEqual(900);
 
   await page.setViewportSize({ width: 520, height: 640 });
   await expect
     .poll(async () => canvas.boundingBox())
-    .toMatchObject({ width: 520 });
+    .toMatchObject({ width: 520 - 180 });
   const compact = await canvas.boundingBox();
   expect(compact).not.toBeNull();
   expect(compact!.height).toBeLessThan(desktop!.height);
@@ -119,6 +119,7 @@ test("notebook canvas follows host panel resizing", async ({ page }) => {
   await expect(canvas).toBeVisible({ timeout: 30_000 });
 
   await shell.evaluate((element) => {
+    element.style.flex = "none";
     element.style.width = "720px";
   });
   await expect.poll(async () => (await canvas.boundingBox())?.width).toBe(720);

@@ -60,8 +60,9 @@ final result reconciles the notebook afterward.
 
 ## Security and limitations
 
-The notebook, workspace and kernel remain startup configuration. No browser tool
-can switch servers, supply credentials, browse files, launch sandboxes, or forward
+The workspace and kernel remain startup configuration; the human Files sidebar
+selects a notebook within that workspace, and tools operate on that tab's notebook.
+No browser tool can switch servers, supply credentials, browse arbitrary files, launch sandboxes, or forward
 arbitrary MCP/Jupyter calls. Notebook outputs and source are intentional public
 tool data; never place secrets in them. Read results omit kernel/session metadata.
 Execution annotations mark unsafe, potentially external side effects. Explicit
@@ -70,7 +71,7 @@ arbitrary code: this filter is not a sandbox or an exfiltration defense.
 
 Detached execute*code is not advertised because the current backend does not
 implement it. Use insert_execute_code_cell for inspectable, persisted execution.
-Multi-notebook selection, Datalayer prompts, resources, cloud and file tools are
+WebMCP notebook selection, Datalayer prompts, resources, cloud and file tools are
 not included. Tool names replace the earlier four notebook*\* WebMCP handlers.
 Browser WebMCP support is experimental; automated browser tests inject a
 modelContext registration shim and invoke its real handlers against real WASM,

@@ -22,28 +22,49 @@
   <body>
     <a class="skip-link" href="#notebook-canvas">Skip to notebook</a>
     <header class="shell-header" aria-label="Notebook application">
-      <div><strong>didaction</strong><span>local notebook</span></div>
+      <div>
+        <button
+          id="explorer-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="file-explorer"
+        >
+          Files</button
+        ><strong>didaction</strong><span>local notebook</span>
+      </div>
       <output id="connection-status" role="status" aria-live="polite"
         >Connecting…</output
       >
     </header>
-    <main id="notebook-shell" aria-label="Interactive notebook">
-      <canvas
-        id="notebook-canvas"
-        tabindex="0"
-        aria-label="Notebook editor canvas"
-      ></canvas>
-      <section
-        id="fatal-error"
-        class="fatal-error"
-        hidden
-        aria-live="assertive"
-      >
-        <h1>The notebook could not start</h1>
-        <p></p>
-        <button type="button" onclick="location.reload()">Retry</button>
-      </section>
-    </main>
+    <div class="workspace-layout">
+      <aside id="file-explorer" aria-label="Notebook file explorer">
+        <h2>Notebooks</h2>
+        <p id="folder-path">Workspace</p>
+        <div class="folder-actions">
+          <button id="folder-up" type="button" disabled>Up</button
+          ><button id="folder-refresh" type="button">Refresh</button>
+        </div>
+        <ul id="notebook-files"></ul>
+        <p id="explorer-status" role="status">Connecting…</p>
+      </aside>
+      <main id="notebook-shell" aria-label="Interactive notebook">
+        <canvas
+          id="notebook-canvas"
+          tabindex="0"
+          aria-label="Notebook editor canvas"
+        ></canvas>
+        <section
+          id="fatal-error"
+          class="fatal-error"
+          hidden
+          aria-live="assertive"
+        >
+          <h1>The notebook could not start</h1>
+          <p></p>
+          <button type="button" onclick="location.reload()">Retry</button>
+        </section>
+      </main>
+    </div>
     <p class="privacy-note">
       Local execution is unsafe. Only run notebooks you trust.
     </p>

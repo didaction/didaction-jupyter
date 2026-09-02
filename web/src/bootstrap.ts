@@ -7,6 +7,7 @@ import { GatewayNotebookTransport } from "./gateway-client";
 import type { NotebookCommand, NotebookSnapshot } from "./types";
 import { installWebMcp } from "./webmcp";
 import { NotebookTools, type Transaction } from "./notebook-tools";
+import { installExplorer } from "./explorer";
 
 const status = document.querySelector<HTMLOutputElement>("#connection-status")!;
 const fatal = document.querySelector<HTMLElement>("#fatal-error")!;
@@ -34,12 +35,17 @@ async function boot(): Promise<void> {
     path: string;
     kernel: string;
   };
-  const transport = new GatewayNotebookTransport();
+  const selectedPath = new URL(location.href).searchParams.get("notebook");
+  if (selectedPath) startup.path = selectedPath;
+  const transport = new GatewayNotebookTransport(
+    "/api/v1/commands",
+    startup.path,
+  );
   const setup = await transport.setup(
     command("setup", {
       path: startup.path,
       kernel: startup.kernel,
-      create: true,
+      create: !selectedPath,
     }),
   );
   if (setup.error || !setup.snapshot)
@@ -60,6 +66,7 @@ async function boot(): Promise<void> {
     JSON.stringify(snapshot),
     dispatchEguiCommand,
   );
+  installExplorer(startup.path, () => mounted.assertExternalReady());
   const externalExecute = async (serialized: string) => {
     try {
       const result = await gateway.execute(serialized, (progress) =>
