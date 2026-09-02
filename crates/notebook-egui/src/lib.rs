@@ -1283,18 +1283,11 @@ impl NotebookEguiApp {
                         self.collapsed_cells.insert(cell.id.clone());
                     }
                 }
-                if cell.cell_type == CellType::Code && !cell.outputs.is_empty() {
-                    ui.horizontal(|ui| {
-                        for mode in [
-                            OutputViewMode::Expanded,
-                            OutputViewMode::Windowed,
-                            OutputViewMode::Collapsed,
-                        ] {
-                            if output_view_button(ui, mode, output_view == mode).clicked() {
-                                self.set_output_view(&cell.id, mode);
-                            }
-                        }
-                    });
+                if cell.cell_type == CellType::Code
+                    && !cell.outputs.is_empty()
+                    && let Some(mode) = output_view_control(ui, output_view)
+                {
+                    self.set_output_view(&cell.id, mode);
                 }
             });
             if !collapsed {
@@ -2359,6 +2352,42 @@ fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tool
     response.clicked()
 }
 
+fn output_view_control(ui: &mut egui::Ui, selected: OutputViewMode) -> Option<OutputViewMode> {
+    let mut chosen = None;
+    let divider = ui.visuals().widgets.noninteractive.bg_stroke;
+    egui::Frame::new()
+        .fill(ui.visuals().widgets.inactive.weak_bg_fill)
+        .stroke(divider)
+        .corner_radius(CornerRadius::same(3))
+        .inner_margin(Margin::same(2))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                for mode in [
+                    OutputViewMode::Expanded,
+                    OutputViewMode::Windowed,
+                    OutputViewMode::Collapsed,
+                ] {
+                    let response = output_view_button(ui, mode, selected == mode);
+                    if response.clicked() {
+                        chosen = Some(mode);
+                    }
+                    if mode != OutputViewMode::Collapsed {
+                        let rect = response.rect;
+                        ui.painter().line_segment(
+                            [
+                                egui::pos2(rect.right(), rect.top() + 3.0),
+                                egui::pos2(rect.right(), rect.bottom() - 3.0),
+                            ],
+                            divider,
+                        );
+                    }
+                }
+            });
+        });
+    chosen
+}
+
 fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -> egui::Response {
     let tooltip = match mode {
         OutputViewMode::Expanded => "Show full output",
@@ -2369,9 +2398,19 @@ fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -
         .add(
             egui::Button::new("")
                 .selected(selected)
+                .stroke(Stroke::NONE)
+                .corner_radius(CornerRadius::ZERO)
                 .min_size(egui::vec2(28.0, 24.0)),
         )
         .on_hover_text(tooltip);
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::RadioButton,
+            response.enabled(),
+            selected,
+            tooltip,
+        )
+    });
     let rect = response.rect.shrink2(egui::vec2(7.0, 6.0));
     let color = ui.style().interact(&response).fg_stroke.color;
     let stroke = Stroke::new(1.4, color);
