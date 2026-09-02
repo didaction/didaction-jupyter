@@ -122,6 +122,69 @@ async function boot(): Promise<void> {
         .snapshot,
     () => {},
     interruptExecute,
+    (name, args) =>
+      dispatchEguiCommand.transaction(async () => {
+        const id = args.cell_id as string;
+        if (name !== "capture_cell") {
+          mounted.cellView(
+            id,
+            name === "set_cell_visibility" ? "cell" : "output",
+            String(name === "set_cell_visibility" ? args.collapsed : args.mode),
+          );
+          const result = { ok: true, cell_id: id, ...args };
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(result) }],
+            structuredContent: result,
+            isError: false,
+          };
+        }
+        mounted.cellView(id, "capture", "");
+        const deadline = performance.now() + 10000;
+        while (performance.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          const raw = mounted.takeCellCapture();
+          if (!raw) continue;
+          const capture = JSON.parse(raw) as {
+            width: number;
+            height: number;
+            rgba: string;
+            clipped: boolean;
+          };
+          const canvas = document.createElement("canvas");
+          canvas.width = capture.width;
+          canvas.height = capture.height;
+          const pixels = Uint8ClampedArray.from(atob(capture.rgba), (byte) =>
+            byte.charCodeAt(0),
+          );
+          canvas
+            .getContext("2d")!
+            .putImageData(
+              new ImageData(pixels, capture.width, capture.height),
+              0,
+              0,
+            );
+          const data = canvas.toDataURL("image/png").split(",")[1];
+          if (!data || data.length > 2_000_000)
+            throw new Error("Cell capture exceeds image limit");
+          const result = {
+            ok: true,
+            cell_id: id,
+            width: capture.width,
+            height: capture.height,
+            clipped: capture.clipped,
+          };
+          return {
+            content: [
+              { type: "image" as const, mimeType: "image/png" as const, data },
+            ],
+            structuredContent: result,
+            isError: false,
+          };
+        }
+        throw new Error(
+          "Cell capture timed out; keep the notebook tab visible",
+        );
+      }),
   );
   const webmcp = await installWebMcp(tools);
   const hasWebMcp = webmcp.available;

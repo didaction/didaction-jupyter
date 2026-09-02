@@ -21,6 +21,9 @@ WebMCP-unavailable browsers remain fully usable by humans.
 - move_cell, delete_cell, clear_cell_output
 - execute_cell, insert_execute_code_cell
 - interrupt_kernel, restart_notebook
+- set_cell_visibility(cell_id, collapsed)
+- set_output_visibility(cell_id, mode): expanded, windowed, collapsed
+- capture_cell(cell_id): PNG image content plus dimensions and clipped flag
 
 Read the advertised JSON Schemas for exact arguments. Cells are addressed by
 stable `cell_id`, not positional IDs; only insertion/movement take a zero-based
@@ -29,7 +32,7 @@ stable `cell_id`, not positional IDs; only insertion/movement take a zero-based
 Oversized answers return a bounded error (an earlier mutation may be committed).
 `edit_cell_source` requires a unique literal match unless replace_all is true.
 
-All commands pass through the same Rust/WASM validation, CommandGateway and
+Notebook data commands pass through the same Rust/WASM validation, CommandGateway and
 direct Jupyter transport as egui. Tool transactions share egui's serial queue,
 including read/modify and insert/execute sequences. They refresh committed state
 before resolving IDs. Tool results and intermediate execution snapshots are
@@ -37,6 +40,18 @@ validated in WASM and reconciled into the mounted egui app without a reload.
 Unsaved local edits block tools; cell editing is disabled during tool transactions.
 Insertion followed by failed execution is explicitly reported as a partial commit.
 No tool call is automatically retried after an ambiguous network failure.
+
+View tools share the frontend serial queue but do not contact Jupyter. They use
+the mounted WASM view API, validate stable cell IDs there, and change the same
+egui visibility state as human controls. They preserve sources, outputs, notebook
+revisions and pending edits. Visibility is local to the tab and does not filter
+read results. Capture scrolls to the target without expanding it, reads the
+actual egui framebuffer, crops to the cell's visible region (excluding adjacent
+cells/toolbars), and returns PNG image content. It is not an HTML reconstruction.
+Tall cells are explicitly marked clipped; capture respects collapsed/windowed
+output modes. Keep the tab visible while capturing. Capture is bounded to four
+million pixels and two million base64 PNG characters, with a ten-second timeout.
+Images reflect the current rendered state; retry if a resource is still loading.
 
 Interrupt is deliberately out-of-band, with an independent WASM validator using
 the same CommandGateway class; otherwise it could not stop a queued execution.

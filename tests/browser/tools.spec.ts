@@ -61,6 +61,25 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
   const cell_id = inserted.structuredContent.cell_id as string;
   expect(JSON.stringify(inserted)).toContain("42");
   expect(
+    (await call("set_output_visibility", { cell_id, mode: "windowed" }))
+      .isError,
+  ).toBe(false);
+  expect(
+    (await call("set_cell_visibility", { cell_id, collapsed: true })).isError,
+  ).toBe(false);
+  const folded = await call("capture_cell", { cell_id });
+  expect(folded.isError).toBe(false);
+  expect(folded.structuredContent.height).toBeGreaterThan(0);
+  expect(
+    (await call("set_cell_visibility", { cell_id, collapsed: false })).isError,
+  ).toBe(false);
+  const expanded = await call("capture_cell", { cell_id });
+  expect(expanded.isError).toBe(false);
+  expect(Number(expanded.structuredContent.height)).toBeGreaterThan(
+    Number(folded.structuredContent.height),
+  );
+  expect(JSON.stringify(await call("read_cell", { cell_id }))).toContain("42");
+  expect(
     (
       await call("edit_cell_source", {
         cell_id,

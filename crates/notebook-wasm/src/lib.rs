@@ -334,6 +334,22 @@ pub struct MountedNotebook {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 impl MountedNotebook {
+    #[wasm_bindgen(js_name = cellView)]
+    pub fn cell_view(&self, id: &str, action: &str, value: &str) -> Result<(), JsError> {
+        self.app
+            .lock()
+            .expect("app mutex")
+            .cell_view(id, action, value)
+            .map_err(|error| JsError::new(&error))?;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
+    #[wasm_bindgen(js_name = takeCellCapture)]
+    pub fn take_cell_capture(&self) -> Option<String> {
+        self.app.lock().expect("app mutex").captured_cell.take()
+    }
     #[wasm_bindgen(js_name = setExternalBusy)]
     pub fn set_external_busy(&self, busy: bool) {
         self.app.lock().expect("app mutex").external_command_active = busy;

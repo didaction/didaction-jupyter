@@ -1,7 +1,10 @@
 import type { CommandResult, NotebookCommand, NotebookSnapshot } from "./types";
 
 export type ToolResult = {
-  content: { type: "text"; text: string }[];
+  content: (
+    | { type: "text"; text: string }
+    | { type: "image"; data: string; mimeType: "image/png" }
+  )[];
   structuredContent: Record<string, unknown>;
   isError: boolean;
 };
@@ -74,6 +77,24 @@ function define(
     },
   });
 }
+define(
+  "set_cell_visibility",
+  "Collapse or expand a cell without modifying notebook contents.",
+  { cell_id: id, collapsed: { type: "boolean" } },
+);
+define(
+  "set_output_visibility",
+  "Set presentation-only output mode; preserves all outputs.",
+  {
+    cell_id: id,
+    mode: { type: "string", enum: ["expanded", "windowed", "collapsed"] },
+  },
+);
+define(
+  "capture_cell",
+  "Scroll to a cell and capture its currently rendered visible portion as PNG. Does not expand hidden content. Tall cells may be clipped; see clipped in result.",
+  { cell_id: id },
+);
 define(
   "read_notebook",
   "Read committed cells, IDs, sources and outputs of the configured notebook.",
@@ -215,6 +236,10 @@ export class NotebookTools implements NotebookToolInvoker {
     private readonly snapshot: () => NotebookSnapshot,
     private readonly assertReady: () => void = () => {},
     private readonly interrupt?: Execute,
+    private readonly view?: (
+      name: string,
+      args: Record<string, unknown>,
+    ) => Promise<ToolResult>,
   ) {}
   listTools(): ToolDefinition[] {
     return structuredClone(definitions);
@@ -225,6 +250,20 @@ export class NotebookTools implements NotebookToolInvoker {
       if (!definition)
         throw new ToolError("unsupported_operation", "Unknown notebook tool");
       const args = parse(definition, input);
+      if (
+        [
+          "set_cell_visibility",
+          "set_output_visibility",
+          "capture_cell",
+        ].includes(name)
+      ) {
+        if (!this.view)
+          throw new ToolError(
+            "unsupported_operation",
+            "Mounted notebook view unavailable",
+          );
+        return await this.view(name, args);
+      }
       const run = async (execute: Execute) => {
         if (name !== "interrupt_kernel") this.assertReady();
         const send = async (

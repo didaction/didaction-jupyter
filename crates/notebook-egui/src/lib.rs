@@ -152,6 +152,9 @@ pub struct NotebookEguiApp {
     redo_stack: Vec<Vec<CellMutation>>,
     suppress_history: bool,
     collapsed_cells: HashSet<String>,
+    capture_target: Option<(String, u32)>,
+    capture_region: Option<(egui::Rect, f32, bool)>,
+    pub captured_cell: Option<String>,
     output_views: HashMap<String, OutputViewMode>,
     hidden_line_numbers: HashSet<String>,
     find_open: bool,
@@ -205,6 +208,9 @@ impl NotebookEguiApp {
             redo_stack: Vec::new(),
             suppress_history: false,
             collapsed_cells: HashSet::new(),
+            capture_target: None,
+            capture_region: None,
+            captured_cell: None,
             output_views: HashMap::new(),
             hidden_line_numbers: HashSet::new(),
             find_open: false,
@@ -218,6 +224,35 @@ impl NotebookEguiApp {
             markdown_cache: CommonMarkCache::default(),
             math_cache: Arc::new(Mutex::new(MathRenderCache::default())),
         }
+    }
+    pub fn cell_view(&mut self, id: &str, action: &str, value: &str) -> Result<(), String> {
+        if id.len() > 128 || !self.state.snapshot.cells.iter().any(|cell| cell.id == id) {
+            return Err("Unknown cell ID".into());
+        }
+        match (action, value) {
+            ("cell", "true") => {
+                self.collapsed_cells.insert(id.to_owned());
+            }
+            ("cell", "false") => {
+                self.collapsed_cells.remove(id);
+            }
+            ("output", mode) => {
+                let mode = match mode {
+                    "expanded" => OutputViewMode::Expanded,
+                    "windowed" => OutputViewMode::Windowed,
+                    "collapsed" => OutputViewMode::Collapsed,
+                    _ => return Err("Invalid output mode".into()),
+                };
+                self.set_output_view(id, mode);
+            }
+            ("capture", "") => {
+                self.captured_cell = None;
+                self.capture_region = None;
+                self.capture_target = Some((id.to_owned(), 30));
+            }
+            _ => return Err("Invalid view operation".into()),
+        }
+        Ok(())
     }
     pub fn apply_completion(&mut self, command_id: Uuid, completion: CompletionReply) {
         if let Some(cell_id) = self.pending_completions.remove(&command_id) {
@@ -1509,6 +1544,30 @@ impl NotebookEguiApp {
                 }
             }
         });
+        if let Some((target, remaining)) = &mut self.capture_target
+            && *target == cell.id
+        {
+            let rect = frame_response.response.rect;
+            if *remaining == 30 {
+                ui.scroll_to_rect_animation(
+                    rect,
+                    Some(egui::Align::Min),
+                    egui::style::ScrollAnimation::none(),
+                );
+            }
+            if *remaining > 0 {
+                *remaining -= 1;
+                ui.ctx().request_repaint();
+            } else {
+                let visible = rect.intersect(ui.clip_rect());
+                self.capture_region = Some((visible, ui.ctx().pixels_per_point(), visible != rect));
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
+                        "notebook-cell",
+                    )));
+                self.capture_target = None;
+            }
+        }
         if let Some(dragged_id) = self.dragging_cell.clone()
             && dragged_id != cell.id
             && ui.rect_contains_pointer(frame_response.response.rect)
@@ -1576,6 +1635,36 @@ impl NotebookEguiApp {
 
 impl eframe::App for NotebookEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        for event in ctx.input(|input| input.events.clone()) {
+            if let egui::Event::Screenshot {
+                image, user_data, ..
+            } = event
+                && user_data
+                    .data
+                    .as_ref()
+                    .and_then(|data| data.downcast_ref::<&str>())
+                    == Some(&"notebook-cell")
+                && let Some((rect, scale, clipped)) = self.capture_region.take()
+            {
+                let x = ((rect.left().max(0.0) * scale) as usize).min(image.size[0]);
+                let y = ((rect.top().max(0.0) * scale) as usize).min(image.size[1]);
+                let right = ((rect.right().max(0.0) * scale) as usize).min(image.size[0]);
+                let bottom = ((rect.bottom().max(0.0) * scale) as usize).min(image.size[1]);
+                let width = right.saturating_sub(x);
+                let height = bottom.saturating_sub(y);
+                if width > 0 && height > 0 && width.saturating_mul(height) <= 4_000_000 {
+                    let mut rgba = Vec::with_capacity(width * height * 4);
+                    for row in y..bottom {
+                        for pixel in
+                            &image.pixels[row * image.size[0] + x..row * image.size[0] + right]
+                        {
+                            rgba.extend_from_slice(&pixel.to_array());
+                        }
+                    }
+                    self.captured_cell = Some(serde_json::json!({"width":width,"height":height,"clipped":clipped,"rgba":base64::engine::general_purpose::STANDARD.encode(rgba)}).to_string());
+                }
+            }
+        }
         let compact_controls = ctx.screen_rect().width() < 600.0;
         ctx.style_mut(|style| {
             style.visuals = egui::Visuals::light();
@@ -2819,6 +2908,22 @@ mod tests {
         let app = NotebookEguiApp::new(NotebookState::new(snapshot).unwrap());
 
         assert!(app.rendered_markdown.contains("code"));
+    }
+
+    #[test]
+    fn tool_view_changes_preserve_notebook_and_validate_targets() {
+        let mut app = app();
+        let before = app.state.clone();
+        app.cell_view("code", "cell", "true").unwrap();
+        assert!(app.collapsed_cells.contains("code"));
+        app.cell_view("code", "output", "windowed").unwrap();
+        assert_eq!(app.output_view("code"), OutputViewMode::Windowed);
+        app.cell_view("code", "cell", "false").unwrap();
+        assert!(!app.collapsed_cells.contains("code"));
+        assert!(app.cell_view("missing", "capture", "").is_err());
+        assert!(app.cell_view("code", "output", "unknown").is_err());
+        assert_eq!(app.state, before);
+        assert!(app.drain_commands().is_empty());
     }
 
     #[test]
