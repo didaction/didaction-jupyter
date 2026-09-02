@@ -12,10 +12,10 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
       string,
       { execute(input: unknown): Promise<unknown> }
     > = {};
-    Object.defineProperty(navigator, "modelContext", {
+    Object.defineProperty(document, "modelContext", {
       configurable: true,
       value: {
-        registerTool(tool: {
+        async registerTool(tool: {
           name: string;
           execute(input: unknown): Promise<unknown>;
         }) {

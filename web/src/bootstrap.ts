@@ -123,7 +123,7 @@ async function boot(): Promise<void> {
     () => {},
     interruptExecute,
   );
-  const webmcp = installWebMcp(tools);
+  const webmcp = await installWebMcp(tools);
   const hasWebMcp = webmcp.available;
   status.textContent = hasWebMcp
     ? "Connected · WebMCP ready"

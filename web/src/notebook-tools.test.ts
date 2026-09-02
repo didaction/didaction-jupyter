@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NotebookTools } from "./notebook-tools";
 import { installWebMcp, type ModelContext } from "./webmcp";
 import {
@@ -153,7 +153,7 @@ describe("transport-neutral notebook tools", () => {
     const h = harness();
     const registered: Parameters<ModelContext["registerTool"]>[0][] = [];
     const removed: string[] = [];
-    const installed = installWebMcp(h.tools, {
+    const installed = await installWebMcp(h.tools, {
       registerTool: (tool) => {
         registered.push(tool);
       },
@@ -173,7 +173,42 @@ describe("transport-neutral notebook tools", () => {
     expect(h.calls).toHaveLength(1);
     installed.dispose();
     expect(removed).toHaveLength(12);
-    expect(installWebMcp(h.tools, {} as ModelContext).available).toBe(false);
+    expect((await installWebMcp(h.tools, {} as ModelContext)).available).toBe(
+      false,
+    );
+  });
+  it("discovers document.modelContext and awaits async registration with abort cleanup", async () => {
+    const signals: AbortSignal[] = [];
+    let completed = 0;
+    vi.stubGlobal("document", {
+      modelContext: {
+        async registerTool(_tool: unknown, options: { signal: AbortSignal }) {
+          await Promise.resolve();
+          completed++;
+          signals.push(options.signal);
+        },
+      },
+    });
+    try {
+      const installed = await installWebMcp(harness().tools);
+      expect(installed.available).toBe(true);
+      expect(completed).toBe(12);
+      installed.dispose();
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("cleans up when asynchronous registration rejects", async () => {
+    let signal: AbortSignal | undefined;
+    const installed = await installWebMcp(harness().tools, {
+      async registerTool(_tool, options) {
+        signal = options?.signal;
+        throw new Error("registration failed");
+      },
+    });
+    expect(installed.available).toBe(false);
+    expect(signal?.aborted).toBe(true);
   });
   it("serializes compound tool calls with human commands", async () => {
     const h = harness();

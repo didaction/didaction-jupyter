@@ -8,7 +8,9 @@ schemas or a connection to its hosted server. No Datalayer dependency is install
 `NotebookToolInvoker.listTools()` and `callTool(name, arguments)` are the
 transport-independent interface. Results contain MCP-style text content,
 structuredContent and isError. `webmcp.ts` only registers this catalog with
-`navigator.modelContext`. Additional adapters can invoke the same interface;
+`document.modelContext`, falling back to `navigator.modelContext`. Registration
+is awaited and an abort signal cleans up document-based registrations.
+Additional adapters can invoke the same interface;
 there is currently no stdio/HTTP MCP listener or JSON-RPC session server.
 WebMCP-unavailable browsers remain fully usable by humans.
 
