@@ -43,6 +43,19 @@ launch is checked by the integration test, not repeatedly by health probes.
 
 ## Other images / kernels
 
+### Quantum-school demo
+
+With the course checkout at `../summer-quantum-school26` and the gateway image
+already built, run `bash scripts/quantum-school.sh up`. It builds a Qrisp 0.9.7
+runtime, stops the current managed deployment, and opens the Day 1 notebook from
+the course folder. Existing notebook files are preserved; kernel memory is lost
+when switching deployments. Stop with `bash scripts/quantum-school.sh down`
+(or `bash scripts/container.sh down`). Override `DIDACTION_NOTEBOOK_WORKSPACE`
+and `DIDACTION_NOTEBOOK_PATH` to select another course folder or notebook.
+Cloud-backend exercises still require your own credentials; none are bundled.
+
+### Custom runtime
+
 Set `DIDACTION_RUNTIME_IMAGE` to an immutable image digest and
 `DIDACTION_KERNEL_NAME` to its installed kernelspec. The image must contain Python,
 the `jupyter server` command, and the language kernel/dependencies. Our runtime

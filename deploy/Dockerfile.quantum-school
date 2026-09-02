@@ -1,0 +1,3 @@
+FROM quay.io/jupyter/minimal-notebook@sha256:aebcf531fc77f3341568f5e37de7eb392ae48f1ae5ce9bc9cf779bd602548d17
+COPY quantum-school-requirements.txt /tmp/quantum-school-requirements.txt
+RUN python -m pip install --no-cache-dir -r /tmp/quantum-school-requirements.txt
