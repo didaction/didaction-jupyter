@@ -70,7 +70,9 @@ use the lease. Brief interruptions fail the UI closed while reconnecting.
 
 ## Opt-in follow mode
 
-Observers can enable **Follow driver** in the header. It is off by default and
+Observers can enable **Follow driver** using the target icon beside the workspace
+explorer toggle in the notebook toolbar. The highlighted icon toggles follow off;
+its tooltip and keyboard-accessible control name describe the action. It is off by default and
 drivers see an orange **Driver** status badge instead of the follow button. Roles
 are workspace-wide and the header updates when handing
 off control. Follow mode

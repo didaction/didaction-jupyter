@@ -181,6 +181,9 @@ pub struct NotebookEguiApp {
     pub captured_cell: Option<String>,
     pub workspace_visible: bool,
     pub workspace_toggle_requested: bool,
+    pub follow_toggle_requested: bool,
+    pub following_driver: bool,
+    pub host_status: String,
     output_views: HashMap<String, OutputViewMode>,
     hidden_line_numbers: HashSet<String>,
     find_open: bool,
@@ -243,6 +246,9 @@ impl NotebookEguiApp {
             captured_cell: None,
             workspace_visible: true,
             workspace_toggle_requested: false,
+            follow_toggle_requested: false,
+            following_driver: false,
+            host_status: "Connecting…".into(),
             output_views: HashMap::new(),
             hidden_line_numbers: HashSet::new(),
             find_open: false,
@@ -1094,6 +1100,18 @@ impl NotebookEguiApp {
                     self.workspace_toggle_requested = true;
                 }
                 if self.read_only {
+                    if toolbar_icon_button(
+                        ui,
+                        true,
+                        ToolbarIcon::Follow(self.following_driver),
+                        if self.following_driver {
+                            "Stop following driver"
+                        } else {
+                            "Follow driver"
+                        },
+                    ) {
+                        self.follow_toggle_requested = true;
+                    }
                     ui.disable();
                 }
                 if toolbar_icon_button(ui, idle, ToolbarIcon::Save, "Save notebook") {
@@ -1292,7 +1310,7 @@ impl NotebookEguiApp {
                 SyncState::Error => ("Action required", Color32::from_rgb(198, 40, 40)),
             }
         };
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(if self.read_only {
                 "Observer · Read-only"
             } else {
@@ -1309,6 +1327,10 @@ impl NotebookEguiApp {
             ));
             ui.separator();
             ui.label(format!("Revision {}", self.state.snapshot.revision));
+            for item in self.host_status.split(" · ") {
+                ui.separator();
+                ui.label(item);
+            }
         });
         if let Some(error) = &self.state.last_error {
             ui.colored_label(
@@ -2472,6 +2494,7 @@ fn notebook_document_width(available_width: f32) -> f32 {
 #[derive(Clone, Copy)]
 enum ToolbarIcon {
     Workspace,
+    Follow(bool),
     Save,
     Add,
     Up,
@@ -2485,7 +2508,9 @@ fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tool
     let response = ui
         .add_enabled(
             enabled,
-            egui::Button::new("").min_size(egui::vec2(30.0, 28.0)),
+            egui::Button::new("")
+                .selected(matches!(icon, ToolbarIcon::Follow(true)))
+                .min_size(egui::vec2(30.0, 28.0)),
         )
         .on_hover_text(tooltip);
     let rect = response.rect.shrink(7.0);
@@ -2497,6 +2522,32 @@ fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tool
     let stroke = Stroke::new(1.6, color);
     let painter = ui.painter();
     match icon {
+        ToolbarIcon::Follow(_) => {
+            let center = rect.center();
+            let radius = rect.width().min(rect.height()) * 0.32;
+            painter.circle_stroke(center, radius, stroke);
+            painter.circle_filled(center, 1.8, color);
+            for (a, b) in [
+                (
+                    egui::pos2(center.x, rect.top()),
+                    egui::pos2(center.x, center.y - radius),
+                ),
+                (
+                    egui::pos2(center.x, center.y + radius),
+                    egui::pos2(center.x, rect.bottom()),
+                ),
+                (
+                    egui::pos2(rect.left(), center.y),
+                    egui::pos2(center.x - radius, center.y),
+                ),
+                (
+                    egui::pos2(center.x + radius, center.y),
+                    egui::pos2(rect.right(), center.y),
+                ),
+            ] {
+                painter.line_segment([a, b], stroke);
+            }
+        }
         ToolbarIcon::Workspace => {
             painter.rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);
             let x = rect.left() + rect.width() * 0.35;

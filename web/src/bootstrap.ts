@@ -18,6 +18,8 @@ interface NotebookContext extends OpenNotebook {
   followSelection(cellId: string | null): void;
   followScroll(fraction: number | null): void;
   isActive(): boolean;
+  hostStatus(following: boolean, text: string): void;
+  takeFollowToggle(): boolean;
 }
 const openContexts = new Set<NotebookContext>();
 
@@ -288,6 +290,8 @@ async function createContext(
     tools,
     connection: collaboration,
     isActive: () => mounted !== undefined,
+    hostStatus: (following, text) => mounted?.setHostStatus(following, text),
+    takeFollowToggle: () => mounted?.takeFollowToggle() ?? false,
     scrollFraction: () => mounted?.scrollFraction() ?? 0,
     followSelection: (cellId) => mounted?.setFollowSelection(cellId),
     followScroll: (fraction) => mounted?.setFollowScroll(fraction),
@@ -439,6 +443,8 @@ async function boot(): Promise<void> {
     }
     updateFollowButton();
     const active = activeContext();
+    if (active?.takeFollowToggle()) followButton.click();
+    active?.hostStatus(follow.enabled, status.textContent ?? "Connecting…");
     if (!active?.canWrite?.()) return;
     for (const context of openContexts)
       if (context.canWrite?.())

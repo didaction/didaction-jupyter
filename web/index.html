@@ -46,13 +46,7 @@
           hidden
           >Driver</output
         >
-        <button id="follow-driver" type="button" aria-pressed="false" disabled>
-          Follow driver
-        </button>
         <output id="follow-status" role="status" aria-live="polite"></output>
-        <output id="connection-status" role="status" aria-live="polite"
-          >Connecting…</output
-        >
       </div>
     </header>
     <div class="workspace-layout">
@@ -67,6 +61,27 @@
         <p id="explorer-status" role="status">Connecting…</p>
       </aside>
       <main id="notebook-shell" aria-label="Interactive notebook">
+        <div
+          class="canvas-accessibility"
+          role="toolbar"
+          aria-label="Notebook collaboration"
+        >
+          <button
+            id="follow-driver"
+            type="button"
+            aria-pressed="false"
+            disabled
+          >
+            Follow driver
+          </button>
+        </div>
+        <output
+          id="connection-status"
+          class="canvas-accessibility"
+          role="status"
+          aria-live="polite"
+          >Connecting…</output
+        >
         <canvas
           id="notebook-canvas"
           tabindex="0"

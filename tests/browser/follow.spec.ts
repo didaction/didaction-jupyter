@@ -162,7 +162,9 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   await page.mouse.wheel(0, 2400);
   await expect.poll(() => scroll(page)).toBeGreaterThan(0.2);
   expect(await scroll(observer)).toBeLessThan(0.01);
-  await observer.locator("#follow-driver").click();
+  await observer
+    .locator("#notebook-canvas")
+    .click({ position: { x: 60, y: 94 } });
   await expect(observer).toHaveURL(new RegExp(names[0]!));
   await expect
     .poll(async () => Math.abs((await scroll(page)) - (await scroll(observer))))
@@ -198,7 +200,7 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
     .poll(async () => Math.abs((await scroll(page)) - (await scroll(observer))))
     .toBeLessThan(0.03);
   await observer.screenshot({ path: ".runtime/follow-mobile.png" });
-  await observer.locator("#follow-driver").click();
+  await observer.locator("#follow-driver").press("Enter");
   const independentPosition = await scroll(observer);
   expect(
     (await call(page, "open_notebook", { notebook_path: names[0] })).isError,
