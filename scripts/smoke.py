@@ -4,6 +4,8 @@ import os
 import urllib.request
 import uuid
 
+client_headers: dict[str, str] = {}
+
 
 def command(kind: str, revision: int | None = None, **values: object) -> dict[str, object]:
     return {
@@ -22,7 +24,7 @@ def call(payload: dict[str, object]) -> dict[str, object]:
     request = urllib.request.Request(  # noqa: S310 - test URL is supplied by the local harness.
         f"{gateway_url}/api/v1/commands",
         data=json.dumps(payload).encode(),
-        headers={"content-type": "application/json"},
+        headers={"content-type": "application/json", **client_headers},
     )
     with urllib.request.urlopen(request, timeout=40) as response:  # noqa: S310
         return json.load(response)
@@ -33,7 +35,7 @@ def call_stream(payload: dict[str, object]) -> list[dict[str, object]]:
     request = urllib.request.Request(  # noqa: S310 - local acceptance harness.
         f"{gateway_url}/api/v1/commands/stream",
         data=json.dumps(payload).encode(),
-        headers={"content-type": "application/json"},
+        headers={"content-type": "application/json", **client_headers},
     )
     events = []
     with urllib.request.urlopen(request, timeout=40) as response:  # noqa: S310
@@ -71,6 +73,15 @@ def insert_cell(revision: int, index: int, source: str, cell_type: str = "code")
 
 
 path = os.environ.get("DIDACTION_SMOKE_PATH", f"acceptance-{uuid.uuid4()}.ipynb")
+gateway_url = os.environ.get("DIDACTION_GATEWAY_URL", "http://127.0.0.1:8080")
+client_headers["x-notebook-path"] = path
+join_request = urllib.request.Request(  # noqa: S310 - isolated test gateway
+    f"{gateway_url}/api/v1/collaboration/join",
+    data=b"",
+    headers=client_headers,
+)
+with urllib.request.urlopen(join_request, timeout=40) as response:  # noqa: S310
+    client_headers["x-notebook-client"] = json.load(response)["token"]
 state = call(command("setup", path=path, kernel="python3", create=True))
 assert not state.get("error"), state
 revision = state["snapshot"]["revision"]
@@ -170,3 +181,10 @@ print(
     "direct Jupyter/ipykernel smoke: PASS "
     "(42, completion, stable edits, SVG graph, intermediate stream/clear/refresh)"
 )
+leave_request = urllib.request.Request(  # noqa: S310 - isolated test gateway
+    f"{gateway_url}/api/v1/collaboration/leave",
+    data=b"",
+    headers=client_headers,
+)
+with urllib.request.urlopen(leave_request, timeout=40):  # noqa: S310
+    pass

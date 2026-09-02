@@ -215,7 +215,10 @@ async def test_stream_endpoint_emits_busy_snapshots_before_idle_final(
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=gateway_main.app), base_url="http://test"
     ) as client:
-        response = await client.post("/api/v1/commands/stream", json=payload)
+        joined = (await client.post("/api/v1/collaboration/join")).json()
+        response = await client.post(
+            "/api/v1/commands/stream", json=payload, headers={"x-notebook-client": joined["token"]}
+        )
 
     events = [json.loads(line) for line in response.text.splitlines()]
     assert [event["snapshot"]["kernel"]["state"] for event in events] == [

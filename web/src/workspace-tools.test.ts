@@ -37,6 +37,14 @@ it("requires explicit notebook addresses and routes only to open notebooks", asy
     entries: [],
   }));
   await workspace.seed("one.ipynb", await create("one.ipynb"));
+  contexts.get("one.ipynb")!.canWrite = () => false;
+  const blocked = await workspace.callTool("delete_cell", {
+    notebook_path: "one.ipynb",
+    cell_id: "cell",
+  });
+  expect(blocked.structuredContent.error).toMatchObject({ code: "not_driver" });
+  expect(contexts.get("one.ipynb")!.tools.callTool).not.toHaveBeenCalled();
+  contexts.get("one.ipynb")!.canWrite = () => true;
   expect((await workspace.callTool("read_notebook", {})).isError).toBe(true);
   expect(
     (

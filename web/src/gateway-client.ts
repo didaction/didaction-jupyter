@@ -9,10 +9,13 @@ export class GatewayNotebookTransport implements NotebookTransport {
   constructor(
     private readonly endpoint = "/api/v1/commands",
     private notebookPath?: string,
+    private readonly clientHeaders: () => Record<string, string> = () => ({}),
+    private readonly onRename: (path: string) => void = () => {},
   ) {}
   private headers(): Record<string, string> {
     return {
       "content-type": "application/json",
+      ...this.clientHeaders(),
       ...(this.notebookPath
         ? { "x-notebook-path": encodeURIComponent(this.notebookPath) }
         : {}),
@@ -98,6 +101,7 @@ export class GatewayNotebookTransport implements NotebookTransport {
       | undefined;
     if (!result.error && typeof notebook?.path === "string") {
       this.notebookPath = notebook.path;
+      this.onRename(notebook.path);
       const url = new URL(location.href);
       url.searchParams.set("notebook", this.notebookPath);
       history.replaceState(null, "", url);

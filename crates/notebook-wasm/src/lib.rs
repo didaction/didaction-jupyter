@@ -379,6 +379,13 @@ impl MountedNotebook {
             ctx.request_repaint();
         }
     }
+    #[wasm_bindgen(js_name = setReadOnly)]
+    pub fn set_read_only(&self, read_only: bool) {
+        self.app.lock().expect("app mutex").read_only = read_only;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+    }
     #[wasm_bindgen(js_name = assertExternalReady)]
     pub fn assert_external_ready(&self) -> Result<(), JsError> {
         if self

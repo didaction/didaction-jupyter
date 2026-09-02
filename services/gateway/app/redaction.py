@@ -3,7 +3,7 @@ import re
 
 REDACTED = "[REDACTED]"
 SENSITIVE = re.compile(
-    r"(?i)(token|authorization|cookie|session-id|kernel-id|code|source|output|content)"
+    r"(?i)(token|notebook-client|authorization|cookie|session-id|kernel-id|code|source|output|content)"
 )
 
 

@@ -33,6 +33,22 @@ const snapshot = {
 };
 
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/v1/collaboration/**", async (route) => {
+    if (route.request().url().includes("/events"))
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.fulfill({
+      json: {
+        token: "test-only",
+        client_id: "one",
+        driver_id: "one",
+        is_driver: true,
+        clients: ["one"],
+        sequence: 1,
+        origin: null,
+        snapshot: null,
+      },
+    });
+  });
   await page.route("**/api/v1/config", async (route) => {
     await route.fulfill({
       contentType: "application/json",

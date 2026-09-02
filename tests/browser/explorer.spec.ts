@@ -10,8 +10,13 @@ test("workspace explorer opens notebooks without redirecting another tab", async
   );
   const config = await (await page.request.get("/api/v1/config")).json();
   const other = "explorer-second.ipynb";
+  const member = await (
+    await page.request.post("/api/v1/collaboration/join", {
+      headers: { "x-notebook-path": other },
+    })
+  ).json();
   const result = await page.request.post("/api/v1/commands", {
-    headers: { "x-notebook-path": other },
+    headers: { "x-notebook-path": other, "x-notebook-client": member.token },
     data: {
       protocol_version: 1,
       command_id: crypto.randomUUID(),
@@ -24,6 +29,9 @@ test("workspace explorer opens notebooks without redirecting another tab", async
     },
   });
   expect((await result.json()).error).toBeNull();
+  await page.request.post("/api/v1/collaboration/leave", {
+    headers: { "x-notebook-path": other, "x-notebook-client": member.token },
+  });
   await page.goto("/");
   await expect(page.locator("#connection-status")).toContainText("Connected", {
     timeout: 60000,

@@ -154,6 +154,7 @@ pub struct NotebookEguiApp {
     editors: Vec<(String, String)>,
     dirty_editors: HashSet<String>,
     pub external_command_active: bool,
+    pub read_only: bool,
     completion_suggestions: HashMap<String, CompletionReply>,
     completion_selection: HashMap<String, usize>,
     pending_caret_positions: HashMap<String, usize>,
@@ -212,6 +213,7 @@ impl NotebookEguiApp {
             editors,
             dirty_editors: HashSet::new(),
             external_command_active: false,
+            read_only: false,
             completion_suggestions: HashMap::new(),
             completion_selection: HashMap::new(),
             pending_caret_positions: HashMap::new(),
@@ -358,6 +360,9 @@ impl NotebookEguiApp {
         self.dirty_editors.clear();
     }
     fn emit(&mut self, kind: NotebookCommandKind) {
+        if self.read_only {
+            return;
+        }
         if !self.suppress_history
             && let NotebookCommandKind::ModifyCells { changes } = &kind
             && let Some(inverse) = inverse_cell_changes(&self.state.snapshot.cells, changes)
@@ -793,6 +798,9 @@ impl NotebookEguiApp {
                 );
             });
             ui.horizontal_wrapped(|ui| {
+                if self.read_only {
+                    ui.disable();
+                }
                 ui.menu_button("File", |ui| {
                     if ui
                         .add_enabled(idle, egui::Button::new("Save Notebook"))
@@ -1078,6 +1086,9 @@ impl NotebookEguiApp {
                 ) {
                     self.workspace_toggle_requested = true;
                 }
+                if self.read_only {
+                    ui.disable();
+                }
                 if toolbar_icon_button(ui, idle, ToolbarIcon::Save, "Save notebook") {
                     self.save_visible_edits();
                 }
@@ -1275,6 +1286,12 @@ impl NotebookEguiApp {
             }
         };
         ui.horizontal(|ui| {
+            ui.label(if self.read_only {
+                "Observer · Read-only"
+            } else {
+                "Driver"
+            });
+            ui.separator();
             let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
             ui.painter().circle_filled(rect.center(), 4.0, color);
             ui.label(label);
@@ -1328,10 +1345,11 @@ impl NotebookEguiApp {
             }
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
-                let idle = !matches!(
-                    self.state.sync_state,
-                    SyncState::Dirty | SyncState::Executing
-                );
+                let idle = !self.read_only
+                    && !matches!(
+                        self.state.sync_state,
+                        SyncState::Dirty | SyncState::Executing
+                    );
                 let (toggle, output_choice) = cell_visibility_control(
                     ui,
                     collapsed,
@@ -1394,7 +1412,7 @@ impl NotebookEguiApp {
             });
             if !collapsed {
                 if cell.cell_type == CellType::Markdown {
-                    let rendered = self.rendered_markdown.contains(&cell.id);
+                    let rendered = self.read_only || self.rendered_markdown.contains(&cell.id);
                     if rendered {
                         let source = self.editor_source(&cell);
                         let rendered_response = rendered_markdown_response(
@@ -1404,7 +1422,11 @@ impl NotebookEguiApp {
                             &mut self.markdown_cache,
                             &self.math_cache,
                         )
-                        .on_hover_text("Double-click to edit Markdown");
+                        .on_hover_text(if self.read_only {
+                            "Read-only while another collaborator drives"
+                        } else {
+                            "Double-click to edit Markdown"
+                        });
                         self.apply_rendered_markdown_interaction(
                             &cell.id,
                             rendered_response.clicked(),
@@ -1415,8 +1437,16 @@ impl NotebookEguiApp {
                         self.edit_mode = false;
                     }
                 }
-                let show_editor = cell.cell_type != CellType::Markdown
-                    || !self.rendered_markdown.contains(&cell.id);
+                if self.read_only && cell.cell_type != CellType::Markdown {
+                    ui.add(
+                        egui::Label::new(RichText::new(&cell.source).monospace())
+                            .wrap()
+                            .selectable(true),
+                    );
+                }
+                let show_editor = !self.read_only
+                    && (cell.cell_type != CellType::Markdown
+                        || !self.rendered_markdown.contains(&cell.id));
                 let edited = show_editor
                     .then(|| {
                         let editor = self
@@ -1681,6 +1711,9 @@ impl NotebookEguiApp {
     }
 
     fn begin_editing_cell(&mut self, cell_id: &str) {
+        if self.read_only {
+            return;
+        }
         self.rendered_markdown.remove(cell_id);
         self.pending_editor_focus = Some(cell_id.to_owned());
         self.edit_mode = true;
@@ -1728,190 +1761,194 @@ impl eframe::App for NotebookEguiApp {
         });
         install_data_image_loader(ctx);
         egui_extras::install_image_loaders(ctx);
-        let now = ctx.input(|input| input.time);
-        if self.autosave_due.is_some_and(|deadline| deadline <= now) {
-            self.autosave_due = None;
-            self.save_visible_edits();
-        }
-        let due = self
-            .completion_due
-            .iter()
-            .filter(|(_, deadline)| **deadline <= now)
-            .map(|(cell_id, _)| cell_id.clone())
-            .collect::<Vec<_>>();
-        for cell_id in due {
-            self.completion_due.remove(&cell_id);
-            if self.edit_mode
-                && let Some(cell) = self
+        if !self.read_only {
+            let now = ctx.input(|input| input.time);
+            if self.autosave_due.is_some_and(|deadline| deadline <= now) {
+                self.autosave_due = None;
+                self.save_visible_edits();
+            }
+            let due = self
+                .completion_due
+                .iter()
+                .filter(|(_, deadline)| **deadline <= now)
+                .map(|(cell_id, _)| cell_id.clone())
+                .collect::<Vec<_>>();
+            for cell_id in due {
+                self.completion_due.remove(&cell_id);
+                if self.edit_mode
+                    && let Some(cell) = self
+                        .state
+                        .snapshot
+                        .cells
+                        .iter()
+                        .find(|cell| cell.id == cell_id)
+                        .cloned()
+                {
+                    self.request_completion(&cell);
+                }
+            }
+            let selected_cell_id = self.state.snapshot.selected_cell_id.clone();
+            let completion_open = selected_cell_id
+                .as_ref()
+                .is_some_and(|id| self.completion_suggestions.contains_key(id));
+            if completion_open && let Some(cell_id) = selected_cell_id.as_ref() {
+                let count = self
+                    .completion_suggestions
+                    .get(cell_id)
+                    .map_or(0, |completion| completion.matches.len().min(12));
+                if count > 0 && ctx.input(|input| input.key_pressed(Key::ArrowDown)) {
+                    ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::ArrowDown));
+                    let selected = self
+                        .completion_selection
+                        .entry(cell_id.clone())
+                        .or_default();
+                    *selected = (*selected + 1).min(count - 1);
+                }
+                if count > 0 && ctx.input(|input| input.key_pressed(Key::ArrowUp)) {
+                    ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::ArrowUp));
+                    let selected = self
+                        .completion_selection
+                        .entry(cell_id.clone())
+                        .or_default();
+                    *selected = selected.saturating_sub(1);
+                }
+                if ctx.input(|input| input.key_pressed(Key::Enter) || input.key_pressed(Key::Tab)) {
+                    ctx.input_mut(|input| {
+                        input.consume_key(egui::Modifiers::NONE, Key::Enter);
+                        input.consume_key(egui::Modifiers::NONE, Key::Tab);
+                    });
+                    self.accept_completion(cell_id);
+                } else if ctx.input(|input| input.key_pressed(Key::Escape)) {
+                    ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape));
+                    self.close_completion(cell_id);
+                }
+            } else if self.edit_mode
+                && ctx.input(|input| input.modifiers.shift && input.key_pressed(Key::Tab))
+                && let Some(cell) = selected_cell_id
+                    .as_ref()
+                    .and_then(|id| self.state.snapshot.cells.iter().find(|cell| &cell.id == id))
+                    .filter(|cell| cell.cell_type == CellType::Code)
+                    .cloned()
+            {
+                ctx.input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, Key::Tab));
+                self.request_inspection(&cell);
+            } else if self.edit_mode
+                && ctx.input(|input| input.key_pressed(Key::Tab))
+                && ctx.input(|input| !input.modifiers.shift)
+                && let Some(cell) = selected_cell_id
+                    .as_ref()
+                    .and_then(|id| self.state.snapshot.cells.iter().find(|cell| &cell.id == id))
+                    .filter(|cell| cell.cell_type == CellType::Code)
+                    .cloned()
+            {
+                ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Tab));
+                self.request_completion(&cell);
+            }
+            if !completion_open && ctx.input(|input| input.key_pressed(Key::Escape)) {
+                self.edit_mode = false;
+            }
+            if !completion_open
+                && ctx.input(|input| input.modifiers.shift && input.key_pressed(Key::Enter))
+            {
+                ctx.input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, Key::Enter));
+                self.execute_selected_and_advance(false);
+            } else if !completion_open
+                && ctx.input(|input| input.modifiers.alt && input.key_pressed(Key::Enter))
+            {
+                ctx.input_mut(|input| input.consume_key(egui::Modifiers::ALT, Key::Enter));
+                self.execute_selected_and_advance(true);
+            }
+            let command_mode = !self.edit_mode;
+            if command_mode
+                && ctx.input(|input| input.key_pressed(Key::Enter))
+                && let Some((_, cell)) = self.selected_cell()
+            {
+                self.begin_editing_cell(&cell.id);
+            }
+            if command_mode
+                && ctx.input(|input| input.key_pressed(Key::ArrowDown) || input.key_pressed(Key::J))
+                && let Some((index, _)) = self.selected_cell()
+                && let Some(next) = self.state.snapshot.cells.get(index + 1)
+            {
+                self.state.snapshot.selected_cell_id = Some(next.id.clone());
+            }
+            if command_mode
+                && ctx.input(|input| input.key_pressed(Key::ArrowUp) || input.key_pressed(Key::K))
+                && let Some((index, _)) = self.selected_cell()
+                && index > 0
+            {
+                self.state.snapshot.selected_cell_id =
+                    Some(self.state.snapshot.cells[index - 1].id.clone());
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::A)) {
+                let index = self
+                    .state
+                    .snapshot
+                    .selected_cell_id
+                    .as_ref()
+                    .and_then(|id| {
+                        self.state
+                            .snapshot
+                            .cells
+                            .iter()
+                            .position(|cell| &cell.id == id)
+                    })
+                    .unwrap_or(0);
+                self.insert_cell(index, CellType::Code, String::new());
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::B)) {
+                self.insert_cell_after_selection(CellType::Code);
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::X)) {
+                self.cut_selected();
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::C)) {
+                self.copy_selected();
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::V)) {
+                self.paste_below_selected();
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::Z)) {
+                if ctx.input(|input| input.modifiers.shift) {
+                    self.replay_history(false);
+                } else {
+                    self.replay_history(true);
+                }
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::S)) {
+                self.save_visible_edits();
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::M)) {
+                self.set_selected_cell_type(CellType::Markdown);
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::Y)) {
+                self.set_selected_cell_type(CellType::Code);
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::R)) {
+                self.set_selected_cell_type(CellType::Raw);
+            }
+            if command_mode && ctx.input(|input| input.key_pressed(Key::O)) {
+                self.cycle_selected_output_view();
+            }
+            if ctx.input(|input| input.modifiers.command && input.key_pressed(Key::Enter))
+                && let Some(id) = self.state.snapshot.selected_cell_id.clone()
+            {
+                if let Some(cell) = self
                     .state
                     .snapshot
                     .cells
                     .iter()
-                    .find(|cell| cell.id == cell_id)
+                    .find(|cell| cell.id == id)
                     .cloned()
-            {
-                self.request_completion(&cell);
+                {
+                    self.flush_editor(&cell);
+                }
+                self.emit(NotebookCommandKind::ExecuteCell { cell_id: id });
             }
         }
-        let selected_cell_id = self.state.snapshot.selected_cell_id.clone();
-        let completion_open = selected_cell_id
-            .as_ref()
-            .is_some_and(|id| self.completion_suggestions.contains_key(id));
-        if completion_open && let Some(cell_id) = selected_cell_id.as_ref() {
-            let count = self
-                .completion_suggestions
-                .get(cell_id)
-                .map_or(0, |completion| completion.matches.len().min(12));
-            if count > 0 && ctx.input(|input| input.key_pressed(Key::ArrowDown)) {
-                ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::ArrowDown));
-                let selected = self
-                    .completion_selection
-                    .entry(cell_id.clone())
-                    .or_default();
-                *selected = (*selected + 1).min(count - 1);
-            }
-            if count > 0 && ctx.input(|input| input.key_pressed(Key::ArrowUp)) {
-                ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::ArrowUp));
-                let selected = self
-                    .completion_selection
-                    .entry(cell_id.clone())
-                    .or_default();
-                *selected = selected.saturating_sub(1);
-            }
-            if ctx.input(|input| input.key_pressed(Key::Enter) || input.key_pressed(Key::Tab)) {
-                ctx.input_mut(|input| {
-                    input.consume_key(egui::Modifiers::NONE, Key::Enter);
-                    input.consume_key(egui::Modifiers::NONE, Key::Tab);
-                });
-                self.accept_completion(cell_id);
-            } else if ctx.input(|input| input.key_pressed(Key::Escape)) {
-                ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape));
-                self.close_completion(cell_id);
-            }
-        } else if self.edit_mode
-            && ctx.input(|input| input.modifiers.shift && input.key_pressed(Key::Tab))
-            && let Some(cell) = selected_cell_id
-                .as_ref()
-                .and_then(|id| self.state.snapshot.cells.iter().find(|cell| &cell.id == id))
-                .filter(|cell| cell.cell_type == CellType::Code)
-                .cloned()
-        {
-            ctx.input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, Key::Tab));
-            self.request_inspection(&cell);
-        } else if self.edit_mode
-            && ctx.input(|input| input.key_pressed(Key::Tab))
-            && ctx.input(|input| !input.modifiers.shift)
-            && let Some(cell) = selected_cell_id
-                .as_ref()
-                .and_then(|id| self.state.snapshot.cells.iter().find(|cell| &cell.id == id))
-                .filter(|cell| cell.cell_type == CellType::Code)
-                .cloned()
-        {
-            ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Tab));
-            self.request_completion(&cell);
-        }
-        if !completion_open && ctx.input(|input| input.key_pressed(Key::Escape)) {
-            self.edit_mode = false;
-        }
-        if !completion_open
-            && ctx.input(|input| input.modifiers.shift && input.key_pressed(Key::Enter))
-        {
-            ctx.input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, Key::Enter));
-            self.execute_selected_and_advance(false);
-        } else if !completion_open
-            && ctx.input(|input| input.modifiers.alt && input.key_pressed(Key::Enter))
-        {
-            ctx.input_mut(|input| input.consume_key(egui::Modifiers::ALT, Key::Enter));
-            self.execute_selected_and_advance(true);
-        }
-        let command_mode = !self.edit_mode;
-        if command_mode
-            && ctx.input(|input| input.key_pressed(Key::Enter))
-            && let Some((_, cell)) = self.selected_cell()
-        {
-            self.begin_editing_cell(&cell.id);
-        }
-        if command_mode
-            && ctx.input(|input| input.key_pressed(Key::ArrowDown) || input.key_pressed(Key::J))
-            && let Some((index, _)) = self.selected_cell()
-            && let Some(next) = self.state.snapshot.cells.get(index + 1)
-        {
-            self.state.snapshot.selected_cell_id = Some(next.id.clone());
-        }
-        if command_mode
-            && ctx.input(|input| input.key_pressed(Key::ArrowUp) || input.key_pressed(Key::K))
-            && let Some((index, _)) = self.selected_cell()
-            && index > 0
-        {
-            self.state.snapshot.selected_cell_id =
-                Some(self.state.snapshot.cells[index - 1].id.clone());
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::A)) {
-            let index = self
-                .state
-                .snapshot
-                .selected_cell_id
-                .as_ref()
-                .and_then(|id| {
-                    self.state
-                        .snapshot
-                        .cells
-                        .iter()
-                        .position(|cell| &cell.id == id)
-                })
-                .unwrap_or(0);
-            self.insert_cell(index, CellType::Code, String::new());
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::B)) {
-            self.insert_cell_after_selection(CellType::Code);
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::X)) {
-            self.cut_selected();
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::C)) {
-            self.copy_selected();
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::V)) {
-            self.paste_below_selected();
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::Z)) {
-            if ctx.input(|input| input.modifiers.shift) {
-                self.replay_history(false);
-            } else {
-                self.replay_history(true);
-            }
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::S)) {
-            self.save_visible_edits();
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::M)) {
-            self.set_selected_cell_type(CellType::Markdown);
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::Y)) {
-            self.set_selected_cell_type(CellType::Code);
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::R)) {
-            self.set_selected_cell_type(CellType::Raw);
-        }
-        if command_mode && ctx.input(|input| input.key_pressed(Key::O)) {
-            self.cycle_selected_output_view();
-        }
-        if ctx.input(|input| input.modifiers.command && input.key_pressed(Key::Enter))
-            && let Some(id) = self.state.snapshot.selected_cell_id.clone()
-        {
-            if let Some(cell) = self
-                .state
-                .snapshot
-                .cells
-                .iter()
-                .find(|cell| cell.id == id)
-                .cloned()
-            {
-                self.flush_editor(&cell);
-            }
-            self.emit(NotebookCommandKind::ExecuteCell { cell_id: id });
-        }
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| self.toolbar(ui));
+        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+            self.toolbar(ui);
+        });
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| self.status(ui));
         egui::CentralPanel::default()
             .frame(
@@ -2886,6 +2923,23 @@ mod tests {
             selected_cell_id: Some("code".into()),
         };
         NotebookEguiApp::new(NotebookState::new(snapshot).unwrap())
+    }
+
+    #[test]
+    fn observer_cannot_enter_edit_mode_or_emit_commands() {
+        let mut app = app();
+        app.read_only = true;
+        app.edit_mode = false;
+        let before = app.state.clone();
+        app.begin_editing_cell("code");
+        app.emit(NotebookCommandKind::ExecuteCell {
+            cell_id: "code".into(),
+        });
+        assert!(!app.edit_mode);
+        assert!(app.drain_commands().is_empty());
+        assert_eq!(app.state, before);
+        app.cell_view("code", "cell", "true").unwrap();
+        assert!(app.collapsed_cells.contains("code"));
     }
 
     #[test]

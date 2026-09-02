@@ -28,7 +28,35 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
     });
     Object.assign(window, { registeredNotebookTools: registered });
   });
-  await page.goto("/");
+  const config = await (await page.request.get("/api/v1/config")).json();
+  const notebook = `tools-${crypto.randomUUID()}.ipynb`;
+  const member = await (
+    await page.request.post("/api/v1/collaboration/join", {
+      headers: { "x-notebook-path": notebook },
+    })
+  ).json();
+  const headers = {
+    "x-notebook-path": notebook,
+    "x-notebook-client": member.token,
+  };
+  const setup = await (
+    await page.request.post("/api/v1/commands", {
+      headers,
+      data: {
+        protocol_version: 1,
+        command_id: crypto.randomUUID(),
+        idempotency_key: crypto.randomUUID(),
+        type: "setup",
+        path: notebook,
+        kernel: config.kernel,
+        create: true,
+        timeout_ms: 30000,
+      },
+    })
+  ).json();
+  expect(setup.error).toBeNull();
+  await page.request.post("/api/v1/collaboration/leave", { headers });
+  await page.goto(`/?notebook=${notebook}`);
   await expect(page.locator("#connection-status")).toContainText(
     "WebMCP ready",
     { timeout: 60000 },

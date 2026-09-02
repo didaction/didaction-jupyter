@@ -8,6 +8,9 @@ export interface OpenNotebook {
   tools: NotebookToolInvoker;
   path?(): string;
   activeContext?(): Record<string, unknown> | null;
+  collaboration?(): Record<string, unknown>;
+  changeDriver?(clientId: string): Promise<void>;
+  canWrite?(): boolean;
   ready(): void;
   activate(): Promise<void>;
   deactivate(): void;
@@ -73,13 +76,20 @@ export class WorkspaceTools implements NotebookToolInvoker {
       "list_notebooks",
       "open_notebook",
       "close_notebook",
+      "get_collaboration",
+      "change_notebook_driver",
     ]) {
       const properties: ToolDefinition["inputSchema"]["properties"] =
         name === "list_open_notebooks" || name === "get_active_context"
           ? {}
           : name === "list_notebooks"
             ? { directory: { ...pathField, minLength: 0 } }
-            : { notebook_path: pathField };
+            : name === "change_notebook_driver"
+              ? {
+                  notebook_path: pathField,
+                  client_id: { type: "string", minLength: 1, maxLength: 128 },
+                }
+              : { notebook_path: pathField };
       scoped.push({
         name,
         description: {
@@ -93,6 +103,10 @@ export class WorkspaceTools implements NotebookToolInvoker {
             "Open an existing notebook and select its egui view. Does not create files.",
           close_notebook:
             "Close this workspace's notebook view without deleting the file or stopping its kernel. Pending edits prevent closing.",
+          get_collaboration:
+            "Get this client's role, current driver and connected client IDs for a notebook. No credentials are returned.",
+          change_notebook_driver:
+            "Hand notebook control to a connected client. Only the current driver may hand off, while idle with saved edits.",
         }[name]!,
         inputSchema: {
           type: "object",
@@ -102,7 +116,9 @@ export class WorkspaceTools implements NotebookToolInvoker {
         },
         annotations: {
           readOnlyHint:
-            name.startsWith("list") || name === "get_active_context",
+            name.startsWith("list") ||
+            name === "get_active_context" ||
+            name === "get_collaboration",
           destructiveHint: false,
           idempotentHint: true,
           openWorldHint: false,
@@ -207,6 +223,44 @@ export class WorkspaceTools implements NotebookToolInvoker {
         kernel_preserved: true,
       });
     }
+    if (name === "get_collaboration")
+      return result({
+        ok: true,
+        notebook_path: notebook,
+        ...context.collaboration?.(),
+      });
+    if (
+      context.canWrite &&
+      !context.canWrite() &&
+      !definition.annotations.readOnlyHint &&
+      !["set_cell_visibility", "set_output_visibility"].includes(name)
+    )
+      return result(
+        {
+          ok: false,
+          error: {
+            code: "not_driver",
+            message: "Read-only: only the notebook driver may change it",
+          },
+        },
+        true,
+      );
+    if (name === "change_notebook_driver") {
+      if (
+        typeof args.client_id !== "string" ||
+        args.client_id.length > 128 ||
+        !args.client_id
+      )
+        throw new Error("Invalid client ID");
+      if (!context.changeDriver) throw new Error("Driver handoff unavailable");
+      context.ready();
+      await context.changeDriver(args.client_id);
+      return result({
+        ok: true,
+        notebook_path: notebook,
+        driver_id: args.client_id,
+      });
+    }
     const { notebook_path: _, ...cellArgs } = args;
     const response = await context.tools.callTool(name, cellArgs);
     const addressed = result(
@@ -236,7 +290,11 @@ export class WorkspaceTools implements NotebookToolInvoker {
           true,
         ),
       );
-    if (name === "interrupt_kernel" || name === "get_active_context")
+    if (
+      name === "interrupt_kernel" ||
+      name === "get_active_context" ||
+      name === "get_collaboration"
+    )
       return run();
     const task = this.tail.then(run);
     this.tail = task;

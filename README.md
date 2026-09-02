@@ -148,7 +148,13 @@ bounded; SVG is decoded only by egui's image loader.
 
 ## Current limitations
 
-- Single-writer notebook saves; simultaneous edits from JupyterLab can conflict.
+Multiple frontend clients now use [single-driver collaboration](docs/collaboration.md):
+the first connection drives; observers receive live committed changes and output.
+`get_collaboration` and `change_notebook_driver` expose role discovery and handoff.
+This is local connection coordination, not authenticated remote multi-user hosting.
+
+- One driver per notebook per gateway process; external JupyterLab edits can still conflict.
+- Close other collaborators before renaming a notebook.
 - Math notation is locally typeset from a bounded LaTeX subset with MiTeX and
   Typst; arbitrary HTML is reduced to safe readable text/table output.
 - Structural undo does not restore cleared kernel outputs; rerun the cell instead.

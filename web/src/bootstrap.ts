@@ -9,6 +9,7 @@ import { installWebMcp } from "./webmcp";
 import { NotebookTools, type Transaction } from "./notebook-tools";
 import { installExplorer } from "./explorer";
 import { WorkspaceTools, type OpenNotebook } from "./workspace-tools";
+import { NotebookCollaboration } from "./collaboration";
 
 const status = document.querySelector<HTMLOutputElement>("#connection-status")!;
 const fatal = document.querySelector<HTMLElement>("#fatal-error")!;
@@ -29,21 +30,32 @@ async function createContext(
   startup: { path: string; kernel: string },
   create = false,
 ): Promise<OpenNotebook> {
+  const collaboration = new NotebookCollaboration(startup.path);
+  await collaboration.join();
+  let readOnly = !collaboration.state?.is_driver;
   const transport = new GatewayNotebookTransport(
     "/api/v1/commands",
     startup.path,
+    () => collaboration.headers(),
+    (path) => collaboration.rename(path),
   );
-  const setup = await transport.setup(
-    command("setup", {
-      path: startup.path,
-      kernel: startup.kernel,
-      create,
-    }),
-  );
-  if (setup.error || !setup.snapshot)
+  const inFlight = collaboration.state?.snapshot;
+  const setup =
+    (inFlight?.kernel as { state?: string } | undefined)?.state === "busy"
+      ? { snapshot: inFlight, error: null }
+      : await transport.setup(
+          command("setup", {
+            path: startup.path,
+            kernel: startup.kernel,
+            create: create && !readOnly,
+          }),
+        );
+  if (setup.error || !setup.snapshot) {
+    await collaboration.close();
     throw new Error(
       setup.error?.message ?? "Gateway returned no notebook snapshot",
     );
+  }
   const snapshot = setup.snapshot as NotebookSnapshot;
   const wasm = new NotebookApplication(JSON.stringify(snapshot));
   const gateway = new CommandGateway(wasm, transport);
@@ -54,6 +66,65 @@ async function createContext(
     ),
   );
   let mounted: Awaited<ReturnType<typeof mountNotebook>> | undefined;
+  let incomingSnapshot: NotebookSnapshot | undefined;
+  let reconciliationQueued = false;
+  void collaboration.watch(
+    (state) => {
+      // Own commands reconcile through their existing result path. Observers use
+      // validated full snapshots, including clear_output and display replacements.
+      if (
+        state.snapshot &&
+        state.origin !== state.client_id &&
+        (readOnly || !state.is_driver)
+      ) {
+        incomingSnapshot = state.snapshot;
+        if (!reconciliationQueued) {
+          reconciliationQueued = true;
+          void dispatchEguiCommand
+            .transaction(async () => {
+              const incoming = incomingSnapshot!;
+              incomingSnapshot = undefined;
+              const current = JSON.parse(wasm.publicSnapshot())
+                .snapshot as NotebookSnapshot;
+              if (incoming.revision >= current.revision) {
+                wasm.replaceSnapshot(JSON.stringify(incoming));
+                mounted?.applyExternalResult(
+                  JSON.stringify({
+                    protocol_version: 1,
+                    command_id: crypto.randomUUID(),
+                    idempotency_key: crypto.randomUUID(),
+                    base_revision: null,
+                    committed_revision: incoming.revision,
+                    snapshot: incoming,
+                    error: null,
+                  }),
+                  false,
+                );
+              }
+            })
+            .catch(() => {
+              readOnly = true;
+              mounted?.setReadOnly(true);
+            })
+            .finally(() => {
+              reconciliationQueued = false;
+            });
+        }
+      }
+      readOnly = !state.is_driver;
+      mounted?.setReadOnly(readOnly);
+      if (mounted)
+        status.textContent =
+          document.documentElement.dataset.webmcp === "available"
+            ? "Connected · WebMCP ready"
+            : "Connected · WebMCP unavailable";
+    },
+    () => {
+      readOnly = true;
+      mounted?.setReadOnly(true);
+      if (mounted) status.textContent = "Reconnecting · Read-only";
+    },
+  );
   const syncWorkspaceVisibility = () =>
     mounted?.setWorkspaceVisible(
       !document.querySelector<HTMLElement>("#file-explorer")!.hidden,
@@ -200,6 +271,14 @@ async function createContext(
   };
   return {
     tools,
+    canWrite: () => !readOnly,
+    collaboration: () => ({
+      client_id: collaboration.state?.client_id ?? null,
+      driver_id: collaboration.state?.driver_id ?? null,
+      is_driver: !readOnly,
+      clients: collaboration.state?.clients ?? [],
+    }),
+    changeDriver: (clientId) => collaboration.changeDriver(clientId),
     activeContext: () =>
       mounted
         ? (JSON.parse(mounted.activeContext()) as Record<string, unknown>)
@@ -220,6 +299,7 @@ async function createContext(
           return !document.querySelector<HTMLElement>("#file-explorer")!.hidden;
         },
       );
+      mounted.setReadOnly(readOnly);
       const url = new URL(location.href);
       syncWorkspaceVisibility();
       const activePath = JSON.parse(wasm.publicSnapshot()).snapshot.notebook
@@ -243,6 +323,7 @@ async function createContext(
       deactivate();
       wasm.dispose();
       void transport.close();
+      void collaboration.close();
     },
   };
 }
