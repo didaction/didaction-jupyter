@@ -133,6 +133,7 @@ pub struct NotebookEguiApp {
     outbound: VecDeque<NotebookCommand>,
     editors: Vec<(String, String)>,
     dirty_editors: HashSet<String>,
+    pub external_command_active: bool,
     completion_suggestions: HashMap<String, CompletionReply>,
     completion_selection: HashMap<String, usize>,
     pending_caret_positions: HashMap<String, usize>,
@@ -185,6 +186,7 @@ impl NotebookEguiApp {
             outbound: VecDeque::new(),
             editors,
             dirty_editors: HashSet::new(),
+            external_command_active: false,
             completion_suggestions: HashMap::new(),
             completion_selection: HashMap::new(),
             pending_caret_positions: HashMap::new(),
@@ -234,6 +236,13 @@ impl NotebookEguiApp {
     }
     pub fn drain_commands(&mut self) -> Vec<NotebookCommand> {
         self.outbound.drain(..).collect()
+    }
+    pub fn external_commands_ready(&self) -> bool {
+        self.dirty_editors.is_empty()
+            && !matches!(
+                self.state.sync_state,
+                SyncState::Dirty | SyncState::Executing
+            )
     }
     pub fn finish_command(&mut self, command_id: Uuid) {
         self.pending_execution_cells.remove(&command_id);
@@ -1225,6 +1234,9 @@ impl NotebookEguiApp {
             .corner_radius(CornerRadius::same(3))
             .inner_margin(Margin::same(10));
         let frame_response = frame.show(ui, |ui| {
+            if self.external_command_active {
+                ui.disable();
+            }
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
                 let idle = !matches!(

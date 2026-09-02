@@ -1,5 +1,8 @@
+import asyncio
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -8,6 +11,32 @@ from deploy.runtime_entrypoint import secret_environment
 from services.gateway.app import main
 from services.gateway.app.config import Settings
 from services.gateway.app.jupyter_adapter import AdapterError, JupyterNotebookTransport
+from services.gateway.app.models import Command
+
+
+@pytest.mark.asyncio
+async def test_interrupt_bypasses_busy_execution_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = JupyterNotebookTransport(Settings())
+    lock = asyncio.Lock()
+    adapter.locks["test.ipynb"] = lock
+    kernel = Mock()
+    monkeypatch.setattr(adapter, "_ensure_kernel", AsyncMock(return_value=kernel))
+    monkeypatch.setattr(adapter, "_read_notebook", AsyncMock(return_value={"cells": []}))
+    async with lock:
+        await asyncio.wait_for(
+            adapter.execute(
+                Command(
+                    protocol_version=1,
+                    timeout_ms=1000,
+                    type="interrupt_kernel",
+                    command_id=uuid4(),
+                    idempotency_key="interrupt-test",
+                ),
+                "test.ipynb",
+            ),
+            timeout=1,
+        )
+    kernel.interrupt.assert_called_once()
 
 
 def test_token_file_is_private_configuration(tmp_path: Path) -> None:

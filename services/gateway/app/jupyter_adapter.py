@@ -74,6 +74,11 @@ class JupyterNotebookTransport:
         if notebook_path is None:
             raise AdapterError("invalid_input", "No notebook is open")
         path = self.settings.confined_path(notebook_path)
+        # Interrupt must bypass the execution lock or it waits for execution to finish.
+        if command.type == "interrupt_kernel":
+            kernel = await self._ensure_kernel(path, self.settings.kernel_name)
+            await asyncio.to_thread(kernel.interrupt)
+            return await self._read_notebook(path)
         lock = self.locks.setdefault(path, asyncio.Lock())
         async with lock:
             if command.type in {"query", "reconnect"}:
@@ -133,11 +138,6 @@ class JupyterNotebookTransport:
                     else len(command.code or ""),
                     command.timeout_ms / 1000,
                 )
-            elif command.type == "interrupt_kernel":
-                kernel = await self._ensure_kernel(
-                    path, command.kernel or self.settings.kernel_name
-                )
-                await asyncio.to_thread(kernel.interrupt)
             elif command.type == "restart_kernel":
                 kernel = await self._ensure_kernel(
                     path, command.kernel or self.settings.kernel_name

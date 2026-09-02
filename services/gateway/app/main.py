@@ -147,8 +147,9 @@ async def command_endpoint(command: Command) -> CommandResult:
             return result
         if current_notebook is None:
             raise AdapterError("invalid_input", "No notebook is open")
-        query = command.model_copy(update={"type": "query", "query": "full"})
-        raw = await transport.execute(query, current_notebook)
+        if command.type != "interrupt_kernel":
+            query = command.model_copy(update={"type": "query", "query": "full"})
+            raw = await transport.execute(query, current_notebook)
         result = snapshot_result(command, raw, current_notebook, base_revision)
     except AdapterError as error:
         result = CommandResult(

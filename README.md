@@ -23,6 +23,11 @@ confines notebook paths, correlates kernel messages, bounds outputs, and
 normalizes nbformat into the versioned Rust protocol. Human actions and optional
 browser WebMCP tools therefore share one validated mutation path.
 
+The frontend exposes a transport-independent catalog of 12 notebook tools through
+WebMCP when available, including stable-ID cell editing and execution. See
+[frontend tools](docs/frontend-tools.md) for schemas, architecture, limits, and
+real-browser verification. This does not add an MCP backend or hosted dependency.
+
 Cell execution uses `/api/v1/commands/stream`. Each bounded NDJSON event is a
 normalized notebook snapshot derived from an IOPub update; `clear_output` and
 `update_display_data` replace prior state before the idle final result. Partial

@@ -286,7 +286,7 @@ pub async fn mount_notebook(
     element_id: String,
     snapshot: String,
     dispatch: js_sys::Function,
-) -> Result<(), JsValue> {
+) -> Result<MountedNotebook, JsValue> {
     let snapshot: NotebookSnapshot =
         serde_json::from_str(&snapshot).map_err(|error| JsValue::from_str(&error.to_string()))?;
     let state =
@@ -299,18 +299,88 @@ pub async fn mount_notebook(
         .and_then(|document| document.get_element_by_id(&element_id))
         .ok_or_else(|| JsValue::from_str("notebook canvas element not found"))?
         .dyn_into::<web_sys::HtmlCanvasElement>()?;
-    eframe::WebRunner::new()
+    let runner = eframe::WebRunner::new();
+    let repaint = Arc::new(Mutex::new(None));
+    let created_repaint = Arc::clone(&repaint);
+    runner
         .start(
             canvas,
             eframe::WebOptions::default(),
-            Box::new(move |_| {
+            Box::new(move |creation| {
+                *created_repaint.lock().expect("repaint mutex") = Some(creation.egui_ctx.clone());
                 Ok(Box::new(MountedApp {
                     app: mounted,
                     dispatch,
                 }))
             }),
         )
-        .await
+        .await?;
+    Ok(MountedNotebook {
+        app,
+        runner,
+        repaint,
+    })
+}
+
+/// Narrow host reconciliation handle, never an arbitrary transport escape hatch.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub struct MountedNotebook {
+    app: Arc<Mutex<NotebookEguiApp>>,
+    runner: eframe::WebRunner,
+    repaint: Arc<Mutex<Option<eframe::egui::Context>>>,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl MountedNotebook {
+    #[wasm_bindgen(js_name = setExternalBusy)]
+    pub fn set_external_busy(&self, busy: bool) {
+        self.app.lock().expect("app mutex").external_command_active = busy;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+    }
+    #[wasm_bindgen(js_name = assertExternalReady)]
+    pub fn assert_external_ready(&self) -> Result<(), JsError> {
+        if self
+            .app
+            .lock()
+            .expect("app mutex")
+            .external_commands_ready()
+        {
+            Ok(())
+        } else {
+            Err(JsError::new(
+                "Save pending notebook edits before invoking tools",
+            ))
+        }
+    }
+    #[wasm_bindgen(js_name = applyExternalResult)]
+    pub fn apply_external_result(&self, serialized: &str, progress: bool) -> Result<(), JsError> {
+        let result: CommandResult = serde_json::from_str(serialized).map_err(js_error)?;
+        let mut app = self.app.lock().expect("app mutex");
+        if let Some(snapshot) = result.snapshot {
+            let next = if progress {
+                apply_progress_snapshot(&app.state, snapshot)
+            } else {
+                app.state.replace_snapshot(snapshot)
+            }
+            .map_err(js_error)?;
+            app.replace_state(next);
+        }
+        if let Some(error) = result.error {
+            app.state.last_error = Some(error);
+            app.state.sync_state = notebook_core::SyncState::Error;
+        }
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
+    pub fn dispose(&self) {
+        self.runner.destroy();
+    }
 }
 
 fn js_error(error: impl std::fmt::Display) -> JsError {

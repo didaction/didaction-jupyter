@@ -6,6 +6,7 @@ import {
 import { GatewayNotebookTransport } from "./gateway-client";
 import type { NotebookCommand, NotebookSnapshot } from "./types";
 import { installWebMcp } from "./webmcp";
+import { NotebookTools, type Transaction } from "./notebook-tools";
 
 const status = document.querySelector<HTMLOutputElement>("#connection-status")!;
 const fatal = document.querySelector<HTMLElement>("#fatal-error")!;
@@ -54,24 +55,82 @@ async function boot(): Promise<void> {
         .snapshot.revision,
     ),
   );
-  const hasWebMcp = installWebMcp(
-    gateway,
+  const mounted = await mountNotebook(
+    "notebook-canvas",
+    JSON.stringify(snapshot),
+    dispatchEguiCommand,
+  );
+  const externalExecute = async (serialized: string) => {
+    try {
+      const result = await gateway.execute(serialized, (progress) =>
+        mounted.applyExternalResult(JSON.stringify(progress), true),
+      );
+      mounted.applyExternalResult(result, false);
+      return result;
+    } catch (error) {
+      const command = JSON.parse(serialized) as NotebookCommand;
+      mounted.applyExternalResult(
+        JSON.stringify({
+          protocol_version: 1,
+          command_id: command.command_id,
+          idempotency_key: command.idempotency_key,
+          base_revision: null,
+          committed_revision: null,
+          snapshot: null,
+          error: {
+            code: "transport_error",
+            message:
+              "Tool command failed; reconnect and inspect notebook before retrying",
+            retryable: true,
+          },
+        }),
+        false,
+      );
+      throw error;
+    }
+  };
+  const transaction: Transaction = (task) =>
+    dispatchEguiCommand.transaction(async () => {
+      mounted.assertExternalReady();
+      mounted.setExternalBusy(true);
+      try {
+        return await task(externalExecute);
+      } finally {
+        mounted.setExternalBusy(false);
+      }
+    });
+  const interruptExecute = async (serialized: string) => {
+    // Out-of-band interruption cannot advance a running command's validator revision.
+    const validation = new NotebookApplication(
+      JSON.stringify(
+        (JSON.parse(wasm.publicSnapshot()) as { snapshot: NotebookSnapshot })
+          .snapshot,
+      ),
+    );
+    try {
+      return await new CommandGateway(validation, transport).execute(
+        serialized,
+      );
+    } finally {
+      validation.dispose();
+    }
+  };
+  const tools = new NotebookTools(
+    transaction,
     () =>
       (JSON.parse(wasm.publicSnapshot()) as { snapshot: NotebookSnapshot })
-        .snapshot.revision,
-    startup,
+        .snapshot,
+    () => {},
+    interruptExecute,
   );
+  const webmcp = installWebMcp(tools);
+  const hasWebMcp = webmcp.available;
   status.textContent = hasWebMcp
     ? "Connected · WebMCP ready"
     : "Connected · WebMCP unavailable";
   document.documentElement.dataset.webmcp = hasWebMcp
     ? "available"
     : "unavailable";
-  await mountNotebook(
-    "notebook-canvas",
-    JSON.stringify(snapshot),
-    dispatchEguiCommand,
-  );
   const shell = document.querySelector<HTMLElement>("#notebook-shell")!;
   const resizeObserver = new ResizeObserver(() => {
     requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
@@ -81,6 +140,8 @@ async function boot(): Promise<void> {
     "beforeunload",
     () => {
       resizeObserver.disconnect();
+      webmcp.dispose();
+      mounted.dispose();
       wasm.dispose();
       void transport.close();
     },

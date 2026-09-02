@@ -28,6 +28,7 @@ export interface WasmApplication {
   prepareCommand(input: string): string;
   applyCommandResult(input: string): string;
   publicSnapshot(): string;
+  replaceSnapshot?(input: string): string;
   dispose(): void;
 }
 export interface NotebookTransport {
