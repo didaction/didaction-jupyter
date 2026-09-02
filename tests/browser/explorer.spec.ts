@@ -63,12 +63,18 @@ test("workspace explorer opens notebooks without redirecting another tab", async
       await page.request.get("/api/v1/notebooks?directory=..%2Foutside")
     ).status(),
   ).toBe(400);
+  // First native egui toolbar slot, before Save (desktop toolbar geometry).
+  await page.locator("#notebook-canvas").click({ position: { x: 24, y: 94 } });
+  await expect(page.locator("#file-explorer")).toBeHidden();
+  await page.locator("#notebook-canvas").click({ position: { x: 24, y: 94 } });
+  await expect(page.locator("#file-explorer")).toBeVisible();
   await page.screenshot({ path: ".impeccable/review/desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
   const toggle = page.getByRole("button", {
     name: "Toggle workspace explorer",
   });
-  await toggle.click();
+  await toggle.focus();
+  await page.keyboard.press("Enter");
   await expect(page.locator("#file-explorer")).toBeHidden();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await page.screenshot({ path: ".impeccable/review/mobile.png" });

@@ -54,6 +54,11 @@ async function createContext(
     ),
   );
   let mounted: Awaited<ReturnType<typeof mountNotebook>> | undefined;
+  const syncWorkspaceVisibility = () =>
+    mounted?.setWorkspaceVisible(
+      !document.querySelector<HTMLElement>("#file-explorer")!.hidden,
+    );
+  window.addEventListener("workspace-visibility", syncWorkspaceVisibility);
   const externalExecute = async (serialized: string) => {
     try {
       const result = await gateway.execute(serialized, (progress) =>
@@ -204,8 +209,15 @@ async function createContext(
         "notebook-canvas",
         JSON.stringify(JSON.parse(wasm.publicSnapshot()).snapshot),
         dispatchEguiCommand,
+        () => {
+          document
+            .querySelector<HTMLButtonElement>("#explorer-toggle")!
+            .click();
+          return !document.querySelector<HTMLElement>("#file-explorer")!.hidden;
+        },
       );
       const url = new URL(location.href);
+      syncWorkspaceVisibility();
       const activePath = JSON.parse(wasm.publicSnapshot()).snapshot.notebook
         .path as string;
       url.searchParams.set("notebook", activePath);
@@ -220,6 +232,10 @@ async function createContext(
     },
     deactivate,
     dispose: () => {
+      window.removeEventListener(
+        "workspace-visibility",
+        syncWorkspaceVisibility,
+      );
       deactivate();
       wasm.dispose();
       void transport.close();

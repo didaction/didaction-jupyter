@@ -175,6 +175,8 @@ pub struct NotebookEguiApp {
     capture_target: Option<(String, u32)>,
     capture_region: Option<(egui::Rect, f32, bool)>,
     pub captured_cell: Option<String>,
+    pub workspace_visible: bool,
+    pub workspace_toggle_requested: bool,
     output_views: HashMap<String, OutputViewMode>,
     hidden_line_numbers: HashSet<String>,
     find_open: bool,
@@ -231,6 +233,8 @@ impl NotebookEguiApp {
             capture_target: None,
             capture_region: None,
             captured_cell: None,
+            workspace_visible: true,
+            workspace_toggle_requested: false,
             output_views: HashMap::new(),
             hidden_line_numbers: HashSet::new(),
             find_open: false,
@@ -1053,6 +1057,18 @@ impl NotebookEguiApp {
                 });
             });
             ui.horizontal_wrapped(|ui| {
+                if toolbar_icon_button(
+                    ui,
+                    true,
+                    ToolbarIcon::Workspace,
+                    if self.workspace_visible {
+                        "Hide workspace explorer"
+                    } else {
+                        "Show workspace explorer"
+                    },
+                ) {
+                    self.workspace_toggle_requested = true;
+                }
                 if toolbar_icon_button(ui, idle, ToolbarIcon::Save, "Save notebook") {
                     self.save_visible_edits();
                 }
@@ -2375,6 +2391,7 @@ fn notebook_document_width(available_width: f32) -> f32 {
 
 #[derive(Clone, Copy)]
 enum ToolbarIcon {
+    Workspace,
     Save,
     Add,
     Up,
@@ -2400,6 +2417,14 @@ fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tool
     let stroke = Stroke::new(1.6, color);
     let painter = ui.painter();
     match icon {
+        ToolbarIcon::Workspace => {
+            painter.rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);
+            let x = rect.left() + rect.width() * 0.35;
+            painter.line_segment(
+                [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                stroke,
+            );
+        }
         ToolbarIcon::Save => {
             painter.rect_stroke(rect, 1.0, stroke, egui::StrokeKind::Inside);
             painter.line_segment(

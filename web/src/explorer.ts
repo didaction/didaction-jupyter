@@ -19,6 +19,7 @@ export function installExplorer(
       ? "Show workspace explorer"
       : "Hide workspace explorer";
     window.dispatchEvent(new Event("resize"));
+    window.dispatchEvent(new Event("workspace-visibility"));
   };
   async function load(path: string) {
     const request = ++generation;

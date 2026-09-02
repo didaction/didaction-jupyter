@@ -56,6 +56,8 @@ body {
   gap: 10px;
 }
 #explorer-toggle {
+  position: fixed;
+  left: -100px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -63,6 +65,11 @@ body {
   height: 44px;
   padding: 10px;
   flex-shrink: 0;
+}
+#explorer-toggle:focus-visible {
+  left: 12px;
+  top: 50px;
+  z-index: 10;
 }
 #explorer-toggle svg {
   width: 22px;

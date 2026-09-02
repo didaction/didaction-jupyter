@@ -92,16 +92,21 @@ pub fn validate_notebook_command(input: &str) -> Result<String, JsError> {
 struct MountedApp {
     app: Arc<Mutex<NotebookEguiApp>>,
     dispatch: js_sys::Function,
+    toggle_workspace: Option<js_sys::Function>,
 }
 
 #[cfg(target_arch = "wasm32")]
 impl eframe::App for MountedApp {
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
-        let commands = {
+        let (commands, toggle_requested) = {
             let mut app = self.app.lock().expect("notebook app mutex poisoned");
             app.update(ctx, frame);
-            app.drain_commands()
+            let toggle_requested = std::mem::take(&mut app.workspace_toggle_requested);
+            (app.drain_commands(), toggle_requested)
         };
+        if toggle_requested && let Some(callback) = &self.toggle_workspace {
+            let _ = callback.call0(&JsValue::NULL);
+        }
         for command in commands {
             let command_id = command.command_id;
             {
@@ -286,6 +291,7 @@ pub async fn mount_notebook(
     element_id: String,
     snapshot: String,
     dispatch: js_sys::Function,
+    toggle_workspace: Option<js_sys::Function>,
 ) -> Result<MountedNotebook, JsValue> {
     let snapshot: NotebookSnapshot =
         serde_json::from_str(&snapshot).map_err(|error| JsValue::from_str(&error.to_string()))?;
@@ -311,6 +317,7 @@ pub async fn mount_notebook(
                 Ok(Box::new(MountedApp {
                     app: mounted,
                     dispatch,
+                    toggle_workspace,
                 }))
             }),
         )
@@ -349,6 +356,13 @@ impl MountedNotebook {
     #[wasm_bindgen(js_name = takeCellCapture)]
     pub fn take_cell_capture(&self) -> Option<String> {
         self.app.lock().expect("app mutex").captured_cell.take()
+    }
+    #[wasm_bindgen(js_name = setWorkspaceVisible)]
+    pub fn set_workspace_visible(&self, visible: bool) {
+        self.app.lock().expect("app mutex").workspace_visible = visible;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
     }
     #[wasm_bindgen(js_name = setExternalBusy)]
     pub fn set_external_busy(&self, busy: bool) {
