@@ -133,7 +133,10 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
     { timeout: 60000 },
   );
   await expect(observer.locator("#follow-driver")).toBeEnabled();
-  await expect(page.locator("#follow-driver")).toBeDisabled();
+  await expect(page.locator("#follow-driver")).toBeHidden();
+  await expect(page.locator("#driver-status")).toHaveText("Driver");
+  await expect(page.locator("#driver-status")).toBeVisible();
+  await expect(observer.locator("#driver-status")).toBeHidden();
   const scroll = async (target: Page) =>
     Number(
       (

@@ -373,6 +373,8 @@ async function boot(): Promise<void> {
     document.querySelector<HTMLButtonElement>("#follow-driver")!;
   const followStatus =
     document.querySelector<HTMLOutputElement>("#follow-status")!;
+  const driverStatus =
+    document.querySelector<HTMLOutputElement>("#driver-status")!;
   const activeContext = () =>
     [...openContexts].find((context) => context.isActive());
   let anchor: NotebookContext | undefined;
@@ -400,8 +402,10 @@ async function boot(): Promise<void> {
     },
   );
   const updateFollowButton = () => {
-    followButton.disabled =
-      !follow.enabled && (!activeContext() || !!activeContext()?.canWrite?.());
+    const isDriver = !!activeContext()?.canWrite?.();
+    followButton.hidden = isDriver;
+    driverStatus.hidden = !isDriver;
+    followButton.disabled = !follow.enabled && (!activeContext() || isDriver);
     followButton.setAttribute("aria-pressed", String(follow.enabled));
     followButton.textContent = follow.enabled
       ? "Stop following"

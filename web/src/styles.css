@@ -75,6 +75,15 @@ body {
   color: #53636b;
   font-size: 0.82rem;
 }
+#driver-status {
+  background: #f5a65b;
+  color: #482509;
+  border: 1px solid #a85518;
+  padding: 6px 12px;
+  line-height: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 #explorer-toggle {
   position: fixed;
   left: -100px;

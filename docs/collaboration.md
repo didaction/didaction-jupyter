@@ -60,6 +60,9 @@ use the lease. Brief interruptions fail the UI closed while reconnecting.
 ## Opt-in follow mode
 
 Observers can enable **Follow driver** in the header. It is off by default and
+drivers see an orange **Driver** status badge instead of the follow button. Roles
+are notebook-specific and the header updates when switching notebooks or handing
+off control. Follow mode
 resets on reload. **Stop following** immediately releases scroll control and
 cancels pending automatic notebook selection. The notebook where follow was
 enabled anchors the session, so opening another notebook does not silently pick

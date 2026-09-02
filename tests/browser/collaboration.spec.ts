@@ -158,6 +158,11 @@ test("one driver; observers receive intermediate output and handoff reverses per
   ).toBe(false);
   await expect.poll(async () => (await role(observer)).is_driver).toBe(true);
   await expect.poll(async () => (await role(page)).is_driver).toBe(false);
+  await expect(observer.locator("#follow-driver")).toBeHidden();
+  await expect(observer.locator("#driver-status")).toBeVisible();
+  await expect(page.locator("#follow-driver")).toBeVisible();
+  await expect(page.locator("#driver-status")).toBeHidden();
+  await observer.screenshot({ path: ".runtime/driver-indicator-mobile.png" });
   expect(
     (await call(page, notebook, "delete_cell", { cell_id: cellId })).isError,
   ).toBe(true);
