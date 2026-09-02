@@ -1,0 +1,20 @@
+name: didaction-attach
+services:
+  gateway:
+    build:
+      context: ..
+      target: gateway
+    environment:
+      DIDACTION_JUPYTER_URL: ${DIDACTION_JUPYTER_URL:?set existing Jupyter Server URL}
+      DIDACTION_JUPYTER_TOKEN_FILE: /run/secrets/jupyter_token
+      DIDACTION_WORKSPACE: /tmp/notebook-path-validation
+      DIDACTION_NOTEBOOK_PATH: ${DIDACTION_NOTEBOOK_PATH:-notebook-parity-demo.ipynb}
+      DIDACTION_KERNEL_NAME: ${DIDACTION_KERNEL_NAME:-python3}
+      DIDACTION_TIMEOUT_SECONDS: ${DIDACTION_TIMEOUT_SECONDS:-30}
+    ports: ["127.0.0.1:${DIDACTION_PORT:-5173}:8080"]
+    secrets: [jupyter_token]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+secrets:
+  jupyter_token:
+    file: ${DIDACTION_JUPYTER_TOKEN_FILE:?set existing server token file}

@@ -8,8 +8,8 @@ cargo check --workspace --target wasm32-unknown-unknown
 pnpm run format
 pnpm run typecheck
 pnpm test
-uv run ruff format --check services scripts tests
-uv run ruff check services scripts tests
+uv run ruff format --check services scripts tests deploy
+uv run ruff check services scripts tests deploy
 uv run mypy
 uv run pytest -q
 uv run python -m pip --version

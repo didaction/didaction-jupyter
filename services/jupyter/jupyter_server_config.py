@@ -1,4 +1,5 @@
 import os
+import socket
 from pathlib import Path
 
 c = get_config()  # noqa: F821
@@ -10,7 +11,14 @@ c.ServerApp.port = int(os.environ.get("DIDACTION_JUPYTER_PORT", "8888"))
 c.ServerApp.open_browser = False
 c.ServerApp.root_dir = str(workspace)
 c.ServerApp.allow_remote_access = False
-c.IdentityProvider.token = os.environ["DIDACTION_JUPYTER_TOKEN"]
+c.ServerApp.local_hostnames = ["localhost", "jupyter", socket.gethostname()]
+c.ServerApp.log_level = "WARN"
+c.IdentityProvider.token = (
+    Path(os.environ["DIDACTION_JUPYTER_TOKEN_FILE"]).read_text().strip()
+    if os.environ.get("DIDACTION_JUPYTER_TOKEN_FILE")
+    else os.environ["DIDACTION_JUPYTER_TOKEN"]
+)
+c.ServerApp.port_retries = 0
 c.ServerApp.disable_check_xsrf = False
 c.ServerApp.allow_origin = ""
 c.ServerApp.terminals_enabled = False

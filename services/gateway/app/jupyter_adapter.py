@@ -38,9 +38,18 @@ class JupyterNotebookTransport:
         return {"Authorization": f"token {self.settings.jupyter_token}"}
 
     async def discover(self) -> dict[str, Any]:
+        self.ready = False
         response = await self._request("GET", "/api/status")
         if response.status_code != 200:
             raise AdapterError("disconnected", "Jupyter Server is unavailable", True)
+        response = await self._request("GET", "/api/kernelspecs")
+        if response.status_code != 200:
+            raise AdapterError("disconnected", "Jupyter kernelspec discovery failed", True)
+        if self.settings.kernel_name not in response.json().get("kernelspecs", {}):
+            raise AdapterError("unsupported_operation", "Configured kernelspec is not installed")
+        response = await self._request("GET", "/api/contents", params={"content": 0})
+        if response.status_code != 200:
+            raise AdapterError("disconnected", "Jupyter Contents is unavailable", True)
         self.profile = {
             "adapter": "jupyter",
             "services": ["contents", "sessions", "kernels", "kernel_channels"],

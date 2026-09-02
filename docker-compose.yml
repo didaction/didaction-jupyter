@@ -1,28 +1,67 @@
+name: didaction
 services:
   jupyter:
-    build: .
-    command: jupyter lab --config services/jupyter/jupyter_server_config.py
+    image: ${DIDACTION_RUNTIME_IMAGE:-quay.io/jupyter/minimal-notebook@sha256:aebcf531fc77f3341568f5e37de7eb392ae48f1ae5ce9bc9cf779bd602548d17}
+    command: ["python", "/opt/didaction/runtime_entrypoint.py"]
     environment:
-      DIDACTION_JUPYTER_HOST: 0.0.0.0
-      DIDACTION_JUPYTER_PORT: 8888
-      DIDACTION_JUPYTER_TOKEN: ${DIDACTION_JUPYTER_TOKEN:?generate a development token}
       DIDACTION_NOTEBOOK_WORKSPACE: /workspace
-      JUPYTER_CONFIG_DIR: /tmp/jupyter-config
-      JUPYTER_DATA_DIR: /tmp/jupyter-data
-      JUPYTER_RUNTIME_DIR: /tmp/jupyter-runtime
-    ports: ["127.0.0.1:8888:8888"]
-    volumes: ["notebooks:/workspace"]
+      DIDACTION_JUPYTER_TOKEN_FILE: /run/secrets/jupyter_token
+      DIDACTION_KERNEL_SECRET_ENV: "${DIDACTION_KERNEL_SECRET_ENV:-{}}"
+    env_file:
+      - ${DIDACTION_KERNEL_ENV_FILE:-./deploy/kernel.env}
+    volumes:
+      - type: bind
+        source: ${DIDACTION_NOTEBOOK_WORKSPACE:-./.runtime/notebooks}
+        target: /workspace
+        bind:
+          create_host_path: false
+      - ./deploy/runtime_entrypoint.py:/opt/didaction/runtime_entrypoint.py:ro
+      - ./services/jupyter/jupyter_server_config.py:/opt/didaction/jupyter_server_config.py:ro
+      - ${DIDACTION_KERNEL_SECRETS_DIR:-./.runtime/kernel-secrets}:/run/kernel-secrets:ro
+    secrets: [jupyter_token]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: ${DIDACTION_KERNEL_MEMORY:-4g}
+    cpus: ${DIDACTION_KERNEL_CPUS:-2}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import pathlib, urllib.request; r=urllib.request.Request('http://127.0.0.1:8888/api/status', headers={'Authorization': 'token '+pathlib.Path('/run/secrets/jupyter_token').read_text().strip()}); urllib.request.urlopen(r, timeout=5)",
+        ]
+      interval: 10s
+      timeout: 6s
+      retries: 12
   gateway:
-    build: .
-    command: uvicorn services.gateway.app.main:app --host 0.0.0.0 --port 8080
+    image: didaction-gateway:local
+    build:
+      context: .
+      target: gateway
     environment:
       DIDACTION_JUPYTER_URL: http://jupyter:8888
-      DIDACTION_JUPYTER_TOKEN: ${DIDACTION_JUPYTER_TOKEN:?generate a development token}
-      DIDACTION_WORKSPACE: /workspace
+      DIDACTION_JUPYTER_TOKEN_FILE: /run/secrets/jupyter_token
+      DIDACTION_WORKSPACE: /tmp/notebook-path-validation
       DIDACTION_NOTEBOOK_PATH: ${DIDACTION_NOTEBOOK_PATH:-notebook-parity-demo.ipynb}
       DIDACTION_KERNEL_NAME: ${DIDACTION_KERNEL_NAME:-python3}
-    ports: ["127.0.0.1:8080:8080"]
-    volumes: ["notebooks:/workspace"]
+      DIDACTION_TIMEOUT_SECONDS: ${DIDACTION_TIMEOUT_SECONDS:-30}
+    ports: ["127.0.0.1:${DIDACTION_PORT:-5173}:8080"]
+    secrets: [jupyter_token]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
     depends_on: [jupyter]
-volumes:
-  notebooks:
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=5)",
+        ]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+secrets:
+  jupyter_token:
+    file: ${DIDACTION_JUPYTER_TOKEN_FILE:-./.runtime/secrets/jupyter-token}

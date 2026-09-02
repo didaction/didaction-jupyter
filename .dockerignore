@@ -1,0 +1,15 @@
+.git
+.runtime
+.venv
+target
+node_modules
+web/pkg
+__pycache__
+*.pyc
+.env*
+secrets
+test-results
+playwright-report
+.pytest_cache
+.mypy_cache
+.ruff_cache

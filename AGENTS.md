@@ -51,7 +51,13 @@ WASM callback; only the final result commits the command and ends executing stat
 - Fast checks: `cargo test --workspace && pnpm test && uv run pytest -q`
 - Full verification: `scripts/check.sh`
 - Real acceptance: `scripts/smoke.sh`
-- Docker: export `DIDACTION_JUPYTER_TOKEN`, then `docker compose up --build`
+- Docker: `bash scripts/container.sh up`
+- Container acceptance: `bash scripts/container-check.sh` after building the gateway image.
+
+For runtime images, connection settings, workspace mounts, or secrets changes,
+read `docs/container-deployment.md`. Keep the gateway independent of the runtime
+filesystem: notebook access goes through Jupyter Contents. Verify image upgrades
+with the real container acceptance test.
 
 ## Security boundaries
 

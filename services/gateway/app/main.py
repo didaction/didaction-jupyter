@@ -2,11 +2,12 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import Settings
 from .jupyter_adapter import AdapterError, JupyterNotebookTransport
@@ -84,6 +85,10 @@ async def health() -> dict[str, str]:
 
 @app.get("/readyz")
 async def ready() -> JSONResponse:
+    try:
+        await transport.discover()
+    except (AdapterError, ValueError):
+        transport.ready = False
     return JSONResponse(
         status_code=200 if transport.ready else 503,
         content={
@@ -221,12 +226,27 @@ async def command_stream(command: Command) -> StreamingResponse:
 
 
 @app.get("/api/v1/download")
-async def download_notebook() -> FileResponse:
+async def download_notebook() -> Response:
     if current_notebook is None:
         raise ValueError("No notebook is open")
-    path = (settings.workspace / current_notebook).resolve()
-    return FileResponse(
-        path, filename=Path(current_notebook).name, media_type="application/x-ipynb+json"
+    notebook = await transport.execute(
+        Command(
+            type="query",
+            protocol_version=1,
+            command_id=uuid4(),
+            idempotency_key="download",
+            timeout_ms=30000,
+            query="full",
+        ),
+        current_notebook,
+    )
+    encoded = json.dumps(notebook).encode()
+    if len(encoded) > settings.response_limit:
+        return JSONResponse(status_code=413, content={"code": "bounds_exceeded"})
+    return Response(
+        encoded,
+        media_type="application/x-ipynb+json",
+        headers={"Content-Disposition": 'attachment; filename="notebook.ipynb"'},
     )
 
 
@@ -235,3 +255,7 @@ async def malformed(_: Request, __: json.JSONDecodeError) -> JSONResponse:
     return JSONResponse(
         status_code=400, content={"code": "invalid_input", "message": "Malformed JSON"}
     )
+
+
+if settings.static_dir is not None:
+    app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="frontend")

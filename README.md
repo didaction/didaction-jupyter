@@ -82,11 +82,17 @@ scripts/dev.sh
 ### Docker
 
 ```bash
-export DIDACTION_JUPYTER_TOKEN="$(openssl rand -hex 24)"
-docker compose up --build
+bash scripts/container.sh up
 ```
 
-Jupyter and the gateway are published on loopback only.
+This builds the frontend/gateway and starts the existing Jupyter
+`quay.io/jupyter/minimal-notebook` image, pinned by multi-architecture digest in
+`docker-compose.yml`. No local Rust, Node, or Python installation is required.
+Only `http://127.0.0.1:5173` is published. Jupyter stays on the private container
+network. Stop with `bash scripts/container.sh down`; notebooks remain on disk.
+
+See [container deployment](docs/container-deployment.md) for custom images,
+workspaces, kernel secrets, connection settings, and attach mode.
 
 ## Verify
 
