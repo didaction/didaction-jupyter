@@ -1,0 +1,10 @@
+FROM docker.io/library/julia:1.10.10-bookworm@sha256:2323a3445e7701cf8f7190293e360e4f67c7e43de24480183f178aa1062dc99b AS julia
+FROM quay.io/jupyter/minimal-notebook@sha256:aebcf531fc77f3341568f5e37de7eb392ae48f1ae5ce9bc9cf779bd602548d17
+USER root
+COPY --from=julia /usr/local/julia /usr/local/julia
+ENV PATH="/usr/local/julia/bin:${PATH}" JULIA_DEPOT_PATH=/opt/julia-depot JULIA_PROJECT=/opt/julia-environment JULIA_PKG_PRECOMPILE_AUTO=0 JULIA_NUM_PRECOMPILE_TASKS=1 GKSwstype=100
+RUN mkdir /opt/julia-depot /opt/julia-environment && chown -R 1000:100 /opt/julia-depot /opt/julia-environment
+COPY --chown=1000:100 julia/ /opt/julia-environment/
+USER ${NB_UID}
+RUN julia --project=/opt/julia-environment -e 'using Pkg; Pkg.instantiate(); Pkg.build("IJulia"); using IJulia; installkernel("Julia course", "--project=/opt/julia-environment", "-O0", "--heap-size-hint=600M", "--compiled-modules=no")'
+RUN julia -O0 --heap-size-hint=600M --compiled-modules=no --project=/opt/julia-environment -e 'using Plots, DSP, ControlSystems, Interpolations, Interact, Printf; savefig(plot([0,1],[0,1]), "/tmp/course-smoke.png"); println("Course packages ready")'

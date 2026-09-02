@@ -17,6 +17,26 @@ use uuid::Uuid;
 const MAX_EMBEDDED_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const COMPLETION_KEY_HELP: &str = "Up/Down select · Enter or Tab apply · Esc close";
 
+fn kernel_syntax(kernel: &str) -> Syntax {
+    if !kernel.to_ascii_lowercase().starts_with("julia") {
+        return Syntax::python();
+    }
+    let mut syntax = Syntax::new("Julia");
+    syntax.comment = "#";
+    syntax.comment_multiline = ["#=", "=#"];
+    syntax.keywords = [
+        "using", "import", "export", "function", "end", "if", "else", "elseif", "for", "while",
+        "begin", "let", "return", "struct", "mutable", "module", "macro", "quote", "try", "catch",
+        "finally", "const", "local", "global", "where", "do", "in", "break", "continue",
+    ]
+    .into_iter()
+    .collect();
+    syntax.special = ["true", "false", "nothing", "missing"]
+        .into_iter()
+        .collect();
+    syntax
+}
+
 #[derive(Default)]
 struct DataImageBytesLoader;
 
@@ -346,12 +366,21 @@ impl NotebookEguiApp {
             self.pending_execution_cells
                 .insert(command_id, cell_id.clone());
         }
+        let timeout_ms = if self.state.snapshot.kernel.name.starts_with("julia")
+            && matches!(
+                kind,
+                NotebookCommandKind::ExecuteCell { .. } | NotebookCommandKind::ExecuteCode { .. }
+            ) {
+            120_000
+        } else {
+            30_000
+        };
         self.outbound.push_back(NotebookCommand {
             protocol_version: PROTOCOL_VERSION,
             command_id,
             idempotency_key: Uuid::new_v4().to_string(),
             expected_revision: Some(self.state.snapshot.revision),
-            timeout_ms: 30_000,
+            timeout_ms,
             kind,
         });
     }
@@ -1377,7 +1406,7 @@ impl NotebookEguiApp {
                                 .with_rows(editor.lines().count().clamp(2, 18))
                                 .with_fontsize(14.0)
                                 .with_theme(ColorTheme::GITHUB_LIGHT)
-                                .with_syntax(Syntax::python())
+                                .with_syntax(kernel_syntax(&self.state.snapshot.kernel.name))
                                 .with_numlines(!self.hidden_line_numbers.contains(&cell.id))
                                 .vscroll(false)
                                 .show(ui, editor);
@@ -2908,6 +2937,15 @@ mod tests {
         let app = NotebookEguiApp::new(NotebookState::new(snapshot).unwrap());
 
         assert!(app.rendered_markdown.contains("code"));
+    }
+
+    #[test]
+    fn julia_kernel_uses_julia_keywords() {
+        let syntax = kernel_syntax("julia-course-1.10");
+        assert_eq!(syntax.language, "Julia");
+        assert!(syntax.keywords.contains("function"));
+        assert_eq!(syntax.comment_multiline, ["#=", "=#"]);
+        assert_eq!(kernel_syntax("python3").language, "Python");
     }
 
     #[test]
