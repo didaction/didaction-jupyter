@@ -132,7 +132,11 @@ export class WorkspaceTools implements NotebookToolInvoker {
     this.active = notebook;
     await context.activate();
   }
-  private async invoke(name: string, input: unknown): Promise<ToolResult> {
+  private async invoke(
+    name: string,
+    input: unknown,
+    followGuard?: () => boolean,
+  ): Promise<ToolResult> {
     // Human rename changes the transport's identity too; never route an old address to the new file.
     for (const [oldPath, context] of [...this.notebooks]) {
       const newPath = context.path?.() ?? oldPath;
@@ -186,6 +190,8 @@ export class WorkspaceTools implements NotebookToolInvoker {
         context = await this.create(notebook);
         this.notebooks.set(notebook, context);
       }
+      if (followGuard && (!followGuard() || context.canWrite?.()))
+        return result({ ok: false, cancelled: true }, true);
       if (this.active !== notebook) {
         const previous = this.notebooks.get(this.active ?? "");
         previous?.deactivate();
@@ -298,6 +304,19 @@ export class WorkspaceTools implements NotebookToolInvoker {
       return run();
     const task = this.tail.then(run);
     this.tail = task;
+    return task;
+  }
+  async openForFollow(
+    notebook: string,
+    current: () => boolean,
+  ): Promise<boolean> {
+    const task = this.tail.then(async () => {
+      if (!current()) return false;
+      return !(
+        await this.invoke("open_notebook", { notebook_path: notebook }, current)
+      ).isError;
+    });
+    this.tail = task.catch(() => undefined);
     return task;
   }
   dispose(): void {

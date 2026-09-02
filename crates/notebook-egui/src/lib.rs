@@ -155,6 +155,9 @@ pub struct NotebookEguiApp {
     dirty_editors: HashSet<String>,
     pub external_command_active: bool,
     pub read_only: bool,
+    pub scroll_fraction: f32,
+    pub follow_scroll: Option<f32>,
+    scroll_extent: f32,
     completion_suggestions: HashMap<String, CompletionReply>,
     completion_selection: HashMap<String, usize>,
     pending_caret_positions: HashMap<String, usize>,
@@ -214,6 +217,9 @@ impl NotebookEguiApp {
             dirty_editors: HashSet::new(),
             external_command_active: false,
             read_only: false,
+            scroll_fraction: 0.0,
+            follow_scroll: None,
+            scroll_extent: 0.0,
             completion_suggestions: HashMap::new(),
             completion_selection: HashMap::new(),
             pending_caret_positions: HashMap::new(),
@@ -487,6 +493,7 @@ impl NotebookEguiApp {
             "cell_id": selected.as_ref().map(|(_, cell)| &cell.id),
             "cell_index": selected.as_ref().map(|(index, _)| index),
             "mode": if self.edit_mode { "edit" } else { "command" },
+            "scroll_fraction": self.scroll_fraction,
         })
     }
     fn selected_cell(&self) -> Option<(usize, Cell)> {
@@ -1961,27 +1968,40 @@ impl eframe::App for NotebookEguiApp {
                     }),
             )
             .show(ctx, |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        ui.set_width(notebook_document_width(ui.available_width()));
-                        if self.state.snapshot.cells.is_empty() {
-                            ui.vertical_centered(|ui| {
-                                ui.add_space(80.0);
-                                ui.heading("A quiet page, ready for work");
-                                ui.label("Add a code or Markdown cell to begin.");
-                            });
-                        }
-                        for (index, cell) in
-                            self.state.snapshot.cells.clone().into_iter().enumerate()
-                        {
-                            self.cell(ui, index, cell);
-                            ui.add_space(10.0);
-                        }
-                        if ui.input(|input| input.pointer.any_released()) {
-                            self.dragging_cell = None;
-                        }
-                    });
+                let mut scroll = egui::ScrollArea::vertical().auto_shrink([false, false]);
+                if let Some(fraction) = self.follow_scroll {
+                    scroll = scroll.vertical_scroll_offset(fraction * self.scroll_extent);
+                }
+                let output = scroll.show(ui, |ui| {
+                    ui.set_width(notebook_document_width(ui.available_width()));
+                    if self.state.snapshot.cells.is_empty() {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(80.0);
+                            ui.heading("A quiet page, ready for work");
+                            ui.label("Add a code or Markdown cell to begin.");
+                        });
+                    }
+                    for (index, cell) in self.state.snapshot.cells.clone().into_iter().enumerate() {
+                        self.cell(ui, index, cell);
+                        ui.add_space(10.0);
+                    }
+                    if ui.input(|input| input.pointer.any_released()) {
+                        self.dragging_cell = None;
+                    }
+                });
+                self.scroll_extent = (output.content_size.y - output.inner_rect.height()).max(0.0);
+                self.scroll_fraction = if self.scroll_extent > 0.0 {
+                    (output.state.offset.y / self.scroll_extent).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                if self.scroll_extent > 0.0
+                    && self
+                        .follow_scroll
+                        .is_some_and(|target| (target - self.scroll_fraction).abs() > 0.001)
+                {
+                    ui.ctx().request_repaint();
+                }
             });
     }
 }

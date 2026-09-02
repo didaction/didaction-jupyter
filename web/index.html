@@ -37,9 +37,15 @@
           </svg></button
         ><strong>didaction</strong><span>local notebook</span>
       </div>
-      <output id="connection-status" role="status" aria-live="polite"
-        >Connecting…</output
-      >
+      <div class="collaboration-controls">
+        <button id="follow-driver" type="button" aria-pressed="false" disabled>
+          Follow driver
+        </button>
+        <output id="follow-status" role="status" aria-live="polite"></output>
+        <output id="connection-status" role="status" aria-live="polite"
+          >Connecting…</output
+        >
+      </div>
     </header>
     <div class="workspace-layout">
       <aside id="file-explorer" aria-label="Notebook file explorer">

@@ -1,4 +1,11 @@
 import type { NotebookSnapshot } from "./types";
+import {
+  validateFollowView,
+  type FollowTransport,
+  type FollowView,
+  type FollowPublisher,
+  type FollowPosition,
+} from "./follow";
 
 export interface CollaborationState {
   notebook_path: string;
@@ -12,12 +19,20 @@ export interface CollaborationState {
 }
 
 /** HTTP adapter; ownership policy and fanout live in the gateway, not here. */
-export class NotebookCollaboration {
+export class NotebookCollaboration implements FollowTransport, FollowPublisher {
   private token = "";
   private stopped = false;
   private controller = new AbortController();
   state?: CollaborationState;
-  constructor(private path: string) {}
+  private published = "";
+  private publishing = false;
+  private publishedAt = 0;
+  constructor(
+    private path: string,
+    private readonly resolveTarget: (
+      path: string,
+    ) => NotebookCollaboration | undefined = () => undefined,
+  ) {}
   rename(path: string): void {
     this.path = path;
   }
@@ -26,6 +41,85 @@ export class NotebookCollaboration {
       "x-notebook-path": encodeURIComponent(this.path),
       "x-notebook-client": this.token,
     };
+  }
+  async publish(position: FollowPosition): Promise<void> {
+    const target =
+      position.notebook_path === this.path
+        ? this
+        : this.resolveTarget(position.notebook_path);
+    if (!target) return;
+    if (
+      !this.state?.is_driver ||
+      !target.state?.is_driver ||
+      this.publishing ||
+      this.stopped
+    )
+      return;
+    const view = {
+      protocol_version: 1,
+      notebook_path: target.path,
+      scroll_fraction: Math.round(position.scroll_fraction * 1000) / 1000,
+    };
+    const key = JSON.stringify(view);
+    if (key === this.published && performance.now() - this.publishedAt < 2000)
+      return;
+    this.publishing = true;
+    try {
+      const response = await fetch("/api/v1/collaboration/view", {
+        method: "POST",
+        headers: {
+          ...this.headers(),
+          "content-type": "application/json",
+          "x-notebook-target-client": target.token,
+        },
+        body: key,
+        signal: AbortSignal.any([
+          this.controller.signal,
+          AbortSignal.timeout(5000),
+        ]),
+      });
+      if (response.ok) {
+        this.published = key;
+        this.publishedAt = performance.now();
+      }
+    } catch {
+      /* The main membership stream owns connection recovery. */
+    } finally {
+      this.publishing = false;
+    }
+  }
+  subscribe(receive: (view: FollowView | null) => void): () => void {
+    const controller = new AbortController();
+    void (async () => {
+      let sequence = -1;
+      while (!controller.signal.aborted && !this.stopped) {
+        try {
+          const response = await fetch(
+            `/api/v1/collaboration/view?after=${sequence}`,
+            {
+              headers: this.headers(),
+              signal: AbortSignal.any([
+                controller.signal,
+                this.controller.signal,
+                AbortSignal.timeout(15000),
+              ]),
+            },
+          );
+          if (!response.ok) throw new Error("Follow connection unavailable");
+          const text = await response.text();
+          if (text.length > 2048) throw new Error("Follow event exceeds limit");
+          const event = JSON.parse(text) as { sequence: number; view: unknown };
+          if (controller.signal.aborted || this.stopped) return;
+          receive(event.view === null ? null : validateFollowView(event.view));
+          sequence = event.sequence;
+        } catch {
+          if (controller.signal.aborted || this.stopped) return;
+          receive(null);
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+    })();
+    return () => controller.abort();
   }
   async join(): Promise<void> {
     const response = await fetch("/api/v1/collaboration/join", {

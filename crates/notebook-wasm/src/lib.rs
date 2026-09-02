@@ -386,6 +386,21 @@ impl MountedNotebook {
             ctx.request_repaint();
         }
     }
+    #[wasm_bindgen(js_name = scrollFraction)]
+    pub fn scroll_fraction(&self) -> f32 {
+        self.app.lock().expect("app mutex").scroll_fraction
+    }
+    #[wasm_bindgen(js_name = setFollowScroll)]
+    pub fn set_follow_scroll(&self, fraction: Option<f32>) -> Result<(), JsError> {
+        if fraction.is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value)) {
+            return Err(JsError::new("Scroll fraction must be between zero and one"));
+        }
+        self.app.lock().expect("app mutex").follow_scroll = fraction;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
     #[wasm_bindgen(js_name = assertExternalReady)]
     pub fn assert_external_ready(&self) -> Result<(), JsError> {
         if self

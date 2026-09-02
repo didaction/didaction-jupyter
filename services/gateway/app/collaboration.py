@@ -5,6 +5,7 @@ coalesce safely: a slow reader receives the latest state, not an unbounded queue
 """
 
 import asyncio
+import math
 import secrets
 import time
 from collections.abc import Callable
@@ -30,6 +31,9 @@ class Room:
     origin: str | None = None
     changed: asyncio.Event = field(default_factory=asyncio.Event)
     active: int = 0
+    view: dict[str, Any] | None = None
+    view_sequence: int = 0
+    view_changed: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 def first_connected(clients: list[str]) -> str | None:
@@ -65,7 +69,10 @@ class Collaboration:
                 del room.members[token]
             clients = [m.client_id for m in room.members.values()]
             if room.driver not in clients:
-                room.driver = self.elect(clients)
+                elected = self.elect(clients)
+                if elected != room.driver:
+                    room.driver = elected
+                    self.clear_view(room)
             if expired:
                 self.notify(room)
         return room
@@ -104,7 +111,51 @@ class Collaboration:
         if client_id not in [m.client_id for m in room.members.values()]:
             raise AdapterError("invalid_input", "Target collaborator is not connected")
         room.driver = client_id
+        self.clear_view(room)
         self.notify(room)
+
+    def clear_view(self, room: Room) -> None:
+        room.view = None
+        room.view_sequence += 1
+        room.view_changed.set()
+        room.view_changed = asyncio.Event()
+
+    def publish_view(
+        self, path: str, token: str, target: str, target_token: str, fraction: float
+    ) -> None:
+        """Transport-neutral presence; neither notebook contents nor revisions change.
+
+        The publisher must drive both the anchor and active notebook. This proves
+        continuity across notebook-scoped identities without trusting a public ID.
+        """
+        self.require_driver(path, token)
+        self.require_driver(target, target_token)
+        if not math.isfinite(fraction) or not 0 <= fraction <= 1:
+            raise AdapterError("invalid_input", "Scroll fraction must be between zero and one")
+        room = self.room(path)
+        view = {
+            "protocol_version": 1,
+            "notebook_path": target,
+            "scroll_fraction": fraction,
+            "driver_id": room.driver,
+        }
+        if room.view == view:
+            return
+        room.view = view
+        room.view_sequence += 1
+        room.view_changed.set()
+        room.view_changed = asyncio.Event()
+
+    async def wait_view(self, path: str, token: str, after: int) -> dict[str, Any]:
+        self.member(path, token)
+        room = self.room(path)
+        if room.view_sequence <= after:
+            try:
+                await asyncio.wait_for(room.view_changed.wait(), 10)
+            except TimeoutError:
+                pass
+        self.member(path, token)
+        return {"sequence": room.view_sequence, "view": room.view}
 
     def rename(self, old: str, new: str) -> None:
         room = self.rooms.pop(old)

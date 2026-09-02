@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict, Field
 
 from .collaboration import Collaboration
 from .config import Settings
@@ -435,6 +436,33 @@ async def collaboration_error(_: Request, error: AdapterError) -> JSONResponse:
 async def join_notebook(request: Request) -> JSONResponse:
     return JSONResponse(
         collaboration.join(request_notebook(request)), headers={"Cache-Control": "no-store"}
+    )
+
+
+class FollowViewInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    protocol_version: int = Field(ge=1, le=1)
+    notebook_path: str = Field(min_length=1, max_length=512)
+    scroll_fraction: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+@app.post("/api/v1/collaboration/view")
+async def publish_view(view: FollowViewInput, request: Request) -> dict[str, bool]:
+    collaboration.publish_view(
+        request_notebook(request),
+        client_token(request),
+        settings.confined_path(view.notebook_path),
+        request.headers.get("x-notebook-target-client", ""),
+        view.scroll_fraction,
+    )
+    return {"ok": True}
+
+
+@app.get("/api/v1/collaboration/view")
+async def follow_view(request: Request, after: int = -1) -> JSONResponse:
+    return JSONResponse(
+        await collaboration.wait_view(request_notebook(request), client_token(request), after),
+        headers={"Cache-Control": "no-store"},
     )
 
 

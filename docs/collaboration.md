@@ -57,6 +57,42 @@ check elects the oldest survivor. Ownership never expires during accepted work.
 Explicit close releases promptly; browsers which cannot send unload requests
 use the lease. Brief interruptions fail the UI closed while reconnecting.
 
+## Opt-in follow mode
+
+Observers can enable **Follow driver** in the header. It is off by default and
+resets on reload. **Stop following** immediately releases scroll control and
+cancels pending automatic notebook selection. The notebook where follow was
+enabled anchors the session, so opening another notebook does not silently pick
+a different driver. The anchor must remain open in both workspaces. A driver
+publishes their active notebook to the notebooks they control; switching into a
+notebook they do not control does not publish a new follow position.
+
+Follow uses a bounded `FollowView` (`protocol_version: 1`, `notebook_path`,
+`scroll_fraction` in `[0,1]`, public `driver_id`). Fractions are relative to the
+scrollable document length, not browser pixels. Collapsed cells and different
+layout widths can therefore produce approximate rather than pixel-identical
+reading positions. Selection, output collapse and notebook edits are not changed
+by follow. Unsaved work or becoming driver prevents automatic navigation.
+
+`web/src/follow.ts` is the transport-independent opt-in/cancellation controller;
+its `FollowTransport.subscribe` and `FollowPublisher.publish` interfaces also
+support in-memory transports for tests. `NotebookCollaboration` supplies the
+current HTTP adapter. Publishing is
+through `Collaboration.publish_view` with authorization for both the anchor and
+target notebook. No public client ID can substitute for a connection capability.
+
+`POST/GET /api/v1/collaboration/view` carries presence separately from document
+snapshots. Small long-poll events coalesce to the latest view; scrolling never
+increments notebook revisions or resends cell contents. Browser publishing is
+throttled to four times per second and unchanged positions are deduplicated.
+Only opted-in observers subscribe to this presence stream. Disconnects and
+driver changes pause follow and release pinned scrolling; promotion to driver
+turns follow off. Nothing is written into the notebook file.
+
+WASM exposes `scrollFraction()` and bounded `setFollowScroll(fraction|null)` on
+the mounted notebook. egui owns the scroll area; TypeScript owns transport and
+workspace selection. `get_active_context` also reports `scroll_fraction`.
+
 ## Limits and trust
 
 This coordinates **one gateway process**, not independent replicas or JupyterLab

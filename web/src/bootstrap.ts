@@ -10,6 +10,15 @@ import { NotebookTools, type Transaction } from "./notebook-tools";
 import { installExplorer } from "./explorer";
 import { WorkspaceTools, type OpenNotebook } from "./workspace-tools";
 import { NotebookCollaboration } from "./collaboration";
+import { FollowController } from "./follow";
+
+interface NotebookContext extends OpenNotebook {
+  connection: NotebookCollaboration;
+  scrollFraction(): number;
+  followScroll(fraction: number | null): void;
+  isActive(): boolean;
+}
+const openContexts = new Set<NotebookContext>();
 
 const status = document.querySelector<HTMLOutputElement>("#connection-status")!;
 const fatal = document.querySelector<HTMLElement>("#fatal-error")!;
@@ -29,8 +38,13 @@ const command = (
 async function createContext(
   startup: { path: string; kernel: string },
   create = false,
-): Promise<OpenNotebook> {
-  const collaboration = new NotebookCollaboration(startup.path);
+): Promise<NotebookContext> {
+  const collaboration = new NotebookCollaboration(
+    startup.path,
+    (path) =>
+      [...openContexts].find((context) => context.path?.() === path)
+        ?.connection,
+  );
   await collaboration.join();
   let readOnly = !collaboration.state?.is_driver;
   const transport = new GatewayNotebookTransport(
@@ -269,8 +283,12 @@ async function createContext(
     old.replaceWith(fresh);
     document.querySelector<HTMLElement>("#notebook-shell")!.hidden = true;
   };
-  return {
+  const context: NotebookContext = {
     tools,
+    connection: collaboration,
+    isActive: () => mounted !== undefined,
+    scrollFraction: () => mounted?.scrollFraction() ?? 0,
+    followScroll: (fraction) => mounted?.setFollowScroll(fraction),
     canWrite: () => !readOnly,
     collaboration: () => ({
       client_id: collaboration.state?.client_id ?? null,
@@ -316,6 +334,7 @@ async function createContext(
     },
     deactivate,
     dispose: () => {
+      openContexts.delete(context);
       window.removeEventListener(
         "workspace-visibility",
         syncWorkspaceVisibility,
@@ -326,6 +345,8 @@ async function createContext(
       void collaboration.close();
     },
   };
+  openContexts.add(context);
+  return context;
 }
 
 async function boot(): Promise<void> {
@@ -348,6 +369,78 @@ async function boot(): Promise<void> {
     },
   );
   await workspace.seed(startup.path, initial);
+  const followButton =
+    document.querySelector<HTMLButtonElement>("#follow-driver")!;
+  const followStatus =
+    document.querySelector<HTMLOutputElement>("#follow-status")!;
+  const activeContext = () =>
+    [...openContexts].find((context) => context.isActive());
+  let anchor: NotebookContext | undefined;
+  const follow = new FollowController(
+    async (view, current) => {
+      const allowed = () =>
+        current() &&
+        !!anchor &&
+        !anchor.canWrite?.() &&
+        anchor.collaboration?.().driver_id === view.driver_id;
+      if (!allowed()) return;
+      if (!(await workspace.openForFollow(view.notebook_path, allowed)))
+        throw new Error("Follow target cannot be selected");
+      if (allowed()) {
+        activeContext()?.followScroll(view.scroll_fraction);
+        followStatus.textContent = "";
+        followButton.title = `Following ${view.notebook_path}. Click to browse independently.`;
+      }
+    },
+    () => {
+      for (const context of openContexts) context.followScroll(null);
+    },
+    () => {
+      followStatus.textContent = "Follow paused · waiting for driver";
+    },
+  );
+  const updateFollowButton = () => {
+    followButton.disabled =
+      !follow.enabled && (!activeContext() || !!activeContext()?.canWrite?.());
+    followButton.setAttribute("aria-pressed", String(follow.enabled));
+    followButton.textContent = follow.enabled
+      ? "Stop following"
+      : "Follow driver";
+    if (!follow.enabled)
+      followButton.title =
+        "Opt in to the driver's notebook and scroll position";
+  };
+  followButton.onclick = () => {
+    if (follow.enabled) {
+      follow.stop();
+      anchor = undefined;
+      followStatus.textContent = "";
+    } else {
+      anchor = activeContext();
+      if (!anchor || anchor.canWrite?.()) return;
+      follow.start(anchor.connection);
+      followStatus.textContent = "Waiting for driver’s view…";
+    }
+    updateFollowButton();
+  };
+  const followTimer = window.setInterval(() => {
+    if (anchor && (!openContexts.has(anchor) || anchor.canWrite?.())) {
+      follow.stop();
+      anchor = undefined;
+      followStatus.textContent = "";
+    }
+    updateFollowButton();
+    const active = activeContext();
+    if (!active?.canWrite?.()) return;
+    for (const context of openContexts)
+      if (context.canWrite?.())
+        void context.connection.publish({
+          protocol_version: 1,
+          notebook_path: active.path!(),
+          scroll_fraction: active.scrollFraction(),
+        });
+  }, 250);
+  updateFollowButton();
   installExplorer(
     startup.path,
     () => {},
@@ -374,6 +467,8 @@ async function boot(): Promise<void> {
   window.addEventListener(
     "beforeunload",
     () => {
+      clearInterval(followTimer);
+      follow.stop();
       resizeObserver.disconnect();
       webmcp.dispose();
       workspace.dispose();

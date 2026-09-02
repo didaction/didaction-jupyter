@@ -25,4 +25,4 @@ curl -fsS "$DIDACTION_GATEWAY_URL/readyz"
 uv run python scripts/smoke.py
 curl -fsS "$DIDACTION_GATEWAY_URL/api/v1/download" >/dev/null
 node scripts/container-browser.mjs
-DIDACTION_BROWSER_GATEWAY="$DIDACTION_GATEWAY_URL" pnpm exec playwright test tests/browser/tools.spec.ts tests/browser/explorer.spec.ts tests/browser/collaboration.spec.ts --workers=1
+DIDACTION_BROWSER_GATEWAY="$DIDACTION_GATEWAY_URL" pnpm exec playwright test tests/browser/tools.spec.ts tests/browser/explorer.spec.ts tests/browser/collaboration.spec.ts tests/browser/follow.spec.ts --workers=1

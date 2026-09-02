@@ -55,6 +55,26 @@ body {
   align-items: center;
   gap: 10px;
 }
+.shell-header .collaboration-controls {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-block: 6px;
+  min-width: 0;
+}
+#follow-driver {
+  min-height: 32px;
+  white-space: nowrap;
+}
+#follow-driver[aria-pressed="true"] {
+  background: #d2e8f6;
+  border-color: #2d698f;
+  color: #194e70;
+}
+#follow-status {
+  color: #53636b;
+  font-size: 0.82rem;
+}
 #explorer-toggle {
   position: fixed;
   left: -100px;
@@ -169,6 +189,9 @@ button:disabled {
   background: #f7f7f7;
 }
 @media (max-width: 640px) {
+  #follow-driver {
+    min-height: 44px;
+  }
   #file-explorer {
     width: 180px;
     flex-basis: 180px;
