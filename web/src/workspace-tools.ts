@@ -1,0 +1,237 @@
+import type {
+  NotebookToolInvoker,
+  ToolDefinition,
+  ToolResult,
+} from "./notebook-tools";
+
+export interface OpenNotebook {
+  tools: NotebookToolInvoker;
+  path?(): string;
+  ready(): void;
+  activate(): Promise<void>;
+  deactivate(): void;
+  dispose(): void;
+}
+const pathField = { type: "string" as const, minLength: 1, maxLength: 512 };
+function path(value: unknown, root = false): string {
+  if (
+    typeof value !== "string" ||
+    value.length > 512 ||
+    (!value && !root) ||
+    /[\\%?#:\x00-\x1f]/.test(value) ||
+    (value && value.split("/").some((part) => !part || part.startsWith(".")))
+  )
+    throw new Error("Use a relative path inside the configured workspace");
+  if (!root && !value.endsWith(".ipynb"))
+    throw new Error("Notebook path must end in .ipynb");
+  return value;
+}
+const result = (value: Record<string, unknown>, isError = false): ToolResult =>
+  new TextEncoder().encode(JSON.stringify(value)).length > 200000
+    ? result(
+        {
+          ok: false,
+          error: {
+            code: "bounds_exceeded",
+            message:
+              "Tool result exceeds limit; use a narrower folder or read_cell",
+          },
+        },
+        true,
+      )
+    : {
+        content: [{ type: "text", text: JSON.stringify(value) }],
+        structuredContent: value,
+        isError,
+      };
+/** One page-local workspace; routing never falls back to whichever notebook is active. */
+export class WorkspaceTools implements NotebookToolInvoker {
+  private readonly notebooks = new Map<string, OpenNotebook>();
+  private active: string | null = null;
+  private tail: Promise<unknown> = Promise.resolve();
+  constructor(
+    private readonly catalog: ToolDefinition[],
+    private readonly create: (path: string) => Promise<OpenNotebook>,
+    private readonly list: (directory: string) => Promise<unknown>,
+  ) {}
+  listTools(): ToolDefinition[] {
+    const scoped: ToolDefinition[] = this.catalog.map((tool) => ({
+      ...tool,
+      inputSchema: {
+        ...tool.inputSchema,
+        properties: {
+          notebook_path: pathField,
+          ...tool.inputSchema.properties,
+        },
+        required: ["notebook_path", ...tool.inputSchema.required],
+      },
+    }));
+    for (const name of [
+      "list_open_notebooks",
+      "list_notebooks",
+      "open_notebook",
+      "close_notebook",
+    ]) {
+      const properties: ToolDefinition["inputSchema"]["properties"] =
+        name === "list_open_notebooks"
+          ? {}
+          : name === "list_notebooks"
+            ? { directory: { ...pathField, minLength: 0 } }
+            : { notebook_path: pathField };
+      scoped.push({
+        name,
+        description: {
+          list_open_notebooks:
+            "List notebooks open in this frontend workspace (not other browser tabs).",
+          list_notebooks:
+            "List notebooks and subfolders inside the configured workspace; directory may be empty for root.",
+          open_notebook:
+            "Open an existing notebook and select its egui view. Does not create files.",
+          close_notebook:
+            "Close this workspace's notebook view without deleting the file or stopping its kernel. Pending edits prevent closing.",
+        }[name]!,
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties,
+          required: Object.keys(properties),
+        },
+        annotations: {
+          readOnlyHint: name.startsWith("list"),
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      });
+    }
+    return structuredClone(scoped);
+  }
+  async seed(notebook: string, context: OpenNotebook): Promise<void> {
+    this.notebooks.set(notebook, context);
+    this.active = notebook;
+    await context.activate();
+  }
+  private async invoke(name: string, input: unknown): Promise<ToolResult> {
+    // Human rename changes the transport's identity too; never route an old address to the new file.
+    for (const [oldPath, context] of [...this.notebooks]) {
+      const newPath = context.path?.() ?? oldPath;
+      if (newPath !== oldPath) {
+        path(newPath);
+        if (this.notebooks.has(newPath))
+          throw new Error("Notebook identity conflict");
+        this.notebooks.delete(oldPath);
+        this.notebooks.set(newPath, context);
+        if (this.active === oldPath) this.active = newPath;
+      }
+    }
+    if (!input || typeof input !== "object" || Array.isArray(input))
+      throw new Error("Arguments must be an object");
+    const args = input as Record<string, unknown>;
+    const definition = this.listTools().find((tool) => tool.name === name);
+    if (!definition) throw new Error("Unknown workspace tool");
+    if (
+      Object.keys(args).some(
+        (key) => !Object.hasOwn(definition.inputSchema.properties, key),
+      ) ||
+      definition.inputSchema.required.some((key) => !Object.hasOwn(args, key))
+    )
+      throw new Error("Missing or unknown arguments");
+    if (name === "list_open_notebooks")
+      return result({
+        ok: true,
+        notebooks: [...this.notebooks.keys()].map((notebook_path) => ({
+          notebook_path,
+          active: notebook_path === this.active,
+        })),
+      });
+    if (name === "list_notebooks")
+      return result({
+        ok: true,
+        listing: await this.list(path(args.directory, true)),
+      });
+    const notebook = path(args.notebook_path);
+    if (name === "open_notebook") {
+      this.notebooks.get(this.active ?? "")?.ready();
+      let context = this.notebooks.get(notebook);
+      if (!context) {
+        if (this.notebooks.size >= 16)
+          throw new Error("Close a notebook before opening more (limit 16)");
+        context = await this.create(notebook);
+        this.notebooks.set(notebook, context);
+      }
+      if (this.active !== notebook) {
+        const previous = this.notebooks.get(this.active ?? "");
+        previous?.deactivate();
+        try {
+          await context.activate();
+        } catch (error) {
+          await previous?.activate();
+          throw error;
+        }
+        this.active = notebook;
+      }
+      return result({ ok: true, notebook_path: notebook, active: true });
+    }
+    const context = this.notebooks.get(notebook);
+    if (!context)
+      return result(
+        {
+          ok: false,
+          error: {
+            code: "notebook_not_open",
+            message: "Open this notebook first",
+          },
+        },
+        true,
+      );
+    if (name === "close_notebook") {
+      context.ready();
+      context.dispose();
+      this.notebooks.delete(notebook);
+      if (this.active === notebook) this.active = null;
+      return result({
+        ok: true,
+        notebook_path: notebook,
+        closed: true,
+        kernel_preserved: true,
+      });
+    }
+    const { notebook_path: _, ...cellArgs } = args;
+    const response = await context.tools.callTool(name, cellArgs);
+    const addressed = result(
+      { ...response.structuredContent, notebook_path: notebook },
+      response.isError,
+    );
+    return {
+      ...addressed,
+      content: [
+        ...response.content.filter((item) => item.type === "image"),
+        ...addressed.content,
+      ],
+    };
+  }
+  callTool(name: string, input: unknown): Promise<ToolResult> {
+    const run = () =>
+      this.invoke(name, input).catch(() =>
+        result(
+          {
+            ok: false,
+            error: {
+              code: "invalid_input",
+              message:
+                "Invalid workspace request or unsaved/busy notebook. Check paths and save edits before switching or closing.",
+            },
+          },
+          true,
+        ),
+      );
+    if (name === "interrupt_kernel") return run();
+    const task = this.tail.then(run);
+    this.tail = task;
+    return task;
+  }
+  dispose(): void {
+    for (const context of this.notebooks.values()) context.dispose();
+    this.notebooks.clear();
+  }
+}

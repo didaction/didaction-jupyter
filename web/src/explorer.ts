@@ -2,6 +2,7 @@
 export function installExplorer(
   current: string,
   assertSaved: () => void,
+  open?: (path: string) => Promise<void>,
 ): void {
   const panel = document.querySelector<HTMLElement>("#file-explorer")!;
   const list = document.querySelector<HTMLUListElement>("#notebook-files")!;
@@ -57,15 +58,22 @@ export function installExplorer(
         label.textContent = entry.name;
         button.append(icon, label);
         button.title = entry.path;
-        if (entry.path === current) button.setAttribute("aria-current", "page");
-        button.onclick = () => {
+        if (
+          entry.path ===
+          (new URL(location.href).searchParams.get("notebook") ?? current)
+        )
+          button.setAttribute("aria-current", "page");
+        button.onclick = async () => {
           if (entry.type === "directory") {
             void load(entry.path);
             return;
           }
-          if (entry.path === current) return;
           try {
             assertSaved();
+            if (open) {
+              await open(entry.path);
+              return;
+            }
             const url = new URL(location.href);
             url.searchParams.set("notebook", entry.path);
             location.assign(url.href);

@@ -8,6 +8,7 @@ import type { NotebookCommand, NotebookSnapshot } from "./types";
 import { installWebMcp } from "./webmcp";
 import { NotebookTools, type Transaction } from "./notebook-tools";
 import { installExplorer } from "./explorer";
+import { WorkspaceTools, type OpenNotebook } from "./workspace-tools";
 
 const status = document.querySelector<HTMLOutputElement>("#connection-status")!;
 const fatal = document.querySelector<HTMLElement>("#fatal-error")!;
@@ -24,19 +25,10 @@ const command = (
   ...values,
 });
 
-async function boot(): Promise<void> {
-  await init();
-  const configResponse = await fetch("/api/v1/config", {
-    headers: { Accept: "application/json" },
-  });
-  if (!configResponse.ok)
-    throw new Error("Gateway startup configuration unavailable");
-  const startup = (await configResponse.json()) as {
-    path: string;
-    kernel: string;
-  };
-  const selectedPath = new URL(location.href).searchParams.get("notebook");
-  if (selectedPath) startup.path = selectedPath;
+async function createContext(
+  startup: { path: string; kernel: string },
+  create = false,
+): Promise<OpenNotebook> {
   const transport = new GatewayNotebookTransport(
     "/api/v1/commands",
     startup.path,
@@ -45,7 +37,7 @@ async function boot(): Promise<void> {
     command("setup", {
       path: startup.path,
       kernel: startup.kernel,
-      create: !selectedPath,
+      create,
     }),
   );
   if (setup.error || !setup.snapshot)
@@ -61,22 +53,17 @@ async function boot(): Promise<void> {
         .snapshot.revision,
     ),
   );
-  const mounted = await mountNotebook(
-    "notebook-canvas",
-    JSON.stringify(snapshot),
-    dispatchEguiCommand,
-  );
-  installExplorer(startup.path, () => mounted.assertExternalReady());
+  let mounted: Awaited<ReturnType<typeof mountNotebook>> | undefined;
   const externalExecute = async (serialized: string) => {
     try {
       const result = await gateway.execute(serialized, (progress) =>
-        mounted.applyExternalResult(JSON.stringify(progress), true),
+        mounted?.applyExternalResult(JSON.stringify(progress), true),
       );
-      mounted.applyExternalResult(result, false);
+      mounted?.applyExternalResult(result, false);
       return result;
     } catch (error) {
       const command = JSON.parse(serialized) as NotebookCommand;
-      mounted.applyExternalResult(
+      mounted?.applyExternalResult(
         JSON.stringify({
           protocol_version: 1,
           command_id: command.command_id,
@@ -98,12 +85,12 @@ async function boot(): Promise<void> {
   };
   const transaction: Transaction = (task) =>
     dispatchEguiCommand.transaction(async () => {
-      mounted.assertExternalReady();
-      mounted.setExternalBusy(true);
+      mounted?.assertExternalReady();
+      mounted?.setExternalBusy(true);
       try {
         return await task(externalExecute);
       } finally {
-        mounted.setExternalBusy(false);
+        mounted?.setExternalBusy(false);
       }
     });
   const interruptExecute = async (serialized: string) => {
@@ -131,6 +118,10 @@ async function boot(): Promise<void> {
     interruptExecute,
     (name, args) =>
       dispatchEguiCommand.transaction(async () => {
+        if (!mounted)
+          throw new Error(
+            "Select this notebook with open_notebook before using view tools",
+          );
         const id = args.cell_id as string;
         if (name !== "capture_cell") {
           mounted.cellView(
@@ -193,7 +184,80 @@ async function boot(): Promise<void> {
         );
       }),
   );
-  const webmcp = await installWebMcp(tools);
+  const deactivate = () => {
+    if (!mounted) return;
+    mounted.dispose();
+    mounted = undefined;
+    const old = document.querySelector<HTMLCanvasElement>("#notebook-canvas")!;
+    const fresh = old.cloneNode(false) as HTMLCanvasElement;
+    old.replaceWith(fresh);
+    document.querySelector<HTMLElement>("#notebook-shell")!.hidden = true;
+  };
+  return {
+    tools,
+    path: () =>
+      JSON.parse(wasm.publicSnapshot()).snapshot.notebook.path as string,
+    ready: () => mounted?.assertExternalReady(),
+    activate: async () => {
+      document.querySelector<HTMLElement>("#notebook-shell")!.hidden = false;
+      mounted = await mountNotebook(
+        "notebook-canvas",
+        JSON.stringify(JSON.parse(wasm.publicSnapshot()).snapshot),
+        dispatchEguiCommand,
+      );
+      const url = new URL(location.href);
+      const activePath = JSON.parse(wasm.publicSnapshot()).snapshot.notebook
+        .path as string;
+      url.searchParams.set("notebook", activePath);
+      history.replaceState(null, "", url);
+      document
+        .querySelectorAll<HTMLElement>("#notebook-files button")
+        .forEach((button) => {
+          if (button.title === activePath)
+            button.setAttribute("aria-current", "page");
+          else button.removeAttribute("aria-current");
+        });
+    },
+    deactivate,
+    dispose: () => {
+      deactivate();
+      wasm.dispose();
+      void transport.close();
+    },
+  };
+}
+
+async function boot(): Promise<void> {
+  await init();
+  const response = await fetch("/api/v1/config");
+  if (!response.ok) throw new Error("Gateway configuration unavailable");
+  const startup = (await response.json()) as { path: string; kernel: string };
+  const selected = new URL(location.href).searchParams.get("notebook");
+  if (selected) startup.path = selected;
+  const initial = await createContext(startup, !selected);
+  const workspace = new WorkspaceTools(
+    initial.tools.listTools(),
+    (path) => createContext({ path, kernel: startup.kernel }),
+    async (directory) => {
+      const response = await fetch(
+        `/api/v1/notebooks?directory=${encodeURIComponent(directory)}`,
+      );
+      if (!response.ok) throw new Error("Folder unavailable");
+      return response.json();
+    },
+  );
+  await workspace.seed(startup.path, initial);
+  installExplorer(
+    startup.path,
+    () => {},
+    async (path) => {
+      const result = await workspace.callTool("open_notebook", {
+        notebook_path: path,
+      });
+      if (result.isError) throw new Error("Unable to open notebook");
+    },
+  );
+  const webmcp = await installWebMcp(workspace);
   const hasWebMcp = webmcp.available;
   status.textContent = hasWebMcp
     ? "Connected · WebMCP ready"
@@ -211,9 +275,7 @@ async function boot(): Promise<void> {
     () => {
       resizeObserver.disconnect();
       webmcp.dispose();
-      mounted.dispose();
-      wasm.dispose();
-      void transport.close();
+      workspace.dispose();
     },
     { once: true },
   );

@@ -2,7 +2,7 @@
 
 The frontend tool catalog is inspired by the cell operations in
 [Datalayer's Jupyter MCP Server](https://jupyter-mcp-server.datalayer.tech/mcp/).
-This is a bounded, single-notebook implementation, not a drop-in copy of its
+This is a bounded, workspace-scoped implementation, not a drop-in copy of its
 schemas or a connection to its hosted server. No Datalayer dependency is installed.
 
 `NotebookToolInvoker.listTools()` and `callTool(name, arguments)` are the
@@ -16,6 +16,10 @@ WebMCP-unavailable browsers remain fully usable by humans.
 
 ## Tools
 
+- list_notebooks(directory): confined folders/notebooks; empty string means root
+- list_open_notebooks(): this frontend workspace's open notebooks and active view
+- open_notebook(notebook_path): open an existing notebook and select its egui view
+- close_notebook(notebook_path): release its frontend state, preserving file and kernel
 - read_notebook, read_cell
 - insert_cell, overwrite_cell_source, edit_cell_source
 - move_cell, delete_cell, clear_cell_output
@@ -26,7 +30,8 @@ WebMCP-unavailable browsers remain fully usable by humans.
 - capture_cell(cell_id): PNG image content plus dimensions and clipped flag
 
 Read the advertised JSON Schemas for exact arguments. Cells are addressed by
-stable `cell_id`, not positional IDs; only insertion/movement take a zero-based
+required `notebook_path` (workspace-relative, including `.ipynb`) and stable
+`cell_id`, not positional IDs; only insertion/movement take a zero-based
 `index`. Source is limited to 64,000 UTF-8 bytes at this interface, execution to
 120 seconds, input to 200 KB, and each serialized answer payload to 200 KB.
 Oversized answers return a bounded error (an earlier mutation may be committed).
@@ -60,8 +65,16 @@ final result reconciles the notebook afterward.
 
 ## Security and limitations
 
-The workspace and kernel remain startup configuration; the human Files sidebar
-selects a notebook within that workspace, and tools operate on that tab's notebook.
+The workspace and kernel remain startup configuration. The human Files sidebar
+and tool opening use the same workspace controller. Each open notebook has its
+own WASM validator, transport scope, and command queue. Cell tools never default
+to the selected notebook; missing addresses and unopened notebooks are rejected.
+Open/close are serialized with tool operations; unsaved edits block switching.
+Up to 16 notebooks can be open in one frontend workspace. This registry is
+page-local, not a census of other browser tabs or Jupyter sessions. Reload opens
+the selected URL notebook; it does not restore the whole open-notebook list.
+View/capture tools require selecting the addressed notebook with open_notebook.
+Closing does not stop the kernel; restart_notebook explicitly resets its memory.
 No browser tool can switch servers, supply credentials, browse arbitrary files, launch sandboxes, or forward
 arbitrary MCP/Jupyter calls. Notebook outputs and source are intentional public
 tool data; never place secrets in them. Read results omit kernel/session metadata.
@@ -71,7 +84,7 @@ arbitrary code: this filter is not a sandbox or an exfiltration defense.
 
 Detached execute*code is not advertised because the current backend does not
 implement it. Use insert_execute_code_cell for inspectable, persisted execution.
-WebMCP notebook selection, Datalayer prompts, resources, cloud and file tools are
+Dataset creation, Datalayer prompts, resources, cloud and arbitrary file tools are
 not included. Tool names replace the earlier four notebook*\* WebMCP handlers.
 Browser WebMCP support is experimental; automated browser tests inject a
 modelContext registration shim and invoke its real handlers against real WASM,

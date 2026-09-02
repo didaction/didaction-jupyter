@@ -49,7 +49,16 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
             >;
           }
         ).registeredNotebookTools;
-        return tools[name]!.execute(args);
+        return tools[name]!.execute({
+          ...(name.startsWith("list_")
+            ? {}
+            : {
+                notebook_path: new URL(location.href).searchParams.get(
+                  "notebook",
+                ),
+              }),
+          ...args,
+        });
       },
       { name, args },
     );
@@ -131,6 +140,27 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
   expect(JSON.stringify(interrupted)).toContain("KeyboardInterrupt");
   expect(Date.now() - began).toBeLessThan(15000);
   expect((await call("delete_cell", { cell_id: sleeper })).isError).toBe(false);
+  const notebook_path = new URL(page.url()).searchParams.get("notebook")!;
+  expect(
+    (await call("read_notebook", { notebook_path: "not-open.ipynb" })).isError,
+  ).toBe(true);
+  expect((await call("list_notebooks", { directory: "" })).isError).toBe(false);
+  expect(
+    (await call("list_open_notebooks")).structuredContent.notebooks,
+  ).toHaveLength(1);
+  expect((await call("close_notebook", { notebook_path })).isError).toBe(false);
+  await expect(page.locator("#notebook-shell")).toBeHidden();
+  expect(
+    (await call("list_open_notebooks")).structuredContent.notebooks,
+  ).toHaveLength(0);
+  expect((await call("open_notebook", { notebook_path })).isError).toBe(false);
+  await expect(page.locator("#notebook-canvas")).toBeVisible();
+  const retained = await call("insert_execute_code_cell", {
+    index: 0,
+    source: "webmcp_value",
+  });
+  expect(JSON.stringify(retained)).toContain("43");
+  await call("delete_cell", { cell_id: retained.structuredContent.cell_id });
   const publicSurface = await page.evaluate(
     () =>
       document.documentElement.innerHTML +
