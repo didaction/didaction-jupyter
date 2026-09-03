@@ -1,14 +1,15 @@
 # AssemblyScript walkthrough graphics
 
-Walkthrough steps may include `graphics` with `language: "assemblyscript-rgba-1"`,
-`source` (1–64,000 UTF-8 bytes) and `description` (1–1,024 UTF-8 bytes). Use the
+Walkthrough steps may include up to eight `graphics_regions`, each with normalized
+`bounds`, `language: "assemblyscript-rgba-1"`, `source` (1–64,000 UTF-8 bytes)
+and `description` (1–1,024 UTF-8 bytes). Use the
 existing `create_microscope` or `update_microscope` WebMCP tools: graphics are part
 of the complete walkthrough, saved with its other content through the
 same validated command path. No extra invocation or notebook mutation API exists.
-The description appears above the graphics; provide an explanation of the visual,
-not just a filename. Existing document aggregate limits still apply.
+The description is exposed as accessible hover/help text; provide an explanation
+of the visual, not just a filename. Existing document aggregate limits still apply.
 
-Set optional `graphics.artifact` to a unique name such as `orbit.ts` to also save
+Set optional region `artifact` to a unique name such as `orbit.ts` to also save
 the AssemblyScript source as an owned workspace file:
 `notebook.ipynb.<cell-hash>.<microscope-id>.orbit.ts`. Names are 4–80 ASCII
 characters, a letters/digits/underscore/hyphen stem beginning with a letter or
@@ -33,23 +34,18 @@ manual inspection; no automatic retry is claimed safe.
 
 ## UI behavior
 
-For a graphics step, the animation fills the complete Microscope stage beneath
-the fixed navigation strip. It receives the stage's current physical dimensions
-after every resize. egui overlays paint afterward, accept input normally, and use
-stage-relative coordinates rather than browser-window coordinates. The top
-Microscope title is the only title row; the former repeated walkthrough title is
-removed.
+Each animation fills only its region beneath the fixed navigation strip and receives
+that region's current physical dimensions after every resize. Regions use integer
+thousandths of stage width/height (`x`, `y`, `width`, `height`), remain inside
+0..1000, and have a minimum 25/1000 size. Array order controls paint order. A region
+and the stage may each specify a `#RRGGBB` background and 0–255 opacity.
 
-Steps may define up to 32 `overlays`. Bounds are integer thousandths of stage
-width/height (`x`, `y`, `width`, `height`), remain inside 0..1000, and have a
-minimum 25/1000 size. Kinds are `code`, `markdown`, and `graphics_controls`.
-The code overlay owns its play control and annotation list so they remain one
-notebook-cell-like environment. Markdown overlays carry their own bounded `markdown`
-source, so a step can contain multiple independently positioned explanations.
-Optional styles select proportional or monospace bundled fonts, 10–32 px size,
-0–255 surface opacity, and `scroll` or `clip` overflow. Scroll is the readable
-default and prevents long Markdown from being silently truncated.
-When overlays are omitted, the same elements use a readable default composition.
+The code surface uses `code_bounds` in the same coordinate system and owns its
+play control and annotation list. The step's short CommonMark description stays
+beside fixed navigation, supports inline `$...$` math, and cannot be arbitrarily
+positioned. `graphics_point` annotations place hoverable callouts within a named
+region using local normalized coordinates. All normal egui UI paints above graphics
+and accepts input normally.
 
 A compact Pause/Resume control freezes or resumes the animation clock. With
 reduced motion enabled, it is replaced by the honest status
@@ -87,7 +83,7 @@ Authors supply arbitrary algorithms. There is no scene graph, shape vocabulary,
 plot primitive or DSL. `tests/fixtures/graphics.ts` contains a complete sine/cosine
 example that rasterizes its own curves. This first bridge is **CPU-generated RGBA**,
 not direct GPU shaders or guest access to Rust egui. The existing egui/Glow renderer
-uploads and clips the resulting texture in the right-hand walkthrough region.
+uploads and clips each resulting texture in its declared walkthrough region.
 
 Allocate reusable storage once: the compiler uses the stub runtime, without a
 garbage collector. Per-frame allocations can exhaust the fixed 16 MiB memory.
@@ -110,7 +106,7 @@ frame; this is a ceiling, not a frame-rate guarantee. `init` runs once per entry
   deadlines. A timeout, trap, invalid buffer or compiler error stays in the graphics
   area with Retry. Source diagnostics remain in the UI, not routine logs.
 - Leaving the step, hiding the notebook for a playground, or disposing the view
-  stops its workers. Opening a playground window no longer hides or replaces the
+  stops that step's region workers. Opening a playground window no longer hides or replaces the
   stage. Dispose is best-effort with forced termination after 50 ms.
   Re-entry creates fresh state; late worker messages are ignored.
 - Pause freezes the animation clock; reduced-motion preferences freeze it too.
@@ -123,10 +119,11 @@ These are application-level restrictions, not a guarantee against browser engine
 vulnerabilities or whole-process out-of-memory failures. In particular, compilation
 has a deadline but no browser-enforced heap cap; keep source bounds conservative.
 
-`get_active_context().context.microscope.walkthrough` includes graphics frame count, dimensions, pause
-state and localized error for diagnosis. It never includes pixel buffers.
+`get_active_context().context.microscope.walkthrough.graphics_regions` includes
+each region ID, frame count, dimensions, pause state and localized error. It never
+includes pixel buffers.
 `capture_microscope_step` returns a bounded PNG of the current stage—background
-and overlays, excluding fixed navigation—so an agent can inspect its composition
+and regions, excluding fixed navigation—so an agent can inspect its composition
 and iterate with visual feedback. It takes no arguments and captures the active
 microscope. If necessary, the PNG is downscaled to fit the agent transport; the
 result reports `source_width`, `source_height`, and `downscaled`.

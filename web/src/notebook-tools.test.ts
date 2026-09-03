@@ -290,8 +290,8 @@ describe("transport-neutral notebook tools", () => {
     expect(registered).toHaveLength(32);
     expect(
       registered.find((tool) => tool.name === "create_microscope")!.inputSchema
-        .properties.walkthrough!.properties?.steps?.items?.properties?.markdown
-        ?.description,
+        .properties.walkthrough!.properties?.steps?.items?.properties
+        ?.description?.description,
     ).toContain("$...$");
     expect(
       registered.find((tool) => tool.name === "create_microscope")!.description,
@@ -304,16 +304,26 @@ describe("transport-neutral notebook tools", () => {
     ).toContain("list_microscopes and read_microscope");
     expect(
       registered.find((tool) => tool.name === "create_microscope")!.description,
-    ).toContain("not a text-heavy slide");
+    ).toContain("Prefer diagrams");
     expect(
       registered.find((tool) => tool.name === "capture_microscope_step")!
         .description,
-    ).toContain("graphics.frames is greater than zero");
+    ).toContain("rendered frames");
     expect(
       registered.find((tool) => tool.name === "update_microscope")!.inputSchema
-        .properties.walkthrough!.properties?.steps?.items?.properties?.graphics
-        ?.properties?.source?.description,
-    ).toContain("never allocate inside render");
+        .properties.walkthrough!.properties?.steps?.items?.properties
+        ?.graphics_regions?.items?.properties?.source?.description,
+    ).toContain("never allocate in render");
+    const stepProperties = registered.find(
+      (tool) => tool.name === "create_microscope",
+    )!.inputSchema.properties.walkthrough!.properties?.steps?.items?.properties;
+    expect(stepProperties?.markdown).toBeUndefined();
+    expect(stepProperties?.overlays).toBeUndefined();
+    expect(stepProperties?.graphics).toBeUndefined();
+    expect(stepProperties?.graphics_regions?.maxItems).toBe(8);
+    expect(
+      stepProperties?.annotations?.items?.properties?.target?.oneOf,
+    ).toHaveLength(2);
     expect(
       registered.find((tool) => tool.name === "open_playground")!.description,
     ).toContain("movable, resizable temporary one-cell window");

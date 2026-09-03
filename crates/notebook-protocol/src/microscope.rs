@@ -16,50 +16,24 @@ pub struct Walkthrough {
 pub struct WalkthroughStep {
     pub id: String,
     pub title: String,
+    /// A short, single-paragraph CommonMark explanation. Inline `$...$` math is supported.
+    pub description: String,
     pub code: String,
-    pub markdown: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_bounds: Option<StageBounds>,
     /// Complete, self-contained source for a fresh temporary kernel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playground_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub graphics: Option<GraphicsDefinition>,
+    pub background: Option<StageBackground>,
     #[serde(default)]
     pub annotations: Vec<Annotation>,
-    /// Optional stage composition. Empty retains the canonical readable layout.
     #[serde(default)]
-    pub overlays: Vec<WalkthroughOverlay>,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WalkthroughOverlayKind {
-    Code,
-    Markdown,
-    GraphicsControls,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OverlayFont {
-    Proportional,
-    Monospace,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OverlayOverflow {
-    Scroll,
-    Clip,
+    pub graphics_regions: Vec<GraphicsRegion>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct OverlayStyle {
-    /// 0..255 alpha for the notebook-like overlay surface.
-    pub opacity: u8,
-    pub font: OverlayFont,
-    pub font_size: u8,
-    pub overflow: OverlayOverflow,
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct OverlayBounds {
+pub struct StageBounds {
     /// Thousandths of the stage width/height.
     pub x: u16,
     pub y: u16,
@@ -68,21 +42,22 @@ pub struct OverlayBounds {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct WalkthroughOverlay {
-    pub id: String,
-    pub kind: WalkthroughOverlayKind,
-    pub bounds: OverlayBounds,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub style: Option<OverlayStyle>,
-    /// Required only for Markdown overlays; permits multiple independent blocks.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub markdown: Option<String>,
+pub struct StageBackground {
+    /// CSS-style `#RRGGBB` color. Alpha is kept separate and bounded.
+    pub color: String,
+    #[serde(default = "opaque")]
+    pub opacity: u8,
 }
-/// Executable source, not a scene description. Imports/capabilities are checked
-/// again by the browser before instantiation; validating source never executes it.
+fn opaque() -> u8 {
+    255
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct GraphicsDefinition {
+pub struct GraphicsRegion {
+    pub id: String,
+    pub bounds: StageBounds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<StageBackground>,
     pub language: GraphicsLanguage,
     pub source: String,
     pub description: String,
@@ -99,16 +74,28 @@ pub enum GraphicsLanguage {
 #[serde(deny_unknown_fields)]
 pub struct Annotation {
     pub id: String,
-    pub start_line: usize,
-    pub end_line: usize,
-    /// Optional one-based inclusive Unicode-scalar columns within a single line.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub start_column: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub end_column: Option<usize>,
     pub text: String,
     #[serde(default)]
     pub color: AnnotationColor,
+    pub target: AnnotationTarget,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AnnotationTarget {
+    CodeRange {
+        start_line: usize,
+        end_line: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        start_column: Option<usize>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        end_column: Option<usize>,
+    },
+    GraphicsPoint {
+        region_id: String,
+        /// Thousandths within the graphics region.
+        x: u16,
+        y: u16,
+    },
 }
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -135,85 +122,110 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
             && s.bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
     }
+    fn bounds(b: &StageBounds) -> bool {
+        b.width >= 25
+            && b.height >= 25
+            && u32::from(b.x) + u32::from(b.width) <= 1000
+            && u32::from(b.y) + u32::from(b.height) <= 1000
+    }
+    fn background(b: &StageBackground) -> bool {
+        b.color.len() == 7
+            && b.color.starts_with('#')
+            && b.color[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+    }
+    fn description(s: &str) -> bool {
+        !s.trim().is_empty()
+            && s.len() <= 512
+            && !s.contains('\n')
+            && !s.contains("![")
+            && !s.contains('<')
+    }
     if !title(&w.title) || w.steps.is_empty() || w.steps.len() > 64 {
         return Err(invalid("Walkthrough needs a title and 1..64 steps"));
     }
     let mut steps = std::collections::BTreeSet::new();
     let mut artifacts = std::collections::BTreeSet::new();
     for s in &w.steps {
-        let mut overlay_ids = std::collections::BTreeSet::new();
-        if let Some(name) = s.graphics.as_ref().and_then(|g| g.artifact.as_ref())
-            && (!valid_graphics_artifact(name) || !artifacts.insert(name))
-        {
-            return Err(invalid(
-                "Graphics artifacts need unique safe names ending in .ts",
-            ));
+        let mut region_ids = std::collections::BTreeSet::new();
+        for region in &s.graphics_regions {
+            if let Some(name) = &region.artifact
+                && (!valid_graphics_artifact(name) || !artifacts.insert(name))
+            {
+                return Err(invalid(
+                    "Graphics artifacts need unique safe names ending in .ts",
+                ));
+            }
         }
         if !id(&s.id)
             || !steps.insert(&s.id)
             || !title(&s.title)
+            || !description(&s.description)
             || s.code.len() > 64_000
-            || s.markdown.len() > 64_000
+            || s.code_bounds.as_ref().is_some_and(|value| !bounds(value))
+            || s.background
+                .as_ref()
+                .is_some_and(|value| !background(value))
             || s.playground_code
                 .as_ref()
                 .is_some_and(|code| code.len() > 64_000 || code.trim().is_empty())
             || s.annotations.len() > 32
-            || s.overlays.len() > 32
-            || s.overlays.iter().any(|overlay| {
-                !id(&overlay.id)
-                    || !overlay_ids.insert(&overlay.id)
-                    || overlay.bounds.width < 25
-                    || overlay.bounds.height < 25
-                    || u32::from(overlay.bounds.x) + u32::from(overlay.bounds.width) > 1000
-                    || u32::from(overlay.bounds.y) + u32::from(overlay.bounds.height) > 1000
-                    || match overlay.kind {
-                        WalkthroughOverlayKind::Markdown => overlay
-                            .markdown
-                            .as_ref()
-                            .is_none_or(|text| text.len() > 64_000),
-                        _ => overlay.markdown.is_some(),
-                    }
-                    || overlay
-                        .style
+            || s.graphics_regions.len() > 8
+            || s.graphics_regions.iter().any(|region| {
+                !id(&region.id)
+                    || !region_ids.insert(&region.id)
+                    || !bounds(&region.bounds)
+                    || region
+                        .background
                         .as_ref()
-                        .is_some_and(|style| !(10..=32).contains(&style.font_size))
-            })
-            || s.graphics.as_ref().is_some_and(|g| {
-                g.source.trim().is_empty()
-                    || g.source.len() > 64_000
-                    || g.description.trim().is_empty()
-                    || g.description.len() > 1024
+                        .is_some_and(|value| !background(value))
+                    || region.source.trim().is_empty()
+                    || region.source.len() > 64_000
+                    || region.description.trim().is_empty()
+                    || region.description.len() > 1024
             })
         {
             return Err(invalid("Invalid or oversized walkthrough step"));
         }
         let mut annotations = std::collections::BTreeSet::new();
         for a in &s.annotations {
-            let columns_valid = match (a.start_column, a.end_column) {
-                (None, None) => true,
-                (Some(start), Some(end)) => {
-                    let line_len = s
-                        .code
-                        .split('\n')
-                        .nth(a.start_line.saturating_sub(1))
-                        .map(str::chars)
-                        .map(Iterator::count)
-                        .unwrap_or(0);
-                    a.start_line == a.end_line && start > 0 && end >= start && end <= line_len
+            let target_valid = match &a.target {
+                AnnotationTarget::CodeRange {
+                    start_line,
+                    end_line,
+                    start_column,
+                    end_column,
+                } => {
+                    let columns_valid = match (start_column, end_column) {
+                        (None, None) => true,
+                        (Some(start), Some(end)) => {
+                            let line_len = s
+                                .code
+                                .split('\n')
+                                .nth(start_line.saturating_sub(1))
+                                .map(str::chars)
+                                .map(Iterator::count)
+                                .unwrap_or(0);
+                            start_line == end_line && *start > 0 && end >= start && *end <= line_len
+                        }
+                        _ => false,
+                    };
+                    *start_line > 0
+                        && end_line >= start_line
+                        && *end_line <= s.code.split('\n').count()
+                        && columns_valid
                 }
-                _ => false,
+                AnnotationTarget::GraphicsPoint { region_id, x, y } => {
+                    region_ids.contains(region_id) && *x <= 1000 && *y <= 1000
+                }
             };
             if !id(&a.id)
                 || !annotations.insert(&a.id)
-                || a.start_line == 0
-                || a.end_line < a.start_line
-                || a.end_line > s.code.split('\n').count()
                 || a.text.trim().is_empty()
-                || a.text.len() > 4096
-                || !columns_valid
+                || a.text.len() > 1024
+                || !target_valid
             {
                 return Err(invalid(
-                    "Invalid annotation ID, text, line range, or optional inclusive one-based character range",
+                    "Invalid annotation ID, text, code range, or graphics point",
                 ));
             }
         }
@@ -245,14 +257,14 @@ pub fn graphics_artifacts(
     if let Some(w) = &doc.walkthrough {
         validate_walkthrough(w)?;
         for step in &w.steps {
-            if let Some(g) = &step.graphics
-                && let Some(name) = &g.artifact
-            {
-                let path = format!("{base}.{name}");
-                if path.len() > 512 {
-                    return Err(invalid("Graphics artifact path exceeds limit"));
+            for g in &step.graphics_regions {
+                if let Some(name) = &g.artifact {
+                    let path = format!("{base}.{name}");
+                    if path.len() > 512 {
+                        return Err(invalid("Graphics artifact path exceeds limit"));
+                    }
+                    files.insert(path, g.source.clone());
                 }
-                files.insert(path, g.source.clone());
             }
         }
     }
@@ -562,13 +574,13 @@ pub fn preserve_references(
 mod tests {
     #[test]
     fn graphics_source_is_bounded_versioned_and_round_trips() {
-        let value = serde_json::json!({"title":"Graphics", "steps":[{"id":"one","title":"One","code":"", "markdown":"", "graphics": {
-            "language":"assemblyscript-rgba-1", "description":"Animated example", "source":"export function render():usize { return 0; }"
-        }}]});
+        let value = serde_json::json!({"title":"Graphics", "steps":[{"id":"one","title":"One","description":"Animated $x$.","code":"", "graphics_regions": [{
+            "id":"diagram","bounds":{"x":0,"y":0,"width":500,"height":500},"language":"assemblyscript-rgba-1", "description":"Animated example", "source":"export function render():usize { return 0; }"
+        }]}]});
         let w: super::Walkthrough = serde_json::from_value(value.clone()).unwrap();
         super::validate_walkthrough(&w).unwrap();
         let mut attached = w.clone();
-        attached.steps[0].graphics.as_mut().unwrap().artifact = Some("orbit.ts".into());
+        attached.steps[0].graphics_regions[0].artifact = Some("orbit.ts".into());
         super::validate_walkthrough(&attached).unwrap();
         for name in [
             "../orbit.ts",
@@ -580,7 +592,7 @@ mod tests {
             "é.ts",
         ] {
             let mut bad = attached.clone();
-            bad.steps[0].graphics.as_mut().unwrap().artifact = Some(name.into());
+            bad.steps[0].graphics_regions[0].artifact = Some(name.into());
             assert!(super::validate_walkthrough(&bad).is_err(), "{name}");
         }
         let mut duplicate = attached.steps[0].clone();
@@ -594,22 +606,22 @@ mod tests {
         );
         for source in [" ".into(), "x".repeat(64001)] {
             let mut bad = w.clone();
-            bad.steps[0].graphics.as_mut().unwrap().source = source;
+            bad.steps[0].graphics_regions[0].source = source;
             assert!(super::validate_walkthrough(&bad).is_err());
         }
         let mut bad = value;
-        bad["steps"][0]["graphics"]["language"] = serde_json::json!("javascript");
+        bad["steps"][0]["graphics_regions"][0]["language"] = serde_json::json!("javascript");
         assert!(serde_json::from_value::<super::Walkthrough>(bad).is_err());
     }
     use super::*;
     #[test]
     fn walkthrough_bounds_focus_and_ownership_are_validated() {
-        let w: Walkthrough = serde_json::from_value(json!({"title":"Explain","steps":[{"id":"one","title":"First","code":"x = 42\nx","markdown":"**Value**","annotations":[{"id":"value","start_line":1,"end_line":2,"text":"Shared variable","color":"blue"}],"overlays":[{"id":"code","kind":"code","bounds":{"x":20,"y":20,"width":500,"height":800}},{"id":"note","kind":"markdown","bounds":{"x":550,"y":20,"width":400,"height":200},"markdown":"Placed note"}]}]})).unwrap();
+        let w: Walkthrough = serde_json::from_value(json!({"title":"Explain","steps":[{"id":"one","title":"First","description":"A **shared** $x$ value.","code":"x = 42\nx","code_bounds":{"x":20,"y":20,"width":500,"height":800},"annotations":[{"id":"value","text":"Shared variable","color":"blue","target":{"kind":"code_range","start_line":1,"end_line":2}}]}]})).unwrap();
         validate_walkthrough(&w).unwrap();
         let encoded = serde_json::to_string(&w).unwrap();
         assert_eq!(serde_json::from_str::<Walkthrough>(&encoded).unwrap(), w);
         let mut outside = w.clone();
-        outside.steps[0].overlays[0].bounds.x = 900;
+        outside.steps[0].code_bounds.as_mut().unwrap().x = 900;
         assert!(validate_walkthrough(&outside).is_err());
         assert!(
             validate_focus(
@@ -644,8 +656,20 @@ mod tests {
         for mutate in 0..8 {
             let mut bad = w.clone();
             match mutate {
-                0 => bad.steps[0].annotations[0].start_line = 0,
-                1 => bad.steps[0].annotations[0].end_line = 3,
+                0 => {
+                    if let AnnotationTarget::CodeRange { start_line, .. } =
+                        &mut bad.steps[0].annotations[0].target
+                    {
+                        *start_line = 0
+                    }
+                }
+                1 => {
+                    if let AnnotationTarget::CodeRange { end_line, .. } =
+                        &mut bad.steps[0].annotations[0].target
+                    {
+                        *end_line = 3
+                    }
+                }
                 2 => bad.steps.push(bad.steps[0].clone()),
                 3 => {
                     let duplicate = bad.steps[0].annotations[0].clone();
@@ -708,9 +732,9 @@ mod tests {
     fn character_annotations_are_paired_single_line_unicode_ranges() {
         let mut w: Walkthrough = serde_json::from_value(json!({
             "title":"Characters", "steps":[{"id":"one","title":"One",
-            "code":"α🙂x\nnext", "markdown":"Text", "annotations":[{
-                "id":"span","start_line":1,"end_line":1,
-                "start_column":2,"end_column":3,"text":"Two characters"
+            "code":"α🙂x\nnext", "description":"Inline $x$.", "annotations":[{
+                "id":"span","text":"Two characters","target":{"kind":"code_range","start_line":1,"end_line":1,
+                "start_column":2,"end_column":3}
             }]}]
         }))
         .unwrap();
@@ -727,18 +751,35 @@ mod tests {
             (None, Some(1), 1),
             (Some(1), Some(2), 2),
         ] {
-            let a = &mut w.steps[0].annotations[0];
-            a.start_column = start;
-            a.end_column = end;
-            a.end_line = end_line;
+            let AnnotationTarget::CodeRange {
+                start_column,
+                end_column,
+                end_line: target_end,
+                ..
+            } = &mut w.steps[0].annotations[0].target
+            else {
+                unreachable!()
+            };
+            *start_column = start;
+            *end_column = end;
+            *target_end = end_line;
             assert!(validate_walkthrough(&w).is_err());
         }
-        let a = &mut w.steps[0].annotations[0];
-        a.start_column = None;
-        a.end_column = None;
+        let AnnotationTarget::CodeRange {
+            start_column,
+            end_column,
+            end_line,
+            ..
+        } = &mut w.steps[0].annotations[0].target
+        else {
+            unreachable!()
+        };
+        *start_column = None;
+        *end_column = None;
+        *end_line = 1;
         validate_walkthrough(&w).unwrap();
         assert!(
-            serde_json::to_value(&w).unwrap()["steps"][0]["annotations"][0]
+            serde_json::to_value(&w).unwrap()["steps"][0]["annotations"][0]["target"]
                 .get("start_column")
                 .is_none()
         );
@@ -757,7 +798,7 @@ mod tests {
             cell_id: "cell-a".into(),
             microscope_id: "abc1234".into(),
             title: "A closer look".into(),
-            walkthrough: serde_json::from_value(json!({"title":"A closer look","steps":[{"id":"one","title":"One","code":"42","markdown":"Example"}]})).unwrap(),
+            walkthrough: serde_json::from_value(json!({"title":"A closer look","steps":[{"id":"one","title":"One","description":"Example $42$.","code":"42"}]})).unwrap(),
         };
         prepare(&mut state, &create).unwrap();
         let doc = document(&state, "cell-a", "abc1234").unwrap();

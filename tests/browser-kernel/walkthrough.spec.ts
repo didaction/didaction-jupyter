@@ -109,12 +109,14 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   ).toBe(true);
   expect((await active()).microscope.walkthrough.step_index).toBe(2);
   const invalid = structuredClone(exampleWalkthrough);
-  invalid.steps[0]!.annotations[0]!.end_line = 999;
+  invalid.steps[0]!.annotations[0]!.target.end_line = 999;
   expect(
     (await call("update_microscope", { walkthrough: invalid })).isError,
   ).toBe(true);
   const badColumns = structuredClone(exampleWalkthrough);
-  Object.assign(badColumns.steps[0]!.annotations[0]!, { end_column: 999 });
+  Object.assign(badColumns.steps[0]!.annotations[0]!.target, {
+    end_column: 999,
+  });
   expect(
     (await call("update_microscope", { walkthrough: badColumns })).isError,
   ).toBe(true);

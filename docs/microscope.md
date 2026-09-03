@@ -1,9 +1,9 @@
 # Microscopes and walkthroughs
 
 A microscope belongs to a notebook cell. Its main content is a walkthrough: a
-title and ordered steps with display-only code, explanatory Markdown and named
-line or character annotations. Each step shows its title and Markdown above a
-notebook-style container with read-only code left and an optional graphics canvas right.
+title and ordered steps with display-only code, a short math-capable description,
+independent graphics regions, and named code or diagram annotations. Fixed
+navigation sits above a workspace-relative teaching stage.
 Code uses the notebook's syntax highlighting. Steps may also provide separate
 `playground_code` for an isolated executable playground. Optional AssemblyScript
 graphics compile and execute in browser workers; see [walkthrough-graphics.md](walkthrough-graphics.md).
@@ -20,10 +20,10 @@ ID; `close_microscope` takes the notebook path. `get_active_context` reports
 `view: "microscope"` and a nullable `microscope` object containing its target,
 loaded state and walkthrough context.
 
-Use `update_microscope` to replace the complete saved walkthrough and its title.
+Use `update_microscope` to replace the complete saved walkthrough.
 The ID and owning cell stay unchanged; omitted steps/annotations are removed.
-`set_microscope_walkthrough` remains a compatibility alias. Updating
-requires the notebook path, cell ID, microscope ID and this `walkthrough` object:
+There is deliberately no compatibility alias. Updating requires the notebook
+path, cell ID, microscope ID and this complete `walkthrough` object:
 
 ```json
 {
@@ -34,16 +34,20 @@ requires the notebook path, cell ID, microscope ID and this `walkthrough` object
       "title": "Assign a value",
       "code": "value = 40 + 2\nvalue",
       "playground_code": "value = 40 + 2\nprint(value)",
-      "markdown": "The expression evaluates to **42**. The variable keeps it for later cells.",
+      "description": "The expression evaluates to **$42$** and keeps it for later cells.",
+      "code_bounds": { "x": 40, "y": 500, "width": 600, "height": 450 },
       "annotations": [
         {
           "id": "sum",
-          "start_line": 1,
-          "end_line": 1,
-          "start_column": 9,
-          "end_column": 14,
           "text": "Evaluate the sum and bind the result.",
-          "color": "blue"
+          "color": "blue",
+          "target": {
+            "kind": "code_range",
+            "start_line": 1,
+            "end_line": 1,
+            "start_column": 9,
+            "end_column": 14
+          }
         }
       ]
     }
@@ -51,15 +55,15 @@ requires the notebook path, cell ID, microscope ID and this `walkthrough` object
 }
 ```
 
-Step and annotation IDs are stable, unique within their parent, 1–64 ASCII
+Step, region, and annotation IDs are stable, unique within their parent, 1–64 ASCII
 letters/digits/underscores/hyphens. Annotation ranges are **one-based and
 inclusive**. Available colors are `blue`, `blue-light`, and `blue-deep`.
 Annotations and code are saved content; code is never executed or copied into
-the owning notebook cell. Highlighted code is shown in a numbered, read-only left
-pane; Markdown is rendered above it using the existing bounded renderer.
-Walkthrough explanations and Markdown overlays use the same CommonMark renderer
-as notebook Markdown cells. WebMCP advertises inline math as `$...$` and display
-math as `$$...$$`; both are typeset locally by the egui frontend.
+the owning notebook cell. A `code_range` uses inclusive one-based lines and
+optional single-line Unicode columns. A `graphics_point` names a graphics region
+and a normalized 0–1000 point; it renders as a hoverable marker and pins its
+callout when focused. The fixed single-paragraph description uses CommonMark and
+encourages inline math with `$...$`. Arbitrary Markdown overlays are not accepted.
 
 ## Temporary playgrounds
 
@@ -107,13 +111,12 @@ Browser-to-browser following is intentionally unsupported.
   Backspace returns to the notebook. These shortcuts are microscope-only and
   do not override playground editing.
 - `focus_microscope_annotation` takes `step_index` and `annotation_id`, opens the
-  step, scrolls the code range into view and pulses its outline. Reduced-motion
-  viewers get a static outline instead.
+  step, and emphasizes a code range or pins a graphics-point callout.
 - `clear_microscope_focus` clears the pulse in the addressed, currently open
   microscope. The step and saved annotations remain. Humans can also use Clear
   focus or select another annotation.
-- `capture_microscope_step` captures the current stage background and positioned
-  overlays as a bounded PNG for agent visual feedback; fixed navigation is omitted.
+- `capture_microscope_step` captures the current stage and its regions as a bounded
+  PNG for agent visual feedback; fixed navigation is omitted.
   It takes no arguments because it captures the active view. Large captures are
   downscaled and report both returned and source dimensions.
 - `get_active_context().context.microscope.walkthrough` reports `title`, `step_index`,
@@ -131,7 +134,7 @@ a muted microscope icon and total sidecar count beside the owning notebook.
 An orphan sidecar without a matching notebook stays visible for recovery.
 Select a title
 to enter its shell. **Back to notebook** returns to the notebook without deleting
-anything. The cross next to each title opens an explicit deletion confirmation;
+anything. The trash icon to the right of each title opens an explicit deletion confirmation;
 confirmation deletes both reference and content file. There is no agent deletion
 tool. Server-side creation/deletion require the workspace driver, including
 direct API commands. Reading and local navigation are available to observers.
@@ -174,19 +177,21 @@ The protocol permits at most 16 references per cell and titles of 1–128 UTF-8
 bytes without control characters. Existing notebook, metadata, response and
 workspace bounds still apply. Unknown schema versions/fields are rejected. The
 document is bounded to 512,000 serialized UTF-8 bytes. Walkthroughs have 1–64
-steps, 1–128-byte titles, at most 64,000 bytes each of code and Markdown per step,
-and at most 32 annotations per step, each with 1–4,096 bytes of explanation.
+steps, 1–128-byte titles, 64,000 bytes of code, a 512-byte single-paragraph
+description, up to eight graphics regions, and at most 32 annotations per step,
+each with 1–1,024 bytes of explanation.
 Annotations always have inclusive, one-based line ranges. They may also include
 both `start_column` and `end_column` to highlight an inclusive range within one
 line. Columns count Unicode characters (not UTF-8 bytes); partial ranges cannot
 span lines. Omitting both columns highlights the complete line range.
 The aggregate walkthrough bound leaves 4 KiB for its ownership envelope. Unknown
 fields are rejected, including arbitrary scripts and kernel configuration. The
-optional `graphics` definition accepts only the versioned AssemblyScript RGBA interface.
+Each graphics region accepts only the versioned AssemblyScript RGBA interface,
+uses normalized stage bounds, and may specify a bounded `#RRGGBB` background.
 
 Rust's `notebook-protocol::microscope` owns the schema and derivation; core/runtime
 own validated transitions. Both egui and WebMCP use the same command gateway for
-`create_microscope`, `set_microscope_walkthrough`, `delete_microscope`, and
+`create_microscope`, `update_microscope`, `delete_microscope`, and
 `read_microscope`. WASM does no I/O.
 Browser IndexedDB commits metadata and artifact in one two-store transaction.
 The native gateway accesses both files through Jupyter Contents, not host paths.

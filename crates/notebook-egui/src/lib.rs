@@ -1822,33 +1822,6 @@ impl NotebookEguiApp {
                         let menu = ui.menu_button("        ", |ui| {
                             for item in microscopes {
                                 ui.horizontal(|ui| {
-                                    let delete = ui
-                                        .add_enabled(
-                                            !self.read_only,
-                                            egui::Button::new("").min_size(egui::vec2(24.0, 30.0)),
-                                        )
-                                        .on_hover_text("Delete microscope");
-                                    let rect = egui::Rect::from_center_size(
-                                        delete.rect.center(),
-                                        egui::vec2(8.0, 8.0),
-                                    );
-                                    let stroke = Stroke::new(
-                                        1.5,
-                                        ui.style().interact(&delete).fg_stroke.color,
-                                    );
-                                    ui.painter().line_segment(
-                                        [rect.left_top(), rect.right_bottom()],
-                                        stroke,
-                                    );
-                                    ui.painter().line_segment(
-                                        [rect.right_top(), rect.left_bottom()],
-                                        stroke,
-                                    );
-                                    if delete.clicked() {
-                                        self.microscope_delete =
-                                            Some((cell.id.clone(), item.clone()));
-                                        ui.close();
-                                    }
                                     if ui.button(&item.title).clicked() {
                                         let _ = self.open_microscope(Some(
                                             notebook_protocol::microscope::MicroscopeTarget {
@@ -1858,6 +1831,16 @@ impl NotebookEguiApp {
                                                 focus: None,
                                             },
                                         ));
+                                        ui.close();
+                                    }
+                                    if toolbar_icon_button(
+                                        ui,
+                                        !self.read_only,
+                                        ToolbarIcon::Trash,
+                                        "Delete microscope",
+                                    ) {
+                                        self.microscope_delete =
+                                            Some((cell.id.clone(), item.clone()));
                                         ui.close();
                                     }
                                 });
@@ -2327,13 +2310,6 @@ impl eframe::App for NotebookEguiApp {
         if let Some(target) = self.microscope_target.clone() {
             egui::TopBottomPanel::top("microscope-toolbar").show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui
-                        .button("Back to notebook")
-                        .on_hover_text("Backspace")
-                        .clicked()
-                    {
-                        let _ = self.open_microscope(None);
-                    }
                     if self.read_only
                         && toolbar_icon_button(
                             ui,
@@ -2348,6 +2324,16 @@ impl eframe::App for NotebookEguiApp {
                     {
                         self.follow_toggle_requested = true;
                     }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let back = egui::Button::new(
+                            RichText::new("Back to notebook").color(Color32::from_rgb(145, 40, 40)),
+                        )
+                        .fill(Color32::from_rgb(255, 245, 245))
+                        .stroke(Stroke::new(1.0, Color32::from_rgb(190, 75, 75)));
+                        if ui.add(back).on_hover_text("Backspace").clicked() {
+                            let _ = self.open_microscope(None);
+                        }
+                    });
                     if let Ok(doc) = notebook_protocol::microscope::document(
                         &self.state.snapshot,
                         &target.cell_id,
@@ -3186,6 +3172,7 @@ enum ToolbarIcon {
     Run,
     Stop,
     Restart,
+    Trash,
 }
 
 fn desktop_control_scale(width: f32) -> f32 {
@@ -3398,6 +3385,37 @@ fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tool
                 color,
                 Stroke::NONE,
             ));
+        }
+        ToolbarIcon::Trash => {
+            let body = egui::Rect::from_min_max(
+                egui::pos2(rect.left() + 2.0, rect.top() + 4.0),
+                egui::pos2(rect.right() - 2.0, rect.bottom()),
+            );
+            painter.rect_stroke(body, 1.0, stroke, egui::StrokeKind::Inside);
+            painter.line_segment(
+                [
+                    egui::pos2(rect.left(), rect.top() + 2.0),
+                    egui::pos2(rect.right(), rect.top() + 2.0),
+                ],
+                stroke,
+            );
+            painter.line_segment(
+                [
+                    egui::pos2(rect.center().x - 3.0, rect.top()),
+                    egui::pos2(rect.center().x + 3.0, rect.top()),
+                ],
+                stroke,
+            );
+            for fraction in [0.38, 0.62] {
+                let x = body.left() + body.width() * fraction;
+                painter.line_segment(
+                    [
+                        egui::pos2(x, body.top() + 3.0),
+                        egui::pos2(x, body.bottom() - 3.0),
+                    ],
+                    stroke,
+                );
+            }
         }
     }
     response.clicked()
@@ -3745,7 +3763,7 @@ mod tests {
                     cell_id: "code".into(),
                     microscope_id: id.into(),
                     title: id.into(),
-                    walkthrough: serde_json::from_value(serde_json::json!({"title":id,"steps":[{"id":"one","title":"One","code":"42","markdown":"Example"}]})).unwrap(),
+                    walkthrough: serde_json::from_value(serde_json::json!({"title":id,"steps":[{"id":"one","title":"One","description":"Example $42$.","code":"42"}]})).unwrap(),
                 },
             )
             .unwrap();

@@ -135,6 +135,18 @@ async function createContext(
   const gateway = new CommandGateway(wasm, transport);
   let mounted: Awaited<ReturnType<typeof mountNotebook>> | undefined;
   let graphics: GraphicsController | undefined;
+  let collapsedExplorerForMicroscope = false;
+  const collapseExplorerForMicroscope = () => {
+    if (!mounted || collapsedExplorerForMicroscope) return;
+    const active = JSON.parse(mounted.activeContext());
+    const explorer = document.querySelector<HTMLElement>("#file-explorer")!;
+    if (active.microscope && !explorer.hidden) {
+      document.querySelector<HTMLButtonElement>("#explorer-toggle")!.click();
+      collapsedExplorerForMicroscope = true;
+    } else if (!active.microscope) {
+      collapsedExplorerForMicroscope = false;
+    }
+  };
   const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
   const syncMotion = () => mounted?.setReducedMotion(motionPreference.matches);
   const dispatchEguiCommand = createQueuedNotebookDispatcher(
@@ -557,6 +569,7 @@ async function createContext(
   };
   const context: NotebookContext = {
     tickPlayground: (following) => {
+      collapseExplorerForMicroscope();
       playground.setFollowing(following && !!mounted);
       const index = mounted?.takePlaygroundRequest();
       if (index !== undefined && index !== null) {

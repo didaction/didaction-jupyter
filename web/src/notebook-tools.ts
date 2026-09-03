@@ -10,7 +10,8 @@ export type ToolResult = {
 };
 type Field = {
   description?: string;
-  type: "string" | "integer" | "boolean" | "object" | "array";
+  type?: "string" | "integer" | "boolean" | "object" | "array";
+  oneOf?: Field[];
   properties?: Record<string, Field>;
   required?: string[];
   additionalProperties?: false;
@@ -59,14 +60,15 @@ type Cell = {
 const markdownGroupMetadataKey = "didaction_markdown_group";
 const id: Field = { type: "string", minLength: 1, maxLength: 128 };
 const source: Field = { type: "string", maxLength: 64000 };
-const walkthroughMarkdown: Field = {
+const stepDescription: Field = {
   type: "string",
-  maxLength: 64000,
+  minLength: 1,
+  maxLength: 512,
   description:
-    "Concise rendered CommonMark for explanation or caption regions. Inline math uses $...$ and display math uses $$...$$. Do not repeat the step title: fixed navigation already displays it, and large text wastes the teaching canvas.",
+    "One short, single-paragraph CommonMark explanation shown beside the fixed step navigation. Use inline math with $...$, for example $E = mc^2$, whenever notation improves understanding. Do not repeat the title, add images, HTML, headings, lists, or line breaks.",
 };
 const microscopeAuthoringGuide =
-  "Authoring workflow: inspect the live schemas; use list_microscopes and read_microscope before replacing existing work; create or update the complete walkthrough; open/focus each step; call capture_microscope_step; inspect the PNG and graphics health; then revise and recapture. Teach one clear concept per step. Make each step a distinct, topic-specific, animated, diagram-led explanation—not a text-heavy slide. Use arrows, connections and consistent colors to make causality memorable. Separate diagram, concise explanation, caption and code regions. Never assume a valid save looks good: accept only when the capture has clear hierarchy with no overlap or clipping, graphics.error is null, and graphics.frames is greater than zero.";
+  "Microscope is a guided visual explanation attached to one notebook cell. Start with get_active_context, then list_microscopes and read_microscope. Teach one clear concept per step: use a clear title, one short math-capable description, focused read-only code, and zero or more topic-specific animated graphics regions. Use code_range annotations to explain code and graphics_point annotations as hoverable callouts on diagrams. After every meaningful edit, open the step, focus important annotations, and call capture_microscope_step; revise until the PNG has clear hierarchy, no overlap or clipping, graphics errors are null, and every region has rendered frames. Prefer diagrams, motion, arrows and consistent color over large text.";
 const index: Field = { type: "integer", minimum: 0, maximum: 2047 };
 const timeout: Field = { type: "integer", minimum: 1, maximum: 120000 };
 const definitions: ToolDefinition[] = [];
@@ -150,23 +152,43 @@ define(
 );
 const shortId: Field = { type: "string", minLength: 1, maxLength: 64 };
 const title: Field = { type: "string", minLength: 1, maxLength: 128 };
-const annotation: Field = {
+const codeTarget: Field = {
   type: "object",
-  description:
-    "A precise code explanation: highlight only the lines or character range that perform the stated action, and explain both what the code does and why it matters. Use focus_microscope_annotation when the range must be visually obvious.",
   additionalProperties: false,
-  required: ["id", "start_line", "end_line", "text"],
+  required: ["kind", "start_line", "end_line"],
   properties: {
-    id: shortId,
+    kind: { type: "string", enum: ["code_range"] },
     start_line: { type: "integer", minimum: 1, maximum: 64001 },
     end_line: { type: "integer", minimum: 1, maximum: 64001 },
     start_column: { type: "integer", minimum: 1, maximum: 64001 },
     end_column: { type: "integer", minimum: 1, maximum: 64001 },
-    text: { type: "string", minLength: 1, maxLength: 4096 },
-    color: { type: "string", enum: ["blue", "blue-light", "blue-deep"] },
   },
 };
-const overlayBounds: Field = {
+const graphicsTarget: Field = {
+  type: "object",
+  additionalProperties: false,
+  required: ["kind", "region_id", "x", "y"],
+  properties: {
+    kind: { type: "string", enum: ["graphics_point"] },
+    region_id: shortId,
+    x: { type: "integer", minimum: 0, maximum: 1000 },
+    y: { type: "integer", minimum: 0, maximum: 1000 },
+  },
+};
+const annotation: Field = {
+  type: "object",
+  description:
+    "A concise hoverable teaching callout. Target either an exact code range or a normalized point inside a named graphics region. Explain what the target does and why it matters; use focus_microscope_annotation to verify it visually.",
+  additionalProperties: false,
+  required: ["id", "text", "target"],
+  properties: {
+    id: shortId,
+    text: { type: "string", minLength: 1, maxLength: 1024 },
+    color: { type: "string", enum: ["blue", "blue-light", "blue-deep"] },
+    target: { oneOf: [codeTarget, graphicsTarget] },
+  },
+};
+const stageBounds: Field = {
   type: "object",
   additionalProperties: false,
   required: ["x", "y", "width", "height"],
@@ -177,28 +199,41 @@ const overlayBounds: Field = {
     height: { type: "integer", minimum: 25, maximum: 1000 },
   },
 };
-const walkthroughOverlay: Field = {
+const background: Field = {
   type: "object",
   additionalProperties: false,
-  required: ["id", "kind", "bounds"],
+  required: ["color"],
+  properties: {
+    color: { type: "string", pattern: "^#[0-9A-Fa-f]{6}$" },
+    opacity: { type: "integer", minimum: 0, maximum: 255 },
+  },
+};
+const graphicsRegion: Field = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "bounds", "language", "source", "description"],
   properties: {
     id: shortId,
-    kind: {
-      type: "string",
-      enum: ["code", "markdown", "graphics_controls"],
+    bounds: stageBounds,
+    background,
+    language: { type: "string", enum: ["assemblyscript-rgba-1"] },
+    source: {
+      ...source,
+      minLength: 1,
+      description:
+        "Animated AssemblyScript RGBA for only this region. Export init(width:i32,height:i32,stepIndex:i32), render(width:i32,height:i32,elapsed:f64,delta:f64):usize, and dispose(). Reuse one fixed StaticArray<u8>; never allocate in render; bounds-check writes. Region dimensions are physical pixels capped at 1024x768.",
     },
-    bounds: overlayBounds,
-    markdown: walkthroughMarkdown,
-    style: {
-      type: "object",
-      additionalProperties: false,
-      required: ["opacity", "font", "font_size", "overflow"],
-      properties: {
-        opacity: { type: "integer", minimum: 0, maximum: 255 },
-        font: { type: "string", enum: ["proportional", "monospace"] },
-        font_size: { type: "integer", minimum: 10, maximum: 32 },
-        overflow: { type: "string", enum: ["scroll", "clip"] },
-      },
+    description: {
+      type: "string",
+      minLength: 1,
+      maxLength: 1024,
+      description: "Short accessible description of what this diagram teaches.",
+    },
+    artifact: {
+      type: "string",
+      minLength: 4,
+      maxLength: 80,
+      pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*\\.ts$",
     },
   },
 };
@@ -215,48 +250,27 @@ const walkthrough: Field = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "title", "code", "markdown"],
+        required: ["id", "title", "description", "code"],
         properties: {
           id: shortId,
           title,
           code: source,
-          markdown: walkthroughMarkdown,
+          description: stepDescription,
+          code_bounds: stageBounds,
+          background,
           playground_code: {
             ...source,
             minLength: 1,
             description:
               "Optional self-contained hands-on experiment for this step. It runs only when explicitly opened and executed in a fresh isolated temporary kernel; do not depend on the notebook kernel or earlier playgrounds.",
           },
-          graphics: {
-            type: "object",
-            additionalProperties: false,
-            required: ["language", "source", "description"],
-            properties: {
-              language: { type: "string", enum: ["assemblyscript-rgba-1"] },
-              source: {
-                ...source,
-                minLength: 1,
-                description:
-                  "Animated AssemblyScript RGBA graphics. Export init(width:i32,height:i32,stepIndex:i32):void, render(width:i32,height:i32,elapsed:f64,delta:f64):usize, and dispose():void. render returns a pointer to width*height*4 unpremultiplied RGBA bytes. Dimensions are physical pixels, usually no more than 1024x768; elapsed/delta are seconds. Allocate one fixed StaticArray<u8> pixel buffer, reuse it, never allocate inside render, and bounds-check every pixel write. The stub runtime is fixed at 16 MiB; only memory and abort imports are allowed—no browser or kernel APIs.",
-              },
-              description: { type: "string", minLength: 1, maxLength: 1024 },
-              artifact: {
-                type: "string",
-                minLength: 4,
-                maxLength: 80,
-                pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*\\.ts$",
-                description:
-                  "Save an owned graphics source attachment as <microscope-path>.<artifact>, e.g. orbit.ts. Updated/deleted with the microscope and included in workspace export.",
-              },
-            },
-          },
           annotations: { type: "array", maxItems: 32, items: annotation },
-          overlays: {
+          graphics_regions: {
             type: "array",
-            maxItems: 32,
-            items: walkthroughOverlay,
+            maxItems: 8,
+            items: graphicsRegion,
             description:
-              "Place code, concise Markdown explanation/caption regions, and graphics controls over the stage. Coordinates are workspace-relative thousandths (0..1000), while graphics use physical pixels, so convert deliberately. Navigation and the step title remain fixed above the stage: do not add a title overlay. Markdown may appear multiple times. Keep important graphics above about overlay y=440 when code begins near y=650.",
+              "Independent diagram regions positioned in workspace-relative thousandths (0..1000). Order controls paint order. Use multiple regions only when separate visual elements improve the explanation; do not draw unused full-canvas pixels.",
           },
         },
       },
@@ -270,12 +284,12 @@ define(
 );
 define(
   "update_microscope",
-  `Replace a microscope's complete walkthrough and title, preserving its ID and owning cell. Code is display-only; annotations use inclusive one-based lines and may narrow to one-based character columns on a single line. Driver-only; saved in its sidecar. ${microscopeAuthoringGuide}`,
+  `Replace a microscope's complete walkthrough, preserving its ID and owning cell. This is the only authoring mutation: send the full desired document. Code is display-only; descriptions are short math-capable CommonMark; annotations target code_range or graphics_point. Driver-only. ${microscopeAuthoringGuide}`,
   { ...microScope, walkthrough },
 );
 define(
   "read_microscope",
-  `Read the saved microscope document and full walkthrough before editing so an update preserves deliberate steps, overlays, annotations and graphics. ${microscopeAuthoringGuide}`,
+  `Read the saved microscope document before editing so the full replacement preserves deliberate steps, regions and annotations. ${microscopeAuthoringGuide}`,
   microScope,
   undefined,
   true,
@@ -289,7 +303,7 @@ define(
 );
 define(
   "focus_microscope_annotation",
-  "Open a step and pulse the named annotation's exact code range so it is obvious in the UI and captures. Use after saving to verify annotation placement; does not change content or execute code.",
+  "Open a step and emphasize a named annotation: pulse its code range or pin its graphics-point callout. Use after saving to verify placement; does not change content or execute code.",
   {
     ...microScope,
     step_index: { type: "integer", minimum: 0, maximum: 63 },
@@ -325,7 +339,7 @@ define(
 );
 define(
   "capture_microscope_step",
-  "Capture the currently rendered microscope stage as PNG for required visual design feedback. Open or focus the intended step first, inspect the returned image for hierarchy, overlap, clipping, legibility and topic-specific visual impact, then revise and capture again. Includes graphics and overlays, not fixed navigation. Accept only when graphics.error is null and graphics.frames is greater than zero.",
+  "Capture the currently rendered microscope stage as PNG for required visual feedback. Open or focus the intended step first; inspect hierarchy, overlap, clipping, legibility, diagram relevance and annotation placement; then revise and recapture. The result reports every graphics region: accept only when each error is null and every region has rendered frames (frames > 0).",
   {},
   [],
   true,
@@ -456,7 +470,29 @@ function parse(
       ? definition.inputSchema.properties[key]
       : undefined;
     if (!field) throw new ToolError("invalid_input", "Unknown argument");
-    if (field.type === "string") {
+    if (field.oneOf) {
+      const matches = field.oneOf.filter((candidate) => {
+        try {
+          parse(
+            {
+              ...definition,
+              inputSchema: {
+                type: "object",
+                additionalProperties: false,
+                properties: { candidate },
+                required: ["candidate"],
+              },
+            },
+            { candidate: value },
+          );
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      if (matches.length !== 1)
+        throw new ToolError("invalid_input", `Invalid argument: ${key}`);
+    } else if (field.type === "string") {
       if (
         typeof value !== "string" ||
         value.length < (field.minLength ?? 0) ||

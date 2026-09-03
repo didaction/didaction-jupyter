@@ -50,62 +50,55 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
         id: "waves",
         title: "Two waves, one phase",
         code: "sin(x - t)\ncos(x - t)",
-        markdown:
-          "Sine and cosine share a frequency: $\\omega$. Their phase relation is $$\\cos(x)=\\sin(x+\\pi/2).$$",
+        description:
+          "Sine and cosine share $\\omega$ with $\\cos(x)=\\sin(x+\\pi/2)$.",
+        code_bounds: { x: 35, y: 180, width: 430, height: 700 },
         annotations: [
           {
             id: "sine-wave",
-            start_line: 1,
-            end_line: 1,
             text: "This line draws the sine wave.",
             color: "blue",
-          },
-        ],
-        graphics: waveGraphics,
-        playground_code: "print(40 + 2)",
-        overlays: [
-          {
-            id: "code",
-            kind: "code",
-            bounds: { x: 35, y: 180, width: 430, height: 700 },
+            target: { kind: "code_range", start_line: 1, end_line: 1 },
           },
           {
-            id: "intro",
-            kind: "markdown",
-            bounds: { x: 35, y: 35, width: 430, height: 120 },
-            markdown:
-              "**Foreground explanation:** inline $\\omega t$ stays aligned with this text.\n\n$$\\cos(x)=\\sin(x+\\pi/2)$$",
-            style: {
-              opacity: 225,
-              font: "proportional",
-              font_size: 18,
-              overflow: "scroll",
+            id: "crest",
+            text: "The crest marks maximum amplitude.",
+            color: "blue-light",
+            target: {
+              kind: "graphics_point",
+              region_id: "wave",
+              x: 750,
+              y: 250,
             },
           },
+        ],
+        graphics_regions: [
           {
-            id: "detail",
-            kind: "markdown",
-            bounds: { x: 520, y: 600, width: 430, height: 140 },
-            markdown: "A second independently positioned Markdown overlay.",
+            id: "wave",
+            bounds: { x: 500, y: 80, width: 470, height: 400 },
+            background: { color: "#F7FAFC", opacity: 255 },
+            ...waveGraphics,
           },
           {
-            id: "graphics",
-            kind: "graphics_controls",
-            bounds: { x: 700, y: 35, width: 250, height: 120 },
+            id: "phase-detail",
+            bounds: { x: 650, y: 520, width: 300, height: 300 },
+            background: { color: "#FFF8F2", opacity: 255 },
+            ...waveGraphics,
           },
         ],
+        playground_code: "print(40 + 2)",
       },
       {
         id: "empty",
         title: "No graphics",
         code: "42",
-        markdown: "The previous runtime has been destroyed.",
+        description: "The previous runtime has been destroyed.",
       },
       ...Array.from({ length: 5 }, (_, index) => ({
         id: `extra-${index + 3}`,
         title: `Additional concept ${index + 3}`,
         code: `${index + 3}`,
-        markdown: `Additional walkthrough content ${index + 3}.`,
+        description: `Additional walkthrough content ${index + 3}.`,
       })),
     ],
   };
@@ -135,16 +128,21 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
       .structuredContent.context as {
       microscope: {
         walkthrough: {
-          graphics: {
+          graphics_regions: Array<{
+            region_id: string;
             frames: number;
             width: number;
             paused: boolean;
             error: string | null;
-          } | null;
+          }> | null;
         };
       };
     };
-    return context.microscope.walkthrough.graphics;
+    return (
+      context.microscope.walkthrough.graphics_regions?.find(
+        (region) => region.region_id === "wave",
+      ) ?? null
+    );
   };
   await expect
     .poll(
@@ -156,18 +154,27 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
       { timeout: 15000 },
     )
     .toBeGreaterThan(3);
+  await expect
+    .poll(async () => {
+      const context = (await microscopeCall(page, "get_active_context"))
+        .structuredContent.context as {
+        microscope: { walkthrough: { graphics_regions?: unknown[] } };
+      };
+      return context.microscope.walkthrough.graphics_regions?.length ?? 0;
+    })
+    .toBe(2);
   const width = (await status())!.width;
   const canvas = (await page.locator("#notebook-canvas").boundingBox())!;
   await page.screenshot({
     path: ".runtime/graphics-stage-before-controls.png",
   });
-  await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 215);
+  await page.mouse.click(canvas.x + canvas.width * 0.17, canvas.y + 280);
   await expect.poll(async () => (await status())?.paused).toBe(true);
   await page.waitForTimeout(150);
   const pausedFrames = (await status())!.frames;
   await page.waitForTimeout(150);
   expect((await status())!.frames).toBe(pausedFrames);
-  await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 215);
+  await page.mouse.click(canvas.x + canvas.width * 0.17, canvas.y + 280);
   await expect
     .poll(async () => (await status())?.frames ?? 0)
     .toBeGreaterThan(pausedFrames);
@@ -233,7 +240,7 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
     "this is invalid syntax",
   ]) {
     const next = structuredClone(walkthrough);
-    next.steps[0]!.graphics!.source = waveGraphics.source.replace(
+    next.steps[0]!.graphics_regions![0]!.source = waveGraphics.source.replace(
       "return changetype<usize>(pixels);",
       body,
     );

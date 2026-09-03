@@ -6,17 +6,20 @@ export const exampleWalkthrough = {
       playground_code: "values = [2, 4]\nprint(sum(values))",
       title: "Choose categories and values",
       code: "labels = ['a', 'b']\nvalues = [2, 4]",
-      markdown:
-        "## Two categories, two values\nEach label pairs with a value. The second bar will be **twice as tall** as the first.",
+      description:
+        "Each label pairs with a value; the second bar is **twice as tall**, or $2x$.",
       annotations: [
         {
           id: "values",
-          start_line: 2,
-          end_line: 2,
-          start_column: 9,
-          end_column: 14,
           text: "These numbers determine the bar heights.",
           color: "blue",
+          target: {
+            kind: "code_range",
+            start_line: 2,
+            end_line: 2,
+            start_column: 9,
+            end_column: 14,
+          },
         },
       ],
     },
@@ -24,15 +27,14 @@ export const exampleWalkthrough = {
       id: "plot",
       title: "Draw the chart",
       code: "import matplotlib.pyplot as plt\n\nplt.bar(labels, values)\nplt.show()",
-      markdown:
-        "## Turn data into a picture\n`bar` maps the values to heights. `show` displays the figure.\n\nThis code is an explanation, not an executable playground.",
+      description:
+        "`bar` maps each value $v_i$ to height; `show` displays the figure.",
       annotations: [
         {
           id: "bars",
-          start_line: 3,
-          end_line: 4,
           text: "Draw the bars, then display the figure.",
           color: "blue-deep",
+          target: { kind: "code_range", start_line: 3, end_line: 4 },
         },
       ],
     },
@@ -43,15 +45,14 @@ export const exampleWalkthrough = {
         { length: 60 },
         (_, i) => `value_${i + 1} = ${i + 1}`,
       ).join("\n"),
-      markdown:
-        "## Follow the annotation\nFocusing a range scrolls the code pane to reveal it. Clear focus to stop the pulse without deleting the annotation.",
+      description:
+        "Focus follows the final range $v_{58}\ldots v_{60}$ without changing it.",
       annotations: [
         {
           id: "last",
-          start_line: 58,
-          end_line: 60,
           text: "The focused range remains visible in long code.",
           color: "blue-light",
+          target: { kind: "code_range", start_line: 58, end_line: 60 },
         },
       ],
     },
