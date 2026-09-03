@@ -101,6 +101,12 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
         code: "42",
         markdown: "The previous runtime has been destroyed.",
       },
+      ...Array.from({ length: 5 }, (_, index) => ({
+        id: `extra-${index + 3}`,
+        title: `Additional concept ${index + 3}`,
+        code: `${index + 3}`,
+        markdown: `Additional walkthrough content ${index + 3}.`,
+      })),
     ],
   };
   const created = await microscopeCall(page, "create_microscope", {

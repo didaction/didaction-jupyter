@@ -2921,7 +2921,7 @@ impl MathRenderCache {
 const MATH_PIXELS_PER_POINT: f32 = 2.0;
 const MATH_RASTER_PADDING_POINTS: f32 = 4.0;
 const INLINE_MATH_RASTER_PADDING_POINTS: f32 = 1.0;
-const INLINE_MATH_BASELINE_OFFSET_POINTS: f32 = 1.5;
+const INLINE_MATH_BASELINE_OFFSET_POINTS: f32 = 4.0;
 
 const MATH_PREAMBLE: &str = r#"
 #let mitexmathbf(it) = math.bold(math.upright(it))
@@ -4334,7 +4334,7 @@ mod tests {
             .expect("inline math texture");
 
         assert!(
-            math_top >= text_top,
+            math_top >= text_top + 3.0,
             "inline math starts above text: math={math_top}, text={text_top}"
         );
     }

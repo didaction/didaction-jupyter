@@ -87,33 +87,37 @@ impl NotebookEguiApp {
         let mut index = focus.step_index;
         ui.heading(&w.steps[index].title);
         ui.add_space(4.0);
-        ui.horizontal_wrapped(|ui| {
-            if toolbar_icon_button(
-                ui,
-                index > 0,
-                ToolbarIcon::Left,
-                "Previous step (Left arrow)",
-            ) {
-                index -= 1;
-            }
-            for (position, step) in w.steps.iter().enumerate() {
-                if walkthrough_light(ui, position == index, position, &step.title) {
-                    index = position;
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), 36.0),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                if toolbar_icon_button(
+                    ui,
+                    index > 0,
+                    ToolbarIcon::Left,
+                    "Previous step (Left arrow)",
+                ) {
+                    index -= 1;
                 }
-            }
-            if toolbar_icon_button(
-                ui,
-                index + 1 < w.steps.len(),
-                ToolbarIcon::Right,
-                "Next step (Right arrow)",
-            ) {
-                index += 1;
-            }
-            if focus.annotation_id.is_some() && ui.button("Clear focus").clicked() {
-                focus.annotation_id = None;
-                let _ = self.focus_walkthrough(focus.clone());
-            }
-        });
+                for (position, step) in w.steps.iter().enumerate() {
+                    if walkthrough_light(ui, position == index, position, &step.title) {
+                        index = position;
+                    }
+                }
+                if toolbar_icon_button(
+                    ui,
+                    index + 1 < w.steps.len(),
+                    ToolbarIcon::Right,
+                    "Next step (Right arrow)",
+                ) {
+                    index += 1;
+                }
+                if focus.annotation_id.is_some() && ui.button("Clear focus").clicked() {
+                    focus.annotation_id = None;
+                    let _ = self.focus_walkthrough(focus.clone());
+                }
+            },
+        );
         if index != focus.step_index {
             focus = WalkthroughFocus {
                 step_index: index,
@@ -591,9 +595,8 @@ impl NotebookEguiApp {
 }
 
 fn walkthrough_light(ui: &mut egui::Ui, active: bool, position: usize, title: &str) -> bool {
-    let response = ui
-        .add_sized([22.0, 22.0], egui::Button::new("").frame(false))
-        .on_hover_text(format!("{}: {title}", position + 1));
+    let (_, response) = ui.allocate_exact_size(egui::vec2(18.0, 28.0), egui::Sense::click());
+    let response = response.on_hover_text(format!("{}: {title}", position + 1));
     let center = response.rect.center();
     let color = if active || response.hovered() {
         Color32::from_rgb(45, 105, 143)
