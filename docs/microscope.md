@@ -92,7 +92,10 @@ Browser-to-browser following is intentionally unsupported.
 
 - `read_microscope` returns the saved document, including its walkthrough.
 - `focus_microscope_step` opens a **zero-based** `step_index`, clearing temporary
-  annotation focus. Humans use Previous, Next or the step dropdown.
+  annotation focus. Humans use the left/right chevron buttons, Left/Right arrow
+  keys, or the step dropdown. Up/Down cycles the current step's annotations;
+  Backspace returns to the notebook. These shortcuts are microscope-only and
+  do not override playground editing or an open step dropdown.
 - `focus_microscope_annotation` takes `step_index` and `annotation_id`, opens the
   step, scrolls the code range into view and pulses its outline. Reduced-motion
   viewers get a static outline instead.

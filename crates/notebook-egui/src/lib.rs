@@ -2153,10 +2153,15 @@ impl eframe::App for NotebookEguiApp {
                     });
                 });
         }
+        self.microscope_shortcuts(ctx);
         if let Some(target) = self.microscope_target.clone() {
             egui::TopBottomPanel::top("microscope-toolbar").show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("Back to notebook").clicked() {
+                    if ui
+                        .button("Back to notebook")
+                        .on_hover_text("Backspace")
+                        .clicked()
+                    {
                         let _ = self.open_microscope(None);
                     }
                     if self.read_only
@@ -2923,6 +2928,8 @@ fn notebook_document_width(available_width: f32) -> f32 {
 
 #[derive(Clone, Copy)]
 enum ToolbarIcon {
+    Left,
+    Right,
     Workspace,
     Follow(bool),
     Save,
@@ -3017,6 +3024,21 @@ fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tool
     let stroke = Stroke::new(1.6 * scale, color);
     let painter = ui.painter();
     match icon {
+        ToolbarIcon::Left | ToolbarIcon::Right => {
+            let (tip, tail) = if matches!(icon, ToolbarIcon::Left) {
+                (rect.left(), rect.right())
+            } else {
+                (rect.right(), rect.left())
+            };
+            painter.add(egui::Shape::line(
+                vec![
+                    egui::pos2(tail, rect.top()),
+                    egui::pos2(tip, rect.center().y),
+                    egui::pos2(tail, rect.bottom()),
+                ],
+                stroke,
+            ));
+        }
         ToolbarIcon::Follow(_) => {
             let center = rect.center();
             let radius = rect.width().min(rect.height()) * 0.32;

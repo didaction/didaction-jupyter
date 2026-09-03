@@ -64,7 +64,7 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   await page.screenshot({ path: ".runtime/walkthrough-desktop.png" });
   // Human egui Next and Previous controls use the same local view state.
   const canvas = (await page.locator("#notebook-canvas").boundingBox())!;
-  await page.mouse.click(canvas.x + 377, canvas.y + 94);
+  await page.mouse.click(canvas.x + 330, canvas.y + 94);
   await expect
     .poll(async () => (await active()).walkthrough.step_index)
     .toBe(1);
@@ -73,6 +73,25 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   await expect
     .poll(async () => (await active()).walkthrough.step_index)
     .toBe(0);
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(async () => (await active()).walkthrough.step_index)
+    .toBe(1);
+  await page.keyboard.press("ArrowDown");
+  await expect
+    .poll(async () => (await active()).walkthrough.annotation_id)
+    .toBe("bars");
+  await page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(async () => (await active()).walkthrough.annotation_id)
+    .toBeNull();
+  await page.keyboard.press("ArrowUp");
+  await expect
+    .poll(async () => (await active()).walkthrough.annotation_id)
+    .toBe("values");
+  await page.keyboard.press("Backspace");
+  await expect.poll(async () => (await active()).walkthrough).toBeNull();
+  expect((await call("open_microscope")).isError).toBe(false);
   expect(
     (
       await call("focus_microscope_annotation", {

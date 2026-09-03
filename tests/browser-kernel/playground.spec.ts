@@ -55,6 +55,17 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
       .isError,
   ).toBe(false);
   await expect(page.locator("#playground-canvas")).toBeVisible();
+  await page.locator("#playground-canvas").evaluate((canvas) => canvas.focus());
+  for (const key of [
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Backspace",
+  ]) {
+    await page.keyboard.press(key);
+  }
+  await expect(page.locator("#playground-canvas")).toBeVisible();
   const read = async () =>
     (
       await microscopeCall(page, "read_playground", {

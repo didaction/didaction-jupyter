@@ -6,6 +6,47 @@ use notebook_protocol::microscope::{
 };
 
 impl NotebookEguiApp {
+    pub(super) fn microscope_shortcuts(&mut self, ctx: &egui::Context) {
+        // Playground editors own their keys, including Backspace and arrows.
+        if self.microscope_target.is_none()
+            || !ctx.input(|input| input.focused)
+            || self.state.snapshot.notebook.workspace == "temporary"
+            || ctx.wants_keyboard_input()
+            || egui::Popup::is_any_open(ctx)
+        {
+            return;
+        }
+        let key = ctx.input_mut(|input| {
+            [
+                Key::Backspace,
+                Key::ArrowLeft,
+                Key::ArrowRight,
+                Key::ArrowUp,
+                Key::ArrowDown,
+            ]
+            .into_iter()
+            .find(|key| input.consume_key(egui::Modifiers::NONE, *key))
+        });
+        if key == Some(Key::Backspace) {
+            let _ = self.open_microscope(None);
+            return;
+        }
+        let Some(w) = self
+            .microscope_document
+            .as_ref()
+            .and_then(|d| d.walkthrough.as_ref())
+        else {
+            return;
+        };
+        let focus = self
+            .microscope_target
+            .as_ref()
+            .and_then(|t| t.focus.clone())
+            .unwrap_or_default();
+        if let Some(next) = key.and_then(|key| navigation_focus(w, &focus, key)) {
+            let _ = self.focus_walkthrough(next);
+        }
+    }
     pub fn focus_walkthrough(&mut self, focus: WalkthroughFocus) -> Result<(), String> {
         let w = self
             .microscope_document
@@ -46,10 +87,12 @@ impl NotebookEguiApp {
         ui.heading(&w.title);
         ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
-            if ui
-                .add_enabled(index > 0, egui::Button::new("Previous"))
-                .clicked()
-            {
+            if toolbar_icon_button(
+                ui,
+                index > 0,
+                ToolbarIcon::Left,
+                "Previous step (Left arrow)",
+            ) {
                 index -= 1;
             }
             egui::ComboBox::from_id_salt("walkthrough-step")
@@ -65,10 +108,12 @@ impl NotebookEguiApp {
                         ui.selectable_value(&mut index, i, format!("{}. {}", i + 1, step.title));
                     }
                 });
-            if ui
-                .add_enabled(index + 1 < w.steps.len(), egui::Button::new("Next"))
-                .clicked()
-            {
+            if toolbar_icon_button(
+                ui,
+                index + 1 < w.steps.len(),
+                ToolbarIcon::Right,
+                "Next step (Right arrow)",
+            ) {
                 index += 1;
             }
             if focus.annotation_id.is_some() && ui.button("Clear focus").clicked() {
@@ -294,6 +339,45 @@ impl NotebookEguiApp {
             });
     }
 }
+fn navigation_focus(
+    w: &Walkthrough,
+    focus: &WalkthroughFocus,
+    key: Key,
+) -> Option<WalkthroughFocus> {
+    let step = w.steps.get(focus.step_index)?;
+    match key {
+        Key::ArrowLeft | Key::ArrowRight => {
+            let index = if key == Key::ArrowLeft {
+                focus.step_index.checked_sub(1)?
+            } else {
+                focus.step_index + 1
+            };
+            w.steps.get(index)?;
+            Some(WalkthroughFocus {
+                step_index: index,
+                annotation_id: None,
+            })
+        }
+        Key::ArrowUp | Key::ArrowDown if !step.annotations.is_empty() => {
+            let count = step.annotations.len();
+            let current = step
+                .annotations
+                .iter()
+                .position(|a| Some(&a.id) == focus.annotation_id.as_ref());
+            let index = match (key, current) {
+                (Key::ArrowUp, Some(i)) => (i + count - 1) % count,
+                (Key::ArrowUp, None) => count - 1,
+                (_, Some(i)) => (i + 1) % count,
+                _ => 0,
+            };
+            Some(WalkthroughFocus {
+                step_index: focus.step_index,
+                annotation_id: Some(step.annotations[index].id.clone()),
+            })
+        }
+        _ => None,
+    }
+}
 
 fn annotated_line(
     line: &str,
@@ -351,6 +435,35 @@ fn color(c: AnnotationColor) -> Color32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arrows_bound_steps_and_cycle_annotations() {
+        let w: Walkthrough = serde_json::from_value(serde_json::json!({
+            "title":"Walk", "steps":[
+                {"id":"one","title":"One","code":"x","markdown":"", "annotations":[
+                    {"id":"a","start_line":1,"end_line":1,"text":"A"},
+                    {"id":"b","start_line":1,"end_line":1,"text":"B"}
+                ]},
+                {"id":"two","title":"Two","code":"x","markdown":"","annotations":[]}
+            ]
+        }))
+        .unwrap();
+        let start = WalkthroughFocus::default();
+        assert!(navigation_focus(&w, &start, Key::ArrowLeft).is_none());
+        let a = navigation_focus(&w, &start, Key::ArrowDown).unwrap();
+        assert_eq!(a.annotation_id.as_deref(), Some("a"));
+        let b = navigation_focus(&w, &a, Key::ArrowDown).unwrap();
+        assert_eq!(b.annotation_id.as_deref(), Some("b"));
+        assert_eq!(navigation_focus(&w, &b, Key::ArrowDown), Some(a.clone()));
+        assert_eq!(navigation_focus(&w, &a, Key::ArrowUp), Some(b.clone()));
+        assert_eq!(navigation_focus(&w, &start, Key::ArrowUp), Some(b));
+        let next = navigation_focus(&w, &a, Key::ArrowRight).unwrap();
+        assert_eq!(next.step_index, 1);
+        assert!(next.annotation_id.is_none());
+        assert!(navigation_focus(&w, &next, Key::ArrowDown).is_none());
+        assert!(navigation_focus(&w, &next, Key::ArrowRight).is_none());
+        assert_eq!(navigation_focus(&w, &next, Key::ArrowLeft), Some(start));
+    }
 
     #[test]
     fn character_highlights_cover_unicode_characters_not_bytes() {
