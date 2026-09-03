@@ -34,9 +34,28 @@ pub struct WalkthroughStep {
 pub enum WalkthroughOverlayKind {
     Code,
     Markdown,
-    Annotations,
-    Playground,
     GraphicsControls,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverlayFont {
+    Proportional,
+    Monospace,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverlayOverflow {
+    Scroll,
+    Clip,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OverlayStyle {
+    /// 0..255 alpha for the notebook-like overlay surface.
+    pub opacity: u8,
+    pub font: OverlayFont,
+    pub font_size: u8,
+    pub overflow: OverlayOverflow,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -53,6 +72,8 @@ pub struct WalkthroughOverlay {
     pub id: String,
     pub kind: WalkthroughOverlayKind,
     pub bounds: OverlayBounds,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<OverlayStyle>,
     /// Required only for Markdown overlays; permits multiple independent blocks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub markdown: Option<String>,
@@ -152,6 +173,10 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
                             .is_none_or(|text| text.len() > 64_000),
                         _ => overlay.markdown.is_some(),
                     }
+                    || overlay
+                        .style
+                        .as_ref()
+                        .is_some_and(|style| !(10..=32).contains(&style.font_size))
             })
             || s.graphics.as_ref().is_some_and(|g| {
                 g.source.trim().is_empty()

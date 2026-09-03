@@ -42,9 +42,13 @@ removed.
 
 Steps may define up to 32 `overlays`. Bounds are integer thousandths of stage
 width/height (`x`, `y`, `width`, `height`), remain inside 0..1000, and have a
-minimum 25/1000 size. Kinds are `code`, `markdown`, `annotations`, `playground`,
-and `graphics_controls`. Markdown overlays carry their own bounded `markdown`
+minimum 25/1000 size. Kinds are `code`, `markdown`, and `graphics_controls`.
+The code overlay owns its play control and annotation list so they remain one
+notebook-cell-like environment. Markdown overlays carry their own bounded `markdown`
 source, so a step can contain multiple independently positioned explanations.
+Optional styles select proportional or monospace bundled fonts, 10–32 px size,
+0–255 surface opacity, and `scroll` or `clip` overflow. Scroll is the readable
+default and prevents long Markdown from being silently truncated.
 When overlays are omitted, the same elements use a readable default composition.
 
 A compact Pause/Resume control freezes or resumes the animation clock. With

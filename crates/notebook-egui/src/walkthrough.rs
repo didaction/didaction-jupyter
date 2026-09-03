@@ -2,8 +2,8 @@
 //! Display-only content; all durable authoring uses validated notebook commands.
 use super::*;
 use notebook_protocol::microscope::{
-    AnnotationColor, OverlayBounds, Walkthrough, WalkthroughFocus, WalkthroughOverlayKind,
-    validate_focus,
+    AnnotationColor, OverlayBounds, OverlayFont, OverlayOverflow, OverlayStyle, Walkthrough,
+    WalkthroughFocus, WalkthroughOverlayKind, validate_focus,
 };
 
 impl NotebookEguiApp {
@@ -392,30 +392,12 @@ impl NotebookEguiApp {
                 },
             ),
             (
-                WalkthroughOverlayKind::Annotations,
-                OverlayBounds {
-                    x: 650,
-                    y: 190,
-                    width: 330,
-                    height: 460,
-                },
-            ),
-            (
                 WalkthroughOverlayKind::GraphicsControls,
                 OverlayBounds {
                     x: 650,
                     y: 20,
                     width: 330,
                     height: 150,
-                },
-            ),
-            (
-                WalkthroughOverlayKind::Playground,
-                OverlayBounds {
-                    x: 650,
-                    y: 670,
-                    width: 200,
-                    height: 90,
                 },
             ),
         ];
@@ -428,6 +410,7 @@ impl NotebookEguiApp {
                         *kind,
                         bounds.clone(),
                         Some(step.markdown.clone()),
+                        None,
                         format!("default-{position}"),
                     )
                 })
@@ -440,17 +423,14 @@ impl NotebookEguiApp {
                         overlay.kind,
                         overlay.bounds.clone(),
                         overlay.markdown.clone(),
+                        overlay.style.clone(),
                         overlay.id.clone(),
                     )
                 })
                 .collect()
         };
-        for (kind, bounds, markdown, id) in overlays {
-            if matches!(kind, WalkthroughOverlayKind::Playground) && step.playground_code.is_none()
-                || matches!(kind, WalkthroughOverlayKind::GraphicsControls)
-                    && step.graphics.is_none()
-                || matches!(kind, WalkthroughOverlayKind::Annotations)
-                    && step.annotations.is_empty()
+        for (kind, bounds, markdown, style, id) in overlays {
+            if matches!(kind, WalkthroughOverlayKind::GraphicsControls) && step.graphics.is_none()
                 || matches!(kind, WalkthroughOverlayKind::Markdown)
                     && markdown.as_deref().unwrap_or_default().is_empty()
             {
@@ -461,25 +441,66 @@ impl NotebookEguiApp {
                 ui.set_clip_rect(rect);
                 match kind {
                     WalkthroughOverlayKind::Markdown => {
+                        let style = style.unwrap_or(OverlayStyle {
+                            opacity: 235,
+                            font: OverlayFont::Proportional,
+                            font_size: 16,
+                            overflow: OverlayOverflow::Scroll,
+                        });
+                        let previous = ui.style().clone();
+                        let mut next = (*previous).clone();
+                        let family = match style.font {
+                            OverlayFont::Proportional => egui::FontFamily::Proportional,
+                            OverlayFont::Monospace => egui::FontFamily::Monospace,
+                        };
+                        next.text_styles.insert(
+                            egui::TextStyle::Body,
+                            egui::FontId::new(f32::from(style.font_size), family),
+                        );
+                        ui.set_style(next);
                         egui::Frame::new()
-                            .fill(Color32::from_white_alpha(235))
+                            .fill(Color32::from_white_alpha(style.opacity))
                             .inner_margin(Margin::same(8))
                             .show(ui, |ui| {
-                                rendered_markdown_response(
-                                    ui,
-                                    &format!("{scope}-{id}"),
-                                    markdown.as_deref().unwrap_or_default(),
-                                    &mut self.markdown_cache,
-                                    &self.math_cache,
-                                );
+                                let mut render = |ui: &mut egui::Ui| {
+                                    rendered_markdown_response(
+                                        ui,
+                                        &format!("{scope}-{id}"),
+                                        markdown.as_deref().unwrap_or_default(),
+                                        &mut self.markdown_cache,
+                                        &self.math_cache,
+                                    );
+                                };
+                                if style.overflow == OverlayOverflow::Scroll {
+                                    egui::ScrollArea::vertical()
+                                        .auto_shrink([false, false])
+                                        .show(ui, render);
+                                } else {
+                                    render(ui);
+                                }
                             });
+                        ui.set_style((*previous).clone());
                     }
                     WalkthroughOverlayKind::Code => {
+                        let opacity = style.as_ref().map_or(240, |style| style.opacity);
                         egui::Frame::new()
-                            .fill(Color32::from_white_alpha(240))
+                            .fill(Color32::from_white_alpha(opacity))
                             .stroke(Stroke::new(1.0, Color32::from_gray(205)))
                             .inner_margin(Margin::same(8))
                             .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    if step.playground_code.is_some()
+                                        && toolbar_icon_button(
+                                            ui,
+                                            !self.read_only,
+                                            ToolbarIcon::Run,
+                                            "Open playground window",
+                                        )
+                                    {
+                                        self.playground_requested = Some(focus.step_index);
+                                    }
+                                    ui.label(RichText::new("Code · read-only").strong());
+                                });
                                 egui::ScrollArea::both().show(ui, |ui| {
                                     for (line, source) in step.code.split('\n').enumerate() {
                                         let selected = step.annotations.iter().any(|a| {
@@ -496,40 +517,27 @@ impl NotebookEguiApp {
                                             ui.label(text);
                                         }
                                     }
+                                    if !step.annotations.is_empty() {
+                                        ui.separator();
+                                        ui.label(RichText::new("Code annotations").strong());
+                                        for annotation in &step.annotations {
+                                            if ui
+                                                .selectable_label(
+                                                    focus.annotation_id.as_ref()
+                                                        == Some(&annotation.id),
+                                                    &annotation.text,
+                                                )
+                                                .clicked()
+                                            {
+                                                let _ = self.focus_walkthrough(WalkthroughFocus {
+                                                    step_index: focus.step_index,
+                                                    annotation_id: Some(annotation.id.clone()),
+                                                });
+                                            }
+                                        }
+                                    }
                                 });
                             });
-                    }
-                    WalkthroughOverlayKind::Annotations => {
-                        egui::Frame::new()
-                            .fill(Color32::from_white_alpha(235))
-                            .inner_margin(Margin::same(8))
-                            .show(ui, |ui| {
-                                ui.label(RichText::new("Code annotations").strong());
-                                for annotation in &step.annotations {
-                                    if ui
-                                        .selectable_label(
-                                            focus.annotation_id.as_ref() == Some(&annotation.id),
-                                            &annotation.text,
-                                        )
-                                        .clicked()
-                                    {
-                                        let _ = self.focus_walkthrough(WalkthroughFocus {
-                                            step_index: focus.step_index,
-                                            annotation_id: Some(annotation.id.clone()),
-                                        });
-                                    }
-                                }
-                            });
-                    }
-                    WalkthroughOverlayKind::Playground => {
-                        if toolbar_icon_button(
-                            ui,
-                            !self.read_only,
-                            ToolbarIcon::Run,
-                            "Open playground window",
-                        ) {
-                            self.playground_requested = Some(focus.step_index);
-                        }
                     }
                     WalkthroughOverlayKind::GraphicsControls => {
                         self.graphics_controls(ui, &step.graphics.as_ref().unwrap().description);

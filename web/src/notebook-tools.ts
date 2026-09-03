@@ -175,16 +175,21 @@ const walkthroughOverlay: Field = {
     id: shortId,
     kind: {
       type: "string",
-      enum: [
-        "code",
-        "markdown",
-        "annotations",
-        "playground",
-        "graphics_controls",
-      ],
+      enum: ["code", "markdown", "graphics_controls"],
     },
     bounds: overlayBounds,
     markdown: source,
+    style: {
+      type: "object",
+      additionalProperties: false,
+      required: ["opacity", "font", "font_size", "overflow"],
+      properties: {
+        opacity: { type: "integer", minimum: 0, maximum: 255 },
+        font: { type: "string", enum: ["proportional", "monospace"] },
+        font_size: { type: "integer", minimum: 10, maximum: 32 },
+        overflow: { type: "string", enum: ["scroll", "clip"] },
+      },
+    },
   },
 };
 const walkthrough: Field = {

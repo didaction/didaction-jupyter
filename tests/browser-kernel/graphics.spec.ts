@@ -64,6 +64,12 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
             kind: "markdown",
             bounds: { x: 35, y: 35, width: 430, height: 120 },
             markdown: "**Foreground explanation** over the animated stage.",
+            style: {
+              opacity: 225,
+              font: "proportional",
+              font_size: 18,
+              overflow: "scroll",
+            },
           },
           {
             id: "detail",
@@ -72,19 +78,9 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
             markdown: "A second independently positioned Markdown overlay.",
           },
           {
-            id: "notes",
-            kind: "annotations",
-            bounds: { x: 520, y: 180, width: 300, height: 220 },
-          },
-          {
             id: "graphics",
             kind: "graphics_controls",
             bounds: { x: 700, y: 35, width: 250, height: 120 },
-          },
-          {
-            id: "play",
-            kind: "playground",
-            bounds: { x: 840, y: 780, width: 110, height: 90 },
           },
         ],
       },
@@ -137,7 +133,9 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
     .toBeGreaterThan(3);
   const width = (await status())!.width;
   const canvas = (await page.locator("#notebook-canvas").boundingBox())!;
-  await page.screenshot({ path: ".runtime/graphics-stage-before-controls.png" });
+  await page.screenshot({
+    path: ".runtime/graphics-stage-before-controls.png",
+  });
   await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 180);
   await expect.poll(async () => (await status())?.paused).toBe(true);
   await page.waitForTimeout(150);
