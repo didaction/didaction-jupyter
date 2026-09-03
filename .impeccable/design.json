@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-01T14:02:51Z",
+  "generatedAt": "2026-09-03T08:01:09.538Z",
   "title": "Design System: didaction notebook",
   "extensions": {
     "colorMeta": {
@@ -272,8 +272,14 @@
       }
     ],
     "breakpoints": [
-      { "name": "canvas-controls-compact", "value": "600px" },
-      { "name": "browser-shell-compact", "value": "640px" }
+      {
+        "name": "canvas-compact-gutters",
+        "value": "600px"
+      },
+      {
+        "name": "browser-shell-compact",
+        "value": "640px"
+      }
     ]
   },
   "components": [
@@ -296,9 +302,9 @@
       "name": "Selected Notebook Cell",
       "kind": "card",
       "refersTo": "cell-selected",
-      "description": "The active unit of editing with grouped primitive actions; visible source flushes before serialized structural or execution commands.",
-      "html": "<article class=\"ds-cell ds-cell-selected\"><div class=\"ds-cell-actions\"><code>In [3]</code><span class=\"ds-cell-action-group\"><button type=\"button\">Run</button></span><i aria-hidden=\"true\"></i><span class=\"ds-cell-action-group\"><button type=\"button\">Add above</button><button type=\"button\">Add below</button><button type=\"button\">Duplicate</button></span><i aria-hidden=\"true\"></i><span class=\"ds-cell-action-group\"><button type=\"button\">Markdown</button></span><i aria-hidden=\"true\"></i><span class=\"ds-cell-action-group\"><button type=\"button\">Move down</button></span><i aria-hidden=\"true\"></i><span class=\"ds-cell-action-group\"><button type=\"button\">Delete</button></span></div><pre>value = 40 + 2</pre></article>",
-      "css": ".ds-cell { color-scheme: light; padding: 10px; color: #263238; background: #fff; border: 1px solid #d2d2d2; border-radius: 3px; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-cell-selected { background: #fafdff; border: 2px solid #2d6991; } .ds-cell-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .ds-cell-action-group { display: inline-flex; align-items: center; gap: 8px; } .ds-cell-actions > i { width: 1px; height: 22px; background: #d2d2d2; } .ds-cell code, .ds-cell pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; } .ds-cell button { min-height: 30px; border: 0; background: #e6e6e6; color: #4b555c; padding: 5px 8px; } .ds-cell button:hover { background: #dce6eb; } .ds-cell button:focus-visible { outline: 3px solid #2d698f; outline-offset: 2px; } .ds-cell button:active { background: #cfdde4; } .ds-cell pre { margin: 10px 0 0; padding: 8px 4px; background: #fff; } @media (max-width: 600px) { .ds-cell button { min-height: 44px; } }"
+      "description": "Active cell with a compact drag target and execution prompt; structural notebook actions live in the stable toolbar and menus.",
+      "html": "<article class=\"ds-cell ds-cell-selected\"><div class=\"ds-cell-actions\"><button type=\"button\" aria-label=\"Drag to reorder cell\" title=\"Drag to reorder cell\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 18 18\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M6 4v10M12 4v10M4 6h10M4 12h10\"/></svg></button><code>In [3]</code></div><pre>value = 40 + 2</pre></article>",
+      "css": ".ds-cell { color-scheme: light; padding: 10px; color: #263238; background: #fff; border: 1px solid #d2d2d2; border-radius: 3px; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-cell-selected { background: #fafdff; border: 2px solid #2d6991; } .ds-cell-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .ds-cell-action-group { display: inline-flex; align-items: center; gap: 8px; } .ds-cell-actions > i { width: 1px; height: 22px; background: #d2d2d2; } .ds-cell code, .ds-cell pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; } .ds-cell button { min-height: clamp(25.5px, 3.75vw, 30px); border: 0; background: #e6e6e6; color: #4b555c; padding: 5px 8px; } .ds-cell button:hover { background: #dce6eb; } .ds-cell button:focus-visible { outline: 3px solid #2d698f; outline-offset: 2px; } .ds-cell button:active { background: #cfdde4; } .ds-cell pre { margin: 10px 0 0; padding: 8px 4px; background: #fff; }"
     },
     {
       "name": "Notebook Output",
@@ -336,6 +342,13 @@
       "description": "Persistent local-execution warning beneath the notebook.",
       "html": "<p class=\"ds-trust-note\">Local execution is unsafe. Only run notebooks you trust.</p>",
       "css": ".ds-trust-note { margin: 0; padding: 8px 20px; color: #53636b; background: #fff8e8; border-top: 1px solid #ead49e; font: 400 0.82rem/1.4 ui-sans-serif, system-ui, sans-serif; } .ds-trust-note:focus-visible { outline: 3px solid #2d698f; outline-offset: -3px; } @media (max-width: 640px) { .ds-trust-note { padding-inline: 12px; } }"
+    },
+    {
+      "name": "Notebook Explorer",
+      "kind": "nav",
+      "description": "Confined notebook workspace with folder navigation, current-notebook selection, and independent scrolling.",
+      "html": "<nav class=\"ds-explorer\" aria-label=\"Notebook workspace\"><h2>Notebooks</h2><p>Workspace</p><div class=\"ds-folder-actions\"><button type=\"button\" disabled>Up</button><button type=\"button\">Refresh</button></div><button class=\"ds-file\" type=\"button\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6\"/></svg><span>demo.ipynb</span></button><p>1 folders and notebooks</p></nav>",
+      "css": ".ds-explorer { width: 248px; max-width: 100%; padding: 12px; overflow-y: auto; color: #263238; background: #fff; border-right: 1px solid #d7dcdf; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-explorer h2 { font-size: 1rem; margin: 0 0 12px; } .ds-explorer p { color: #53636b; font-size: .82rem; overflow-wrap: anywhere; } .ds-folder-actions { display: flex; gap: 8px; margin-bottom: 12px; } .ds-explorer button { border: 1px solid #84949c; border-radius: 0; padding: 7px 12px; background: #fff; color: inherit; cursor: pointer; } .ds-explorer button:hover { background: #eef4f7; } .ds-explorer button:active { background: #dfeaf0; } .ds-explorer button:focus-visible { outline: 3px solid #2d698f; outline-offset: 3px; } .ds-explorer button:disabled { cursor: default; color: #53636b; background: #f7f7f7; } .ds-explorer .ds-file { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 4px; border: 0; text-align: left; font-size: .82rem; } .ds-file span { overflow-wrap: anywhere; min-width: 0; } .ds-file svg { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.5; } .ds-explorer [aria-current] { background: #d2e8f6; color: #194e70; } @media (max-width: 640px) { .ds-explorer { width: 180px; } }"
     }
   ],
   "narrative": {
@@ -344,7 +357,7 @@
     "keyCharacteristics": [
       "Document-led vertical notebook flow.",
       "Compact, desktop-IDE chrome that wraps cleanly on narrow screens.",
-      "Explicit light-mode egui primitives with grouped, text-labeled per-cell actions.",
+      "Explicit light-mode egui primitives with Jupyter-familiar menus, toolbar icons, cell-type control, and execution prompts.",
       "Flat light surfaces separated by thin rules rather than depth effects.",
       "Restrained sans-serif interface type paired with monospace code and output.",
       "Blue emphasis for focus and cell selection; semantic color only for status and risk.",
@@ -391,7 +404,7 @@
       "Do keep the vertical notebook document, its ordered cells, and each output directly adjacent to its source.",
       "Do reserve blue for focus, selection, and running state; reserve green, orange, and red for explicit system meaning.",
       "Do preserve visible keyboard focus and touch-sized controls at narrow widths.",
-      "Do keep per-cell primitives text-labeled, grouped by task, and attached to the cell they modify.",
+      "Do keep selected-cell primitives in the stable Jupyter toolbar order, with descriptive hover text and equivalent menu labels.",
       "Do keep failures bounded, specific, and paired with the next valid recovery action.",
       "Do show synchronization, kernel state, and revision as quiet persistent metadata."
     ],
