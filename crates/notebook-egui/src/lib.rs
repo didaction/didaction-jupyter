@@ -176,6 +176,8 @@ pub struct NotebookEguiApp {
     redo_stack: Vec<Vec<CellMutation>>,
     suppress_history: bool,
     collapsed_cells: HashSet<String>,
+    agent_highlights: HashMap<String, Color32>,
+    pub reduced_motion: bool,
     capture_target: Option<(String, u32)>,
     capture_region: Option<(egui::Rect, f32, bool)>,
     pub captured_cell: Option<String>,
@@ -242,6 +244,8 @@ impl NotebookEguiApp {
             redo_stack: Vec::new(),
             suppress_history: false,
             collapsed_cells: HashSet::new(),
+            agent_highlights: HashMap::new(),
+            reduced_motion: false,
             capture_target: None,
             capture_region: None,
             captured_cell: None,
@@ -270,6 +274,21 @@ impl NotebookEguiApp {
             return Err("Unknown cell ID".into());
         }
         match (action, value) {
+            ("highlight", color) => {
+                let color = match color {
+                    "blue" => Color32::from_rgb(45, 105, 145),
+                    "blue-light" => Color32::from_rgb(91, 145, 181),
+                    "blue-deep" => Color32::from_rgb(30, 78, 115),
+                    _ => return Err("Invalid highlight color".into()),
+                };
+                if self.agent_highlights.len() >= 128 && !self.agent_highlights.contains_key(id) {
+                    return Err("Highlight limit reached; clear a highlight first".into());
+                }
+                self.agent_highlights.insert(id.to_owned(), color);
+            }
+            ("clear_highlight", "") => {
+                self.agent_highlights.remove(id);
+            }
             ("cell", "true") => {
                 self.collapsed_cells.insert(id.to_owned());
             }
@@ -364,6 +383,8 @@ impl NotebookEguiApp {
             .collect::<HashSet<_>>();
         self.output_views
             .retain(|cell_id, _| current_cells.contains(cell_id.as_str()));
+        self.agent_highlights
+            .retain(|cell_id, _| current_cells.contains(cell_id.as_str()));
         self.editors = self
             .state
             .snapshot
@@ -373,7 +394,7 @@ impl NotebookEguiApp {
             .collect();
         self.dirty_editors.clear();
     }
-    fn emit(&mut self, kind: NotebookCommandKind) {
+    fn emit(&mut self, mut kind: NotebookCommandKind) {
         if self.read_only {
             return;
         }
@@ -385,6 +406,9 @@ impl NotebookEguiApp {
             self.redo_stack.clear();
         }
         let command_id = Uuid::new_v4();
+        if let NotebookCommandKind::ModifyCells { changes } = &mut kind {
+            anchor_cell_changes(&self.state.snapshot.cells, changes);
+        }
         if let NotebookCommandKind::ExecuteCell { cell_id } = &kind {
             self.pending_execution_cells
                 .insert(command_id, cell_id.clone());
@@ -519,11 +543,15 @@ impl NotebookEguiApp {
         }
     }
     fn execute_selected(&mut self) {
-        if let Some((_, cell)) = self.selected_cell()
-            && cell.cell_type == CellType::Code
-        {
+        if let Some((_, cell)) = self.selected_cell() {
             self.flush_editor(&cell);
-            self.emit(NotebookCommandKind::ExecuteCell { cell_id: cell.id });
+            if cell.cell_type == CellType::Code {
+                self.emit(NotebookCommandKind::ExecuteCell { cell_id: cell.id });
+            } else if cell.cell_type == CellType::Markdown {
+                self.rendered_markdown.insert(cell.id);
+                self.pending_editor_focus = None;
+                self.edit_mode = false;
+            }
         }
     }
     fn execute_cell(&mut self, index: usize, cell: &Cell) {
@@ -537,22 +565,18 @@ impl NotebookEguiApp {
         });
     }
     fn execute_selected_and_advance(&mut self, always_insert: bool) {
-        let Some((index, cell)) = self.selected_cell() else {
+        let Some((index, _)) = self.selected_cell() else {
             return;
         };
-        if cell.cell_type != CellType::Code {
-            return;
-        }
-        self.flush_editor(&cell);
-        self.emit(NotebookCommandKind::ExecuteCell {
-            cell_id: cell.id.clone(),
-        });
+        self.execute_selected();
         if !always_insert && let Some(next) = self.state.snapshot.cells.get(index + 1) {
+            self.selected_cells.clear();
             self.state.snapshot.selected_cell_id = Some(next.id.clone());
             self.edit_mode = false;
             return;
         }
         let id = self.insert_cell(index + 1, CellType::Code, String::new());
+        self.selected_cells.clear();
         self.state.snapshot.selected_cell_id = Some(id.clone());
         self.pending_editor_focus = always_insert.then_some(id);
         self.edit_mode = always_insert;
@@ -635,6 +659,7 @@ impl NotebookEguiApp {
             return;
         };
         let id = cell.id.clone();
+        let selected_type = cell.cell_type.clone();
         if extend {
             let anchor = self
                 .state
@@ -651,7 +676,9 @@ impl NotebookEguiApp {
                 .unwrap_or(index);
             self.selected_cells.clear();
             for cell in &self.state.snapshot.cells[anchor.min(index)..=anchor.max(index)] {
-                self.selected_cells.insert(cell.id.clone());
+                if cell.cell_type == selected_type {
+                    self.selected_cells.insert(cell.id.clone());
+                }
             }
         } else {
             self.selected_cells.clear();
@@ -763,6 +790,7 @@ impl NotebookEguiApp {
             if self.editor_source(cell).contains(&self.find_query) {
                 let id = cell.id.clone();
                 self.state.snapshot.selected_cell_id = Some(id.clone());
+                self.selected_cells.clear();
                 self.collapsed_cells.remove(&id);
                 if cell.cell_type == CellType::Markdown {
                     self.rendered_markdown.remove(&id);
@@ -1432,6 +1460,7 @@ impl NotebookEguiApp {
                 if drag.drag_started() {
                     self.dragging_cell = Some(cell.id.clone());
                     self.state.snapshot.selected_cell_id = Some(cell.id.clone());
+                    self.selected_cells.clear();
                 }
                 if drag.dragged() {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
@@ -1515,7 +1544,10 @@ impl NotebookEguiApp {
                                 .id_source(format!("code-editor-{}", cell.id))
                                 .with_rows(editor.lines().count().clamp(2, 18))
                                 .with_fontsize(14.0)
-                                .with_theme(ColorTheme::GITHUB_LIGHT)
+                                .with_theme(ColorTheme {
+                                    selection: "#d2e8f6",
+                                    ..ColorTheme::GITHUB_LIGHT
+                                })
                                 .with_syntax(kernel_syntax(&self.state.snapshot.kernel.name))
                                 .with_numlines(!self.hidden_line_numbers.contains(&cell.id))
                                 .vscroll(false)
@@ -1564,13 +1596,16 @@ impl NotebookEguiApp {
                             response.request_focus();
                             self.pending_editor_focus = None;
                         }
-                        if response.has_focus() || response.clicked() {
+                        if response.gained_focus() || response.clicked() {
                             self.state.snapshot.selected_cell_id = Some(cell.id.clone());
-                            if response.clicked() {
-                                self.selected_cells.clear();
-                                self.selected_cells.insert(cell.id.clone());
-                            }
+                            self.selected_cells.clear();
+                            self.selected_cells.insert(cell.id.clone());
                             self.edit_mode = true;
+                        } else if response.has_focus()
+                            && self.state.snapshot.selected_cell_id.as_deref()
+                                != Some(cell.id.as_str())
+                        {
+                            response.surrender_focus();
                         }
                         if response.has_focus() && ui.input(|input| input.key_pressed(Key::Escape))
                         {
@@ -1683,6 +1718,24 @@ impl NotebookEguiApp {
                 }
             }
         });
+        let rect = frame_response.response.rect;
+        if ui.rect_contains_pointer(rect) && ui.input(|input| input.pointer.primary_clicked()) {
+            self.agent_highlights.remove(&cell.id);
+        }
+        if let Some(color) = self.agent_highlights.get(&cell.id) {
+            let width = if self.reduced_motion {
+                2.5
+            } else {
+                ui.ctx().request_repaint_after(Duration::from_millis(33));
+                2.5 + ui.input(|input| (input.time * std::f64::consts::PI).sin()) as f32 * 0.75
+            };
+            ui.painter().rect_stroke(
+                rect.shrink(4.0),
+                2.0,
+                Stroke::new(width, *color),
+                egui::StrokeKind::Inside,
+            );
+        }
         if let Some((target, remaining)) = &mut self.capture_target
             && *target == cell.id
         {
@@ -1772,7 +1825,10 @@ impl NotebookEguiApp {
         double_clicked: bool,
     ) {
         if clicked || double_clicked {
+            self.selected_cells.clear();
             self.state.snapshot.selected_cell_id = Some(cell_id.to_owned());
+            self.edit_mode = false;
+            self.pending_editor_focus = None;
         }
         if double_clicked {
             self.begin_editing_cell(cell_id);
@@ -1917,19 +1973,26 @@ impl eframe::App for NotebookEguiApp {
                 self.edit_mode = false;
             }
             if !completion_open
-                && ctx.input(|input| input.modifiers.shift && input.key_pressed(Key::Enter))
+                && ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, Key::Enter))
             {
-                ctx.input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, Key::Enter));
+                self.execute_selected();
+            } else if !completion_open
+                && ctx.input_mut(|input| input.consume_key(egui::Modifiers::SHIFT, Key::Enter))
+            {
+                ctx.memory_mut(|memory| {
+                    if let Some(id) = memory.focused() {
+                        memory.surrender_focus(id);
+                    }
+                });
                 self.execute_selected_and_advance(false);
             } else if !completion_open
-                && ctx.input(|input| input.modifiers.alt && input.key_pressed(Key::Enter))
+                && ctx.input_mut(|input| input.consume_key(egui::Modifiers::ALT, Key::Enter))
             {
-                ctx.input_mut(|input| input.consume_key(egui::Modifiers::ALT, Key::Enter));
                 self.execute_selected_and_advance(true);
             }
             let command_mode = !self.edit_mode;
             if command_mode
-                && ctx.input(|input| input.key_pressed(Key::Enter))
+                && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Enter))
                 && let Some((_, cell)) = self.selected_cell()
             {
                 self.begin_editing_cell(&cell.id);
@@ -1940,6 +2003,7 @@ impl eframe::App for NotebookEguiApp {
                 && let Some(next) = self.state.snapshot.cells.get(index + 1)
             {
                 self.state.snapshot.selected_cell_id = Some(next.id.clone());
+                self.selected_cells.clear();
             }
             if command_mode
                 && ctx.input(|input| input.key_pressed(Key::ArrowUp) || input.key_pressed(Key::K))
@@ -1948,6 +2012,7 @@ impl eframe::App for NotebookEguiApp {
             {
                 self.state.snapshot.selected_cell_id =
                     Some(self.state.snapshot.cells[index - 1].id.clone());
+                self.selected_cells.clear();
             }
             if command_mode && ctx.input(|input| input.key_pressed(Key::A)) {
                 let index = self
@@ -1998,21 +2063,6 @@ impl eframe::App for NotebookEguiApp {
             }
             if command_mode && ctx.input(|input| input.key_pressed(Key::O)) {
                 self.cycle_selected_output_view();
-            }
-            if ctx.input(|input| input.modifiers.command && input.key_pressed(Key::Enter))
-                && let Some(id) = self.state.snapshot.selected_cell_id.clone()
-            {
-                if let Some(cell) = self
-                    .state
-                    .snapshot
-                    .cells
-                    .iter()
-                    .find(|cell| cell.id == id)
-                    .cloned()
-                {
-                    self.flush_editor(&cell);
-                }
-                self.emit(NotebookCommandKind::ExecuteCell { cell_id: id });
             }
         }
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
@@ -2458,6 +2508,42 @@ fn move_index_for_drop(source_index: usize, hovered_index: usize, before: bool) 
     boundary.saturating_sub(usize::from(source_index < boundary))
 }
 
+// Capture positional intent when the UI emits it; resolve IDs only at preparation.
+fn anchor_cell_changes(cells: &[Cell], changes: &mut [CellMutation]) {
+    let mut ids: Vec<String> = cells.iter().map(|cell| cell.id.clone()).collect();
+    for change in changes {
+        match change.clone() {
+            CellMutation::Insert { index, cell } => {
+                let index = index.min(ids.len());
+                if let Some(anchor) = ids.get(index).or_else(|| ids.last()) {
+                    *change = CellMutation::InsertRelative {
+                        anchor_cell_id: anchor.clone(),
+                        after: index == ids.len(),
+                        cell: cell.clone(),
+                    };
+                }
+                ids.insert(index, cell.id);
+            }
+            CellMutation::Move { cell_id, index } => {
+                if let Some(current) = ids.iter().position(|id| id == &cell_id) {
+                    ids.remove(current);
+                    let index = index.min(ids.len());
+                    if let Some(anchor) = ids.get(index).or_else(|| ids.last()) {
+                        *change = CellMutation::MoveRelative {
+                            cell_id: cell_id.clone(),
+                            anchor_cell_id: anchor.clone(),
+                            after: index == ids.len(),
+                        };
+                    }
+                    ids.insert(index, cell_id);
+                }
+            }
+            CellMutation::Delete { cell_id } => ids.retain(|id| id != &cell_id),
+            _ => {}
+        }
+    }
+}
+
 fn inverse_cell_changes(cells: &[Cell], changes: &[CellMutation]) -> Option<Vec<CellMutation>> {
     let mut working = cells.to_vec();
     let mut inverse = Vec::with_capacity(changes.len());
@@ -2506,7 +2592,9 @@ fn inverse_cell_changes(cells: &[Cell], changes: &[CellMutation]) -> Option<Vec<
                     index: previous,
                 });
             }
-            CellMutation::ClearOutputs { .. } => return None,
+            CellMutation::ClearOutputs { .. }
+            | CellMutation::InsertRelative { .. }
+            | CellMutation::MoveRelative { .. } => return None,
         }
     }
     inverse.reverse();
@@ -3034,6 +3122,107 @@ mod tests {
             selected_cell_id: Some("code".into()),
         };
         NotebookEguiApp::new(NotebookState::new(snapshot).unwrap())
+    }
+
+    #[test]
+    fn markdown_shift_enter_renders_and_advances() {
+        let mut app = app();
+        let mut markdown = app.state.snapshot.cells[0].clone();
+        markdown.id = "markdown".into();
+        markdown.cell_type = CellType::Markdown;
+        app.state.snapshot.cells.insert(0, markdown);
+        app.editors.push(("markdown".into(), "# Edited".into()));
+        app.dirty_editors.insert("markdown".into());
+        app.select_cell(0, false);
+        app.begin_editing_cell("markdown");
+        app.execute_selected_and_advance(false);
+        assert!(app.rendered_markdown.contains("markdown"));
+        assert_eq!(app.state.snapshot.selected_cell_id.as_deref(), Some("code"));
+        assert_eq!(app.selected_cells_in_order().len(), 1);
+        assert!(!app.edit_mode);
+        assert!(
+            app.drain_commands()
+                .iter()
+                .all(|c| !matches!(c.kind, NotebookCommandKind::ExecuteCell { .. }))
+        );
+    }
+
+    #[test]
+    fn agent_highlights_are_bounded_local_and_dismissed_on_click() {
+        let mut app = app();
+        let before = app.state.clone();
+        assert!(app.cell_view("code", "highlight", "red").is_err());
+        assert!(app.cell_view("missing", "highlight", "blue").is_err());
+        app.cell_view("code", "highlight", "blue-deep").unwrap();
+        assert_eq!(app.agent_highlights.len(), 1);
+        assert_eq!(app.state, before);
+        app.cell_view("code", "clear_highlight", "").unwrap();
+        assert!(app.agent_highlights.is_empty());
+        app.cell_view("code", "highlight", "blue").unwrap();
+        let ctx = egui::Context::default();
+        let mut input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(800.0, 600.0),
+            )),
+            ..Default::default()
+        };
+        let cell = app.state.snapshot.cells[0].clone();
+        let _ = ctx.run(input.clone(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
+        });
+        input.events = vec![
+            egui::Event::PointerMoved(egui::pos2(50.0, 30.0)),
+            egui::Event::PointerButton {
+                pos: egui::pos2(50.0, 30.0),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ];
+        let _ = ctx.run(input.clone(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
+        });
+        input.events = vec![egui::Event::PointerButton {
+            pos: egui::pos2(50.0, 30.0),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        }];
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
+        });
+        assert!(app.agent_highlights.is_empty());
+    }
+
+    #[test]
+    fn ui_inserts_capture_id_anchors_and_shift_selection_does_not_mix_types() {
+        let mut app = app();
+        let mut markdown = app.state.snapshot.cells[0].clone();
+        markdown.id = "markdown".into();
+        markdown.cell_type = CellType::Markdown;
+        app.state.snapshot.cells.push(markdown);
+        app.insert_cell(1, CellType::Code, String::new());
+        assert!(
+            matches!(&app.drain_commands()[0].kind, NotebookCommandKind::ModifyCells { changes } if matches!(&changes[0], CellMutation::InsertRelative { anchor_cell_id, after: false, .. } if anchor_cell_id == "markdown"))
+        );
+        app.select_cell(0, false);
+        app.select_cell(1, true);
+        assert_eq!(app.selected_cells.len(), 1);
+        assert!(app.selected_cells.contains("markdown"));
+    }
+
+    #[test]
+    fn clicking_markdown_clears_previous_code_selection() {
+        let mut app = app();
+        let mut markdown = app.state.snapshot.cells[0].clone();
+        markdown.id = "markdown".into();
+        markdown.cell_type = CellType::Markdown;
+        app.state.snapshot.cells.push(markdown);
+        app.select_cell(0, false);
+        app.apply_rendered_markdown_interaction("markdown", true, false);
+        assert!(!app.selected_cells.contains("code"));
+        assert_eq!(app.selected_cells_in_order()[0].id, "markdown");
     }
 
     #[test]

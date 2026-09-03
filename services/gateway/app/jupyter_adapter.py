@@ -482,6 +482,26 @@ class JupyterNotebookTransport:
     def _apply_changes(self, notebook: Any, changes: list[dict[str, Any]]) -> None:
         for change in changes:
             operation = change.get("operation")
+            if operation in ("insert_relative", "move_relative"):
+                if not isinstance(change.get("after"), bool):
+                    raise AdapterError(
+                        "invalid_input", "Relative position requires a boolean after"
+                    )
+                anchor = self._cell(notebook, change.get("anchor_cell_id"))
+                if operation == "move_relative":
+                    cell = self._cell(notebook, change.get("cell_id"))
+                    if cell.id == anchor.id:
+                        raise AdapterError("invalid_input", "Cell cannot anchor itself")
+                    notebook.cells.remove(cell)
+                    notebook.cells.insert(
+                        notebook.cells.index(anchor) + int(bool(change.get("after"))), cell
+                    )
+                    continue
+                change = {
+                    **change,
+                    "index": notebook.cells.index(anchor) + int(bool(change.get("after"))),
+                }
+                operation = "insert"
             if operation == "insert":
                 value = change.get("cell", {})
                 kind = value.get("cell_type", "code")

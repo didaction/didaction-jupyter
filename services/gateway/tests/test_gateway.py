@@ -30,6 +30,43 @@ def make_command(kind: str, **values: object) -> Command:
     )
 
 
+def test_relative_positions_follow_ids_and_reject_missing_anchors(tmp_path: Path) -> None:
+    adapter = JupyterNotebookTransport(Settings(workspace=tmp_path))
+    notebook = nbformat.v4.new_notebook(
+        cells=[nbformat.v4.new_code_cell(id=name) for name in ["a", "c", "b"]]
+    )
+    adapter._apply_changes(
+        notebook,
+        [
+            {
+                "operation": "insert_relative",
+                "anchor_cell_id": "b",
+                "after": False,
+                "cell": {"id": "x", "cell_type": "code", "source": "42"},
+            }
+        ],
+    )
+    assert [cell.id for cell in notebook.cells] == ["a", "c", "x", "b"]
+    adapter._apply_changes(
+        notebook,
+        [{"operation": "move_relative", "cell_id": "a", "anchor_cell_id": "b", "after": True}],
+    )
+    assert [cell.id for cell in notebook.cells] == ["c", "x", "b", "a"]
+    with pytest.raises(AdapterError):
+        adapter._apply_changes(
+            notebook,
+            [
+                {
+                    "operation": "move_relative",
+                    "cell_id": "a",
+                    "anchor_cell_id": "deleted",
+                    "after": True,
+                }
+            ],
+        )
+    assert [cell.id for cell in notebook.cells] == ["c", "x", "b", "a"]
+
+
 @pytest.mark.parametrize(
     "path",
     ["../bad.ipynb", "/tmp/bad.ipynb", "a//b.ipynb", "a/./b.ipynb"],  # noqa: S108

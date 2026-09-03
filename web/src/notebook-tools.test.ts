@@ -88,6 +88,70 @@ function harness() {
   return { tools, calls, dispatch, count: () => validations };
 }
 describe("transport-neutral notebook tools", () => {
+  it("requires an unambiguous positional intent and forwards ID anchors", async () => {
+    const h = harness();
+    for (const position of [
+      {},
+      { index: 0, before_cell_id: "one" },
+      { before_cell_id: "one", after_cell_id: "one" },
+    ]) {
+      expect(
+        (
+          await h.tools.callTool("insert_cell", {
+            ...position,
+            cell_type: "markdown",
+            source: "note",
+          })
+        ).isError,
+      ).toBe(true);
+    }
+    expect(h.calls).toHaveLength(0);
+    expect(
+      (
+        await h.tools.callTool("insert_cell", {
+          before_cell_id: "one",
+          cell_type: "markdown",
+          source: "note",
+        })
+      ).isError,
+    ).toBe(false);
+    expect(h.calls.at(-1)?.changes).toMatchObject([
+      { operation: "insert_relative", anchor_cell_id: "one", after: false },
+    ]);
+  });
+  it("routes bounded agent highlights through the view validator, never kernel commands", async () => {
+    const view = vi.fn(async () => ({
+      content: [],
+      structuredContent: { ok: true },
+      isError: false,
+    }));
+    const transaction = vi.fn();
+    const tools = new NotebookTools(
+      transaction,
+      () => ({ protocol_version: 1, revision: 1, cells: [] }),
+      undefined,
+      undefined,
+      view,
+    );
+    expect(
+      (
+        await tools.callTool("highlight_cell", {
+          cell_id: "one",
+          color: "blue-light",
+        })
+      ).isError,
+    ).toBe(false);
+    expect(
+      (await tools.callTool("clear_cell_highlight", { cell_id: "one" }))
+        .isError,
+    ).toBe(false);
+    expect(
+      (await tools.callTool("highlight_cell", { cell_id: "one", color: "red" }))
+        .isError,
+    ).toBe(true);
+    expect(view).toHaveBeenCalledTimes(2);
+    expect(transaction).not.toHaveBeenCalled();
+  });
   it("maps the complete cell workflow through command validation", async () => {
     const h = harness();
     const inserted = await h.tools.callTool("insert_cell", {
@@ -162,7 +226,7 @@ describe("transport-neutral notebook tools", () => {
       },
     });
     expect(installed.available).toBe(true);
-    expect(registered).toHaveLength(15);
+    expect(registered).toHaveLength(17);
     expect(
       (
         await registered
@@ -172,7 +236,7 @@ describe("transport-neutral notebook tools", () => {
     ).toBe(false);
     expect(h.calls).toHaveLength(1);
     installed.dispose();
-    expect(removed).toHaveLength(15);
+    expect(removed).toHaveLength(17);
     expect((await installWebMcp(h.tools, {} as ModelContext)).available).toBe(
       false,
     );
@@ -192,7 +256,7 @@ describe("transport-neutral notebook tools", () => {
     try {
       const installed = await installWebMcp(harness().tools);
       expect(installed.available).toBe(true);
-      expect(completed).toBe(15);
+      expect(completed).toBe(17);
       installed.dispose();
       expect(signals.every((signal) => signal.aborted)).toBe(true);
     } finally {

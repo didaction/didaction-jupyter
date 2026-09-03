@@ -97,6 +97,8 @@ async function createContext(
   const wasm = new NotebookApplication(JSON.stringify(snapshot));
   const gateway = new CommandGateway(wasm, transport);
   let mounted: Awaited<ReturnType<typeof mountNotebook>> | undefined;
+  const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
+  const syncMotion = () => mounted?.setReducedMotion(motionPreference.matches);
   const dispatchEguiCommand = createQueuedNotebookDispatcher(
     gateway,
     () =>
@@ -250,10 +252,23 @@ async function createContext(
           );
         const id = args.cell_id as string;
         if (name !== "capture_cell") {
+          syncMotion();
           mounted.cellView(
             id,
-            name === "set_cell_visibility" ? "cell" : "output",
-            String(name === "set_cell_visibility" ? args.collapsed : args.mode),
+            name === "highlight_cell"
+              ? "highlight"
+              : name === "clear_cell_highlight"
+                ? "clear_highlight"
+                : name === "set_cell_visibility"
+                  ? "cell"
+                  : "output",
+            name === "highlight_cell"
+              ? String(args.color ?? "blue")
+              : name === "clear_cell_highlight"
+                ? ""
+                : String(
+                    name === "set_cell_visibility" ? args.collapsed : args.mode,
+                  ),
           );
           const result = { ok: true, cell_id: id, ...args };
           return {
@@ -312,6 +327,7 @@ async function createContext(
   );
   const deactivate = () => {
     if (!mounted) return;
+    motionPreference.removeEventListener("change", syncMotion);
     mounted.dispose();
     mounted = undefined;
     const old = document.querySelector<HTMLCanvasElement>("#notebook-canvas")!;
@@ -358,6 +374,8 @@ async function createContext(
         },
       );
       mounted.setReadOnly(readOnly);
+      syncMotion();
+      motionPreference.addEventListener("change", syncMotion);
       const url = new URL(location.href);
       syncWorkspaceVisibility();
       const activePath = JSON.parse(wasm.publicSnapshot()).snapshot.notebook

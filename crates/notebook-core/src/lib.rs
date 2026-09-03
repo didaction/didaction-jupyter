@@ -181,6 +181,33 @@ fn apply_optimistic_changes(
 ) -> Result<(), DomainError> {
     for change in changes {
         match change {
+            CellMutation::InsertRelative {
+                anchor_cell_id,
+                after,
+                cell,
+            } => {
+                let index = cells
+                    .iter()
+                    .position(|c| &c.id == anchor_cell_id)
+                    .ok_or_else(invalid_cell)?;
+                cells.insert(index + usize::from(*after), cell.clone());
+            }
+            CellMutation::MoveRelative {
+                cell_id,
+                anchor_cell_id,
+                after,
+            } => {
+                let current = cells
+                    .iter()
+                    .position(|c| &c.id == cell_id)
+                    .ok_or_else(invalid_cell)?;
+                let cell = cells.remove(current);
+                let index = cells
+                    .iter()
+                    .position(|c| &c.id == anchor_cell_id)
+                    .ok_or_else(invalid_cell)?;
+                cells.insert(index + usize::from(*after), cell);
+            }
             CellMutation::Insert { index, cell } => {
                 cells.insert((*index).min(cells.len()), cell.clone())
             }
@@ -290,6 +317,67 @@ mod tests {
                 }],
             },
         }
+    }
+    #[test]
+    fn anchors_follow_reordered_cells_and_reject_deleted_targets_atomically() {
+        let mut data = snapshot(2);
+        for id in ["c", "b"] {
+            let mut cell = data.cells[0].clone();
+            cell.id = id.into();
+            data.cells.push(cell);
+        }
+        let state = NotebookState::new(data).unwrap();
+        let mut cell = state.snapshot.cells[0].clone();
+        cell.id = "x".into();
+        let mut command = modify(2);
+        command.kind = NotebookCommandKind::ModifyCells {
+            changes: vec![CellMutation::InsertRelative {
+                anchor_cell_id: "b".into(),
+                after: false,
+                cell,
+            }],
+        };
+        let serialized = serde_json::to_string(&command).unwrap();
+        let command: NotebookCommand = serde_json::from_str(&serialized).unwrap();
+        let inserted = state.prepare(command).unwrap().optimistic_state;
+        assert_eq!(
+            inserted
+                .snapshot
+                .cells
+                .iter()
+                .map(|cell| cell.id.as_str())
+                .collect::<Vec<_>>(),
+            ["a", "c", "x", "b"]
+        );
+        let mut command = modify(2);
+        command.kind = NotebookCommandKind::ModifyCells {
+            changes: vec![CellMutation::MoveRelative {
+                cell_id: "a".into(),
+                anchor_cell_id: "b".into(),
+                after: true,
+            }],
+        };
+        let moved = state.prepare(command).unwrap().optimistic_state;
+        assert_eq!(
+            moved
+                .snapshot
+                .cells
+                .iter()
+                .map(|cell| cell.id.as_str())
+                .collect::<Vec<_>>(),
+            ["c", "b", "a"]
+        );
+        let before = state.clone();
+        let mut command = modify(2);
+        command.kind = NotebookCommandKind::ModifyCells {
+            changes: vec![CellMutation::MoveRelative {
+                cell_id: "a".into(),
+                anchor_cell_id: "deleted".into(),
+                after: false,
+            }],
+        };
+        assert!(state.prepare(command).is_err());
+        assert_eq!(state, before);
     }
     #[test]
     fn prepare_is_deterministic() {

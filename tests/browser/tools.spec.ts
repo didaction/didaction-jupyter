@@ -97,6 +97,40 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
   expect(inserted.isError).toBe(false);
   const cell_id = inserted.structuredContent.cell_id as string;
   expect(JSON.stringify(inserted)).toContain("42");
+  const anchored = await call("insert_execute_code_cell", {
+    before_cell_id: cell_id,
+    source: "webmcp_value + 1",
+  });
+  expect(anchored.isError).toBe(false);
+  expect(JSON.stringify(anchored)).toContain("43");
+  const anchorId = anchored.structuredContent.cell_id;
+  expect(
+    (await call("move_cell", { cell_id: anchorId, after_cell_id: cell_id }))
+      .isError,
+  ).toBe(false);
+  const ordered = (await call("read_notebook")).structuredContent.cells as {
+    id: string;
+  }[];
+  expect(ordered.findIndex((cell) => cell.id === anchorId)).toBe(
+    ordered.findIndex((cell) => cell.id === cell_id) + 1,
+  );
+  expect(
+    (await call("highlight_cell", { cell_id, color: "blue-deep" })).isError,
+  ).toBe(false);
+  await page.screenshot({ path: ".runtime/agent-highlight-desktop.png" });
+  expect((await call("clear_cell_highlight", { cell_id })).isError).toBe(false);
+  expect((await call("delete_cell", { cell_id: anchorId })).isError).toBe(
+    false,
+  );
+  expect(
+    (
+      await call("insert_cell", {
+        before_cell_id: anchorId,
+        cell_type: "code",
+        source: "must not insert",
+      })
+    ).isError,
+  ).toBe(true);
   expect(
     (await call("set_output_visibility", { cell_id, mode: "windowed" }))
       .isError,

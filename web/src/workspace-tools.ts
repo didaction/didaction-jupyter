@@ -244,7 +244,12 @@ export class WorkspaceTools implements NotebookToolInvoker {
       context.canWrite &&
       !context.canWrite() &&
       !definition.annotations.readOnlyHint &&
-      !["set_cell_visibility", "set_output_visibility"].includes(name)
+      ![
+        "set_cell_visibility",
+        "set_output_visibility",
+        "highlight_cell",
+        "clear_cell_highlight",
+      ].includes(name)
     )
       return result(
         {

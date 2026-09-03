@@ -96,6 +96,20 @@ define(
   { cell_id: id },
 );
 define(
+  "highlight_cell",
+  "Add a separate pulsing agent border in this notebook view. Click the cell or call clear_cell_highlight to dismiss. Does not select or edit the cell. In-memory only.",
+  {
+    cell_id: id,
+    color: { type: "string", enum: ["blue", "blue-light", "blue-deep"] },
+  },
+  ["cell_id"],
+);
+define(
+  "clear_cell_highlight",
+  "Clear a cell's agent border in this view without changing its selection or contents.",
+  { cell_id: id },
+);
+define(
   "read_notebook",
   "Read committed cells, IDs, sources and outputs of the configured notebook.",
   {},
@@ -109,11 +123,18 @@ define(
   undefined,
   true,
 );
-define("insert_cell", "Insert a cell at a zero-based index.", {
-  index,
-  cell_type: { type: "string", enum: ["code", "markdown", "raw"] },
-  source,
-});
+define(
+  "insert_cell",
+  "Insert before_cell_id or after_cell_id (stable across reorder), or at an explicitly absolute zero-based index. Supply exactly one position.",
+  {
+    index,
+    before_cell_id: id,
+    after_cell_id: id,
+    cell_type: { type: "string", enum: ["code", "markdown", "raw"] },
+    source,
+  },
+  ["cell_type", "source"],
+);
 define(
   "overwrite_cell_source",
   "Replace a cell's entire source, preserving its ID and type.",
@@ -130,10 +151,17 @@ define(
   },
   ["cell_id", "old_string", "new_string"],
 );
-define("move_cell", "Move a cell to a zero-based final index.", {
-  cell_id: id,
-  index,
-});
+define(
+  "move_cell",
+  "Move before_cell_id or after_cell_id, or to an explicitly absolute zero-based final index. Supply exactly one position.",
+  {
+    cell_id: id,
+    index,
+    before_cell_id: id,
+    after_cell_id: id,
+  },
+  ["cell_id"],
+);
 define("delete_cell", "Delete one cell and its outputs by stable ID.", {
   cell_id: id,
 });
@@ -153,8 +181,8 @@ define(
 define(
   "insert_execute_code_cell",
   "Insert then execute code. Insertion remains on execution failure; never blindly retry.",
-  { index, source, timeout_ms: timeout },
-  ["index", "source"],
+  { index, before_cell_id: id, after_cell_id: id, source, timeout_ms: timeout },
+  ["source"],
   false,
   true,
 );
@@ -251,10 +279,24 @@ export class NotebookTools implements NotebookToolInvoker {
         throw new ToolError("unsupported_operation", "Unknown notebook tool");
       const args = parse(definition, input);
       if (
+        ["insert_cell", "insert_execute_code_cell", "move_cell"].includes(
+          name,
+        ) &&
+        ["index", "before_cell_id", "after_cell_id"].filter(
+          (key) => args[key] !== undefined,
+        ).length !== 1
+      )
+        throw new ToolError(
+          "invalid_input",
+          "Supply exactly one of before_cell_id, after_cell_id or absolute index",
+        );
+      if (
         [
           "set_cell_visibility",
           "set_output_visibility",
           "capture_cell",
+          "highlight_cell",
+          "clear_cell_highlight",
         ].includes(name)
       ) {
         if (!this.view)
@@ -344,6 +386,14 @@ export class NotebookTools implements NotebookToolInvoker {
         let affectedId = cell?.id;
         const modify = (change: Record<string, unknown>) =>
           send("modify_cells", { changes: [change] });
+        const position = (operation: "insert" | "move") =>
+          args.index !== undefined
+            ? { operation, index: args.index }
+            : {
+                operation: `${operation}_relative`,
+                anchor_cell_id: args.before_cell_id ?? args.after_cell_id,
+                after: args.after_cell_id !== undefined,
+              };
         switch (name) {
           case "insert_cell":
           case "insert_execute_code_cell": {
@@ -354,8 +404,7 @@ export class NotebookTools implements NotebookToolInvoker {
               );
             affectedId = crypto.randomUUID();
             await modify({
-              operation: "insert",
-              index: args.index,
+              ...position("insert"),
               cell: {
                 id: affectedId,
                 cell_type: name === "insert_cell" ? args.cell_type : "code",
@@ -428,9 +477,8 @@ export class NotebookTools implements NotebookToolInvoker {
                 "Move index exceeds cell count",
               );
             await modify({
-              operation: "move",
+              ...position("move"),
               cell_id: affectedId,
-              index: args.index,
             });
             break;
           case "delete_cell":

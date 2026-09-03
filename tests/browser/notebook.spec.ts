@@ -163,3 +163,112 @@ test("notebook canvas follows host panel resizing", async ({ page }) => {
     0,
   );
 });
+
+test("Markdown keyboard run returns to rendered mode and highlights remain separate", async ({
+  page,
+}) => {
+  let executions = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/commands/stream")) executions++;
+  });
+  await page.addInitScript(() => {
+    const tools: Record<string, { execute(input: unknown): Promise<unknown> }> =
+      {};
+    Object.defineProperty(document, "modelContext", {
+      value: {
+        registerTool(tool: {
+          name: string;
+          execute(input: unknown): Promise<unknown>;
+        }) {
+          tools[tool.name] = tool;
+        },
+        unregisterTool(name: string) {
+          delete tools[name];
+        },
+      },
+    });
+    Object.assign(window, { notebookTestTools: tools });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await expect(page.locator("#connection-status")).toContainText(
+    "WebMCP ready",
+    { timeout: 30000 },
+  );
+  const call = (name: string, args: Record<string, unknown> = {}) =>
+    page.evaluate(
+      async ({ name, args }) => {
+        const tools = (
+          window as unknown as {
+            notebookTestTools: Record<
+              string,
+              {
+                execute(input: unknown): Promise<{
+                  isError: boolean;
+                  structuredContent: {
+                    context: { cell_id: string; mode: string };
+                  };
+                }>;
+              }
+            >;
+          }
+        ).notebookTestTools;
+        return tools[name]!.execute(
+          name === "get_active_context"
+            ? {}
+            : { notebook_path: "notebook-parity-demo.ipynb", ...args },
+        );
+      },
+      { name, args },
+    );
+  const canvas = page.locator("#notebook-canvas");
+  const box = await canvas.boundingBox();
+  await canvas.click({ position: { x: box!.width / 2, y: box!.height - 80 } });
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("ArrowUp");
+  await expect
+    .poll(
+      async () =>
+        (await call("get_active_context")).structuredContent.context.cell_id,
+    )
+    .toBe("markdown");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(
+      async () =>
+        (await call("get_active_context")).structuredContent.context.mode,
+    )
+    .toBe("edit");
+  await page.keyboard.press("Shift+Enter");
+  await expect
+    .poll(
+      async () => (await call("get_active_context")).structuredContent.context,
+    )
+    .toMatchObject({ cell_id: "code", mode: "command" });
+  expect(
+    (await call("highlight_cell", { cell_id: "markdown", color: "blue-light" }))
+      .isError,
+  ).toBe(false);
+  await page.screenshot({ path: ".runtime/markdown-highlight-desktop.png" });
+  await page.keyboard.press("Enter");
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
+      ),
+  );
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
+      ),
+  );
+  await page.screenshot({ path: ".runtime/code-selection.png" });
+  await page.setViewportSize({ width: 520, height: 640 });
+  await page.screenshot({ path: ".runtime/markdown-highlight-mobile.png" });
+  expect(
+    (await call("clear_cell_highlight", { cell_id: "markdown" })).isError,
+  ).toBe(false);
+  expect(executions).toBe(0);
+});

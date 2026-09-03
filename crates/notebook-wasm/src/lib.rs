@@ -416,6 +416,10 @@ impl MountedNotebook {
             ctx.request_repaint();
         }
     }
+    #[wasm_bindgen(js_name = setReducedMotion)]
+    pub fn set_reduced_motion(&self, reduced: bool) {
+        self.app.lock().expect("app mutex").reduced_motion = reduced;
+    }
     #[wasm_bindgen(js_name = setReadOnly)]
     pub fn set_read_only(&self, read_only: bool) {
         self.app.lock().expect("app mutex").read_only = read_only;

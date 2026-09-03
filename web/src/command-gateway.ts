@@ -79,7 +79,17 @@ export function createQueuedNotebookDispatcher(
     onProgress?: (serialized: string) => void,
   ) => {
     const command = JSON.parse(serialized) as NotebookCommand;
-    command.expected_revision = currentRevision();
+    // Absolute positions cannot be silently rebased: a reorder changes intent.
+    const positional =
+      command.type === "modify_cells" &&
+      Array.isArray(command.changes) &&
+      command.changes.some(
+        (change) =>
+          change.operation === "insert" || change.operation === "move",
+      );
+    if (positional && command.expected_revision == null)
+      throw new Error("Absolute cell positions require expected_revision");
+    if (!positional) command.expected_revision = currentRevision();
     const serializedResult = await gateway.execute(
       JSON.stringify(command),
       onProgress ? (result) => onProgress(JSON.stringify(result)) : undefined,

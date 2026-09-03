@@ -7,6 +7,41 @@ import { MockNotebookTransport } from "./gateway-client";
 import type { CommandResult, NotebookCommand, WasmApplication } from "./types";
 
 describe("CommandGateway", () => {
+  it("never rebases an absolute position onto a reordered notebook", async () => {
+    const observed: unknown[] = [];
+    const wasm: WasmApplication = {
+      prepareCommand: (value) => {
+        observed.push(JSON.parse(value).expected_revision);
+        return value;
+      },
+      applyCommandResult: (value) => value,
+      publicSnapshot: () => "{}",
+      dispose() {},
+    };
+    const transport = new MockNotebookTransport((command) => ({
+      protocol_version: 1,
+      command_id: command.command_id,
+      idempotency_key: command.idempotency_key,
+    }));
+    const dispatch = createQueuedNotebookDispatcher(
+      new CommandGateway(wasm, transport),
+      () => 9,
+    );
+    const command = {
+      protocol_version: 1,
+      command_id: "one",
+      idempotency_key: "one",
+      timeout_ms: 1000,
+      type: "modify_cells",
+      expected_revision: 2,
+      changes: [{ operation: "insert", index: 1 }],
+    };
+    await dispatch(JSON.stringify(command));
+    expect(observed).toEqual([2]);
+    await expect(
+      dispatch(JSON.stringify({ ...command, expected_revision: null })),
+    ).rejects.toThrow("require expected_revision");
+  });
   it("notifies the host of renames only after successful reconciliation", async () => {
     const order: string[] = [];
     let fail = false;

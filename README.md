@@ -13,6 +13,25 @@ It is a single-user spike; the server runtime remains the default.
 
 ## Frontend diagnostics
 
+Markdown runs locally: Shift+Enter saves the edited source, renders Markdown,
+and advances to the next cell. Selection ranges stay within one cell type.
+
+WebMCP `insert_cell`, `insert_execute_code_cell`, and `move_cell` accept exactly
+one of `before_cell_id`, `after_cell_id`, or `index`. Prefer stable-ID anchors:
+they are resolved by the shared Rust model against the state being committed,
+and a deleted anchor rejects the operation. `index` explicitly means absolute
+position; queued absolute commands retain their expected revision and reject
+intervening changes. The egui insertion and drag controls emit ID anchors too.
+Insertion-plus-execution always executes the newly generated cell ID.
+
+Use `highlight_cell` with `notebook_path`, `cell_id`, and optional `color`
+(`blue`, `blue-light`, or `blue-deep`) for a separate pulsing agent border.
+`clear_cell_highlight` takes the same notebook/cell identity. Clicking the cell
+also dismisses it. Highlights are presentation-only, limited to 128 per view,
+kept only in memory, and are not broadcast to collaborators or saved. Reduced
+motion preferences turn the pulse into a static border. These tools do not
+change selection, execute code, or bypass driver permissions for notebook edits.
+
 The diagnostic waveform icon at the start of the bottom status bar opens a right
 inspector. It shows the Git commit embedded in the loaded WASM build (plus dirty
 checkout status), not the server's current checkout. Builds without Git metadata

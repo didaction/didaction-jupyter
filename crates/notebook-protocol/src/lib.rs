@@ -106,6 +106,16 @@ pub enum QueryKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum CellMutation {
+    InsertRelative {
+        anchor_cell_id: String,
+        after: bool,
+        cell: Cell,
+    },
+    MoveRelative {
+        cell_id: String,
+        anchor_cell_id: String,
+        after: bool,
+    },
     Insert {
         index: usize,
         cell: Cell,
@@ -334,6 +344,32 @@ pub fn validate_relative_path(path: &str) -> Result<(), ProtocolError> {
 fn validate_mutation(change: &CellMutation) -> Result<(), ProtocolError> {
     match change {
         CellMutation::Insert { cell, .. } => validate_cell(cell),
+        CellMutation::InsertRelative {
+            anchor_cell_id,
+            cell,
+            ..
+        } => {
+            if anchor_cell_id.is_empty() || anchor_cell_id.len() > 128 {
+                return Err(bounds("invalid anchor cell id"));
+            }
+            validate_cell(cell)
+        }
+        CellMutation::MoveRelative {
+            cell_id,
+            anchor_cell_id,
+            ..
+        } => {
+            if cell_id.is_empty()
+                || cell_id.len() > 128
+                || anchor_cell_id.is_empty()
+                || anchor_cell_id.len() > 128
+                || cell_id == anchor_cell_id
+            {
+                Err(bounds("invalid anchor cell id"))
+            } else {
+                Ok(())
+            }
+        }
         CellMutation::Update {
             cell_id,
             source,
