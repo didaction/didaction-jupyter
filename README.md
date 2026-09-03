@@ -1,7 +1,7 @@
 # didaction Jupyter
 
 A standalone local-first notebook frontend: egui compiled to WebAssembly, a
-same-origin FastAPI gateway, and a real Jupyter Server/IPython kernel. It uses
+same-origin Rust gateway, and a real Jupyter Server/IPython kernel. It uses
 Jupyter's native Contents, Sessions, Kernels, and kernel-channel protocols. No
 MCP server sits between the gateway and Jupyter.
 
@@ -28,6 +28,14 @@ actions are not WebMCP calls and do not enter this list. On narrow screens the
 inspector temporarily hides the explorer, or occupies the working area on phones.
 
 ## Architecture
+
+The native Rust gateway implements the same browser HTTP/NDJSON
+interface and direct Jupyter REST/WebSocket adapter, including workspace-wide
+driver/follow coordination. Start it with
+`DIDACTION_GATEWAY_IMPLEMENTATION=rust bash scripts/dev.sh`.
+Python remains an explicit rollback (`DIDACTION_GATEWAY_IMPLEMENTATION=python`).
+See [Rust gateway migration](docs/rust-runtime-migration.md) for
+startup, verification and known differences.
 
 ```text
 egui action ─┐

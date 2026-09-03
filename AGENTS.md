@@ -11,13 +11,14 @@ validated command path.
 `notebook-protocol` owns bounded serialized contracts. `notebook-core` owns
 deterministic optimistic state and reconciliation. `notebook-egui` renders state
 and emits typed commands. `notebook-wasm` validates commands, mounts egui, and
-reconciles results. TypeScript owns browser APIs. The Python gateway owns the
+reconciles results. TypeScript owns browser APIs. The native gateway owns the
 Jupyter token and directly adapts Contents/Sessions/Kernels REST plus the kernel
 channels WebSocket into internal snapshots.
 
 `notebook-runtime` owns validated authoritative proposals and atomic output
-reduction, compiled natively and to WASM. Browser mode uses it now; the Python
-gateway has not yet migrated. For native gateway migration or shared execution
+reduction and workspace-wide collaboration policy, compiled natively and to WASM.
+The default `notebook-gateway` Rust host uses it; Python remains an explicit rollback.
+For native gateway migration or shared execution
 semantics, read `docs/rust-runtime-migration.md`. Keep the optimistic UI replica
 separate from authoritative proposals and acknowledge only durable host commits.
 
@@ -39,7 +40,8 @@ warning when Stop must terminate a worker and discard its live variables.
 
 ## Invariants
 
-- Rust/WASM never fetches, opens sockets/files, launches processes, or knows URLs.
+- UI/runtime Rust and WASM never perform I/O. Native-only `notebook-gateway` owns
+  sockets, token-file reads and host clocks; its dependencies are excluded on wasm32.
 - The browser never receives Jupyter tokens, cookies, session IDs, or kernel IDs.
 - Raw Jupyter data never enters egui state; normalize it to protocol snapshots.
 - Preserve IOPub ordering and `clear_output`/`update_display_data` replacement
@@ -90,3 +92,6 @@ Start at `crates/notebook-protocol/src/lib.rs`, then
 `crates/notebook-core/src/lib.rs`, `web/src/command-gateway.ts`,
 `services/gateway/app/jupyter_adapter.py`, and
 `crates/notebook-egui/src/lib.rs`.
+For Rust host work, start at `crates/notebook-gateway/src/native/server.rs`, then
+`jupyter.rs` and `notebook-runtime/src/collaboration.rs`. Keep accepted execution
+independent of HTTP socket lifetime and retain uncertain outcomes until restart.

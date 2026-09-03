@@ -33,12 +33,32 @@ trap cleanup EXIT INT TERM
 
 uv run jupyter lab --config services/jupyter/jupyter_server_config.py \
   >"$SMOKE_RUNTIME/jupyter.log" 2>&1 & pids+=("$!")
-uv run uvicorn services.gateway.app.main:app --host 127.0.0.1 --port 48080 \
+export DIDACTION_GATEWAY_BIND="127.0.0.1:48080"
+export DIDACTION_GATEWAY_PORT="48080"
+if [[ "${DIDACTION_NATIVE_BROWSER_CHECK:-0}" == 1 ]]; then
+  export DIDACTION_STATIC_DIR="$PWD/dist"
+fi
+bash scripts/gateway.sh \
   >"$SMOKE_RUNTIME/gateway.log" 2>&1 & pids+=("$!")
 
-for _ in {1..80}; do
+for _ in {1..400}; do
   if curl -fsS http://127.0.0.1:48080/readyz | grep -q '"status":"ready"'; then
     uv run python scripts/smoke.py
+    if [[ "${DIDACTION_GATEWAY_IMPLEMENTATION:-rust}" == rust ]]; then
+      uv run python scripts/native-gateway-smoke.py
+      if [[ "${DIDACTION_NATIVE_BROWSER_CHECK:-0}" == 1 ]]; then
+        for spec in collaboration explorer follow tools; do
+          kill "${pids[1]}"
+          wait "${pids[1]}" || true
+          bash scripts/gateway.sh >"$SMOKE_RUNTIME/gateway.log" 2>&1 & pids[1]="$!"
+          for _ in {1..80}; do
+            if curl -fsS http://127.0.0.1:48080/readyz >/dev/null 2>&1; then break; fi
+            sleep 0.25
+          done
+          DIDACTION_BROWSER_GATEWAY="$DIDACTION_GATEWAY_URL" pnpm exec playwright test "tests/browser/$spec.spec.ts" --workers=1
+        done
+      fi
+    fi
     exit 0
   fi
   sleep 0.25

@@ -7,6 +7,7 @@ DIDACTION_DEV_TOKEN="${DIDACTION_JUPYTER_TOKEN:-$(openssl rand -hex 24)}"
 export DIDACTION_JUPYTER_TOKEN="$DIDACTION_DEV_TOKEN"
 export TOKEN="$DIDACTION_DEV_TOKEN"
 export DIDACTION_NOTEBOOK_WORKSPACE="${DIDACTION_NOTEBOOK_WORKSPACE:-$PWD/.runtime/notebooks}"
+export DIDACTION_WORKSPACE="$DIDACTION_NOTEBOOK_WORKSPACE"
 export DIDACTION_NOTEBOOK_PATH="${DIDACTION_NOTEBOOK_PATH:-notebook-parity-demo.ipynb}"
 export DIDACTION_KERNEL_NAME="${DIDACTION_KERNEL_NAME:-python3}"
 export JUPYTER_CONFIG_DIR="$PWD/.runtime/jupyter-config"
@@ -35,7 +36,7 @@ cleanup() { for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done; }
 trap cleanup EXIT INT TERM
 
 uv run jupyter lab --config services/jupyter/jupyter_server_config.py & pids+=("$!")
-uv run uvicorn services.gateway.app.main:app --host 127.0.0.1 --port 8080 & pids+=("$!")
+bash scripts/gateway.sh & pids+=("$!")
 pnpm run dev & pids+=("$!")
 
 echo "didaction notebook: http://127.0.0.1:5173"

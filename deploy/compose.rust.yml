@@ -1,0 +1,9 @@
+# Explicit Rust image selection for isolated testing. Rust is also the default.
+services:
+  gateway:
+    image: didaction-gateway-rust:local
+    build:
+      target: ${DIDACTION_RUST_BUILD_TARGET:-gateway-rust}
+    healthcheck:
+      test:
+        ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/readyz"]
