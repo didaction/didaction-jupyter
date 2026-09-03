@@ -8,6 +8,7 @@ use notebook_protocol::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+pub mod collaboration;
 
 /// Produces a validated proposal, not a storage commit or execution acknowledgement.
 pub fn prepare(

@@ -6,6 +6,7 @@ members = [
   "crates/notebook-egui",
   "crates/notebook-wasm",
   "crates/notebook-runtime",
+  "crates/notebook-gateway",
 ]
 
 [workspace.package]

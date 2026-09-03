@@ -1,0 +1,24 @@
+[package]
+name = "notebook-gateway"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Native effects stay out of the WASM dependency graph.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+axum = "=0.8.8"
+tokio = { version = "=1.49.0", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["json", "rustls-tls", "stream"] }
+tokio-tungstenite = { version = "=0.28.0", features = ["rustls-tls-webpki-roots"] }
+tower-http = { version = "=0.6.8", features = ["fs", "limit"] }
+tokio-stream = "=0.1.18"
+futures-util = "=0.3.34"
+url = "=2.5.8"
+percent-encoding = "=2.3.2"
+notebook-runtime.workspace = true
+notebook-core.workspace = true
+notebook-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid = { version = "=1.18.1", features = ["v4"] }
+base64.workspace = true
