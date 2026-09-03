@@ -13,6 +13,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
+mod walkthrough;
 
 const MAX_EMBEDDED_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const COMPLETION_KEY_HELP: &str = "Up/Down select · Enter or Tab apply · Esc close";
@@ -190,6 +191,7 @@ pub struct NotebookEguiApp {
     pub microscope_target: Option<notebook_protocol::microscope::MicroscopeTarget>,
     microscope_document: Option<notebook_protocol::microscope::MicroscopeDocument>,
     microscope_delete: Option<(String, notebook_protocol::microscope::MicroscopeRef)>,
+    walkthrough_scroll_to_focus: bool,
     output_views: HashMap<String, OutputViewMode>,
     hidden_line_numbers: HashSet<String>,
     find_open: bool,
@@ -242,14 +244,23 @@ impl NotebookEguiApp {
                 &doc.microscope.id,
             )
             .map_err(|e| e.to_string())?;
-            if &expected != doc {
-                return Err("Microscope document identity mismatch".into());
-            }
+            notebook_protocol::microscope::validate_document(doc, &expected)
+                .map_err(|e| e.to_string())?;
+            let focus = doc.walkthrough.as_ref().map(|w| {
+                self.microscope_target
+                    .as_ref()
+                    .filter(|t| t.cell_id == doc.cell_id && t.microscope_id == doc.microscope.id)
+                    .and_then(|t| t.focus.clone())
+                    .filter(|f| notebook_protocol::microscope::validate_focus(w, f).is_ok())
+                    .unwrap_or_default()
+            });
             self.state.snapshot.selected_cell_id = Some(doc.cell_id.clone());
             self.selected_cells.clear();
             self.microscope_target = Some(notebook_protocol::microscope::MicroscopeTarget {
                 cell_id: doc.cell_id.clone(),
                 microscope_id: doc.microscope.id.clone(),
+                revision: doc.microscope.revision,
+                focus,
             });
         } else {
             self.microscope_target = None;
@@ -322,6 +333,7 @@ impl NotebookEguiApp {
             microscope_target: None,
             microscope_document: None,
             microscope_delete: None,
+            walkthrough_scroll_to_focus: false,
             output_views: HashMap::new(),
             hidden_line_numbers: HashSet::new(),
             find_open: false,
@@ -606,6 +618,7 @@ impl NotebookEguiApp {
             "scroll_fraction": self.scroll_fraction,
             "microscope": self.microscope_target,
             "microscope_loaded": self.microscope_document.is_some(),
+            "walkthrough": self.walkthrough_context(),
         })
     }
     fn selected_cell(&self) -> Option<(usize, Cell)> {
@@ -1611,6 +1624,8 @@ impl NotebookEguiApp {
                                             notebook_protocol::microscope::MicroscopeTarget {
                                                 cell_id: cell.id.clone(),
                                                 microscope_id: item.id.clone(),
+                                                revision: item.revision,
+                                                focus: None,
                                             },
                                         ));
                                         ui.close();
@@ -2088,12 +2103,12 @@ impl eframe::App for NotebookEguiApp {
             });
             egui::TopBottomPanel::bottom("status").show(ctx, |ui| self.status(ui));
             egui::CentralPanel::default().show(ctx,|ui| {
-                if self.microscope_document.is_some() {
-                    ui.heading("Microscope workspace");
-                    ui.label("This microscope is empty.");
-                    ui.label("Walkthroughs, graphics and executable playgrounds will be added in later steps.");
-                    ui.separator();
-                    ui.label(format!("Cell: {} · Microscope: {}",target.cell_id,target.microscope_id));
+                if let Some(doc) = self.microscope_document.clone() {
+                    if let Some(w) = doc.walkthrough { self.walkthrough_ui(ui, &w); }
+                    else {
+                        ui.heading("This microscope has no walkthrough yet");
+                        ui.label("Ask an agent to set up a walkthrough with code, annotations and an explanation for each step.");
+                    }
                 } else if let Some(error) = &self.state.last_error {
                     ui.colored_label(Color32::from_rgb(198,40,40),&error.message);
                     if ui.button("Retry loading microscope").clicked() {
@@ -3358,6 +3373,8 @@ mod tests {
         app.open_microscope(Some(MicroscopeTarget {
             cell_id: "code".into(),
             microscope_id: "micro01".into(),
+            revision: 0,
+            focus: None,
         }))
         .unwrap();
         assert!(matches!(

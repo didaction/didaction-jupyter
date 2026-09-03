@@ -468,6 +468,7 @@ async fn dispatch(
         NotebookCommandKind::Setup { create: true, .. }
             | NotebookCommandKind::RenameNotebook { .. }
             | NotebookCommandKind::CreateMicroscope { .. }
+            | NotebookCommandKind::SetMicroscopeWalkthrough { .. }
             | NotebookCommandKind::DeleteMicroscope { .. }
     ) {
         match host.artifact_lock.try_lock() {
@@ -713,6 +714,11 @@ async fn run(
             microscope_id,
             ..
         }
+        | SetMicroscopeWalkthrough {
+            cell_id,
+            microscope_id,
+            ..
+        }
         | DeleteMicroscope {
             cell_id,
             microscope_id,
@@ -739,6 +745,14 @@ async fn run(
                 microscope_id,
             )?;
             let stored = host.jupyter.read_microscope(&doc).await?;
+            let replacement = if let SetMicroscopeWalkthrough { walkthrough, .. } = &command.kind {
+                let mut updated =
+                    notebook_protocol::microscope::document(&proposed, cell_id, microscope_id)?;
+                updated.walkthrough = Some(walkthrough.clone());
+                Some(updated)
+            } else {
+                None
+            };
             let original = raw.clone();
             if matches!(command.kind, ReadMicroscope { .. }) {
                 result.microscope = Some(stored.ok_or_else(|| {
@@ -748,7 +762,16 @@ async fn run(
                     )
                 })?);
             } else {
-                if create {
+                if let Some(updated) = &replacement {
+                    let previous = stored.as_ref().ok_or_else(|| {
+                        error(
+                            ErrorCode::InvalidInput,
+                            "Microscope content file is missing",
+                        )
+                    })?;
+                    host.jupyter.replace_microscope(previous, updated).await?;
+                    result.microscope = Some(updated.clone());
+                } else if create {
                     if stored.is_some() {
                         return Err(error(
                             ErrorCode::InvalidInput,
@@ -769,8 +792,15 @@ async fn run(
                     } else {
                         if create && observed.as_ref().is_ok_and(|value| value == &original) {
                             let _ = host.jupyter.delete_microscope(&doc).await;
-                        } else if stored.is_some() {
-                            let _ = host.jupyter.create_microscope(&doc).await;
+                        } else if let Some(previous) = &stored {
+                            if let Some(updated) = &replacement {
+                                if observed.as_ref().is_ok_and(|value| value == &original) {
+                                    let _ =
+                                        host.jupyter.replace_microscope(updated, previous).await;
+                                }
+                            } else {
+                                let _ = host.jupyter.create_microscope(previous).await;
+                            }
                         }
                         return Err(failure);
                     }

@@ -9,7 +9,13 @@ export type ToolResult = {
   isError: boolean;
 };
 type Field = {
-  type: "string" | "integer" | "boolean";
+  type: "string" | "integer" | "boolean" | "object" | "array";
+  properties?: Record<string, Field>;
+  required?: string[];
+  additionalProperties?: false;
+  items?: Field;
+  minItems?: number;
+  maxItems?: number;
   maxLength?: number;
   minLength?: number;
   minimum?: number;
@@ -104,6 +110,86 @@ define(
   "Return this window to notebook mode.",
   {},
   [],
+  true,
+);
+const microScope = {
+  cell_id: id,
+  microscope_id: { type: "string", minLength: 7, maxLength: 7 } as Field,
+};
+const shortId: Field = { type: "string", minLength: 1, maxLength: 64 };
+const title: Field = { type: "string", minLength: 1, maxLength: 128 };
+const annotation: Field = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "start_line", "end_line", "text"],
+  properties: {
+    id: shortId,
+    start_line: { type: "integer", minimum: 1, maximum: 64001 },
+    end_line: { type: "integer", minimum: 1, maximum: 64001 },
+    text: { type: "string", minLength: 1, maxLength: 4096 },
+    color: { type: "string", enum: ["blue", "blue-light", "blue-deep"] },
+  },
+};
+const walkthrough: Field = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "steps"],
+  properties: {
+    title,
+    steps: {
+      type: "array",
+      minItems: 1,
+      maxItems: 64,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "title", "code", "markdown"],
+        properties: {
+          id: shortId,
+          title,
+          code: source,
+          markdown: source,
+          annotations: { type: "array", maxItems: 32, items: annotation },
+        },
+      },
+    },
+  },
+};
+define(
+  "set_microscope_walkthrough",
+  "Replace a microscope's complete walkthrough. Display-only code, ordered steps, Markdown and inclusive one-based line annotations. Driver-only; saved in its sidecar.",
+  { ...microScope, walkthrough },
+);
+define(
+  "read_microscope",
+  "Read the saved microscope document and its walkthrough.",
+  microScope,
+  undefined,
+  true,
+);
+define(
+  "focus_microscope_step",
+  "Open this microscope at a zero-based step index, clearing temporary annotation focus. Local presentation only; opt-in followers follow the driver.",
+  { ...microScope, step_index: { type: "integer", minimum: 0, maximum: 63 } },
+  undefined,
+  true,
+);
+define(
+  "focus_microscope_annotation",
+  "Open a step and pulse the named annotation's code range. Does not change saved annotations or execute code.",
+  {
+    ...microScope,
+    step_index: { type: "integer", minimum: 0, maximum: 63 },
+    annotation_id: shortId,
+  },
+  undefined,
+  true,
+);
+define(
+  "clear_microscope_focus",
+  "Clear temporary annotation focus in the currently open microscope; keep the current step and saved annotations.",
+  microScope,
+  undefined,
   true,
 );
 define(
@@ -235,7 +321,7 @@ function parse(
   if (!input || typeof input !== "object" || Array.isArray(input))
     throw new ToolError("invalid_input", "Arguments must be an object");
   const values = input as Record<string, unknown>;
-  if (new TextEncoder().encode(JSON.stringify(values)).length > 200000)
+  if (new TextEncoder().encode(JSON.stringify(values)).length > 512000)
     throw new ToolError("bounds_exceeded", "Tool input exceeds limit");
   for (const key of definition.inputSchema.required)
     if (!Object.hasOwn(values, key))
@@ -261,6 +347,39 @@ function parse(
         value > (field.maximum ?? 2047)
       )
         throw new ToolError("invalid_input", `Invalid argument: ${key}`);
+    } else if (field.type === "object") {
+      parse(
+        {
+          ...definition,
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: field.properties!,
+            required: field.required!,
+          },
+        },
+        value,
+      );
+    } else if (field.type === "array") {
+      if (
+        !Array.isArray(value) ||
+        value.length < (field.minItems ?? 0) ||
+        value.length > (field.maxItems ?? 64)
+      )
+        throw new ToolError("invalid_input", `Invalid array: ${key}`);
+      for (const item of value)
+        parse(
+          {
+            ...definition,
+            inputSchema: {
+              type: "object",
+              additionalProperties: false,
+              properties: { item: field.items! },
+              required: ["item"],
+            },
+          },
+          { item },
+        );
     } else if (typeof value !== "boolean")
       throw new ToolError("invalid_input", `Invalid argument: ${key}`);
   }
@@ -268,7 +387,7 @@ function parse(
 }
 function answer(value: Record<string, unknown>, isError = false): ToolResult {
   const text = JSON.stringify(value);
-  if (new TextEncoder().encode(text).length > 200000)
+  if (new TextEncoder().encode(text).length > 600000)
     return answer(
       {
         ok: false,
@@ -328,6 +447,9 @@ export class NotebookTools implements NotebookToolInvoker {
           "clear_cell_highlight",
           "open_microscope",
           "close_microscope",
+          "focus_microscope_step",
+          "focus_microscope_annotation",
+          "clear_microscope_focus",
         ].includes(name)
       ) {
         if (!this.view)
@@ -427,6 +549,23 @@ export class NotebookTools implements NotebookToolInvoker {
                   | { items?: unknown[] }
                   | undefined
               )?.items ?? [],
+          });
+        }
+        if (
+          name === "set_microscope_walkthrough" ||
+          name === "read_microscope"
+        ) {
+          const result = await send(name, {
+            cell_id: cell!.id,
+            microscope_id: args.microscope_id,
+            ...(name === "set_microscope_walkthrough"
+              ? { walkthrough: args.walkthrough }
+              : {}),
+          });
+          return answer({
+            ok: true,
+            revision: this.snapshot().revision,
+            microscope: result.microscope,
           });
         }
         if (name === "create_microscope") {

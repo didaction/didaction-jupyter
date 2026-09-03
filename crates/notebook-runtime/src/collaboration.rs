@@ -238,6 +238,21 @@ impl Collaboration {
                     fail(ErrorCode::InvalidInput, "Invalid microscope follow target")
                 })?;
             notebook_protocol::microscope::validate_id(&microscope.microscope_id)?;
+            if microscope.focus.as_ref().is_some_and(|f| {
+                f.step_index >= 64
+                    || f.annotation_id.as_ref().is_some_and(|id| {
+                        id.is_empty()
+                            || id.len() > 64
+                            || !id
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                    })
+            }) {
+                return Err(fail(
+                    ErrorCode::InvalidInput,
+                    "Invalid walkthrough follow focus",
+                ));
+            }
             if microscope.cell_id.is_empty() || microscope.cell_id.len() > 128 {
                 return Err(fail(ErrorCode::InvalidInput, "Invalid microscope cell ID"));
             }

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { exampleWalkthrough } from "../fixtures/walkthrough";
 
 async function installTools(page: Page) {
   await page.addInitScript(() => {
@@ -223,6 +224,46 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   await expect
     .poll(() => activeMicroscope(observer))
     .toEqual({ cell_id: "tail-note", microscope_id: microscope.microscope_id });
+  expect(
+    (
+      await call(observer, "set_microscope_walkthrough", {
+        ...microscope,
+        walkthrough: exampleWalkthrough,
+      })
+    ).isError,
+  ).toBe(true);
+  expect(
+    (
+      await call(page, "set_microscope_walkthrough", {
+        ...microscope,
+        walkthrough: exampleWalkthrough,
+      })
+    ).isError,
+  ).toBe(false);
+  expect(
+    (
+      await call(page, "focus_microscope_annotation", {
+        ...microscope,
+        step_index: 1,
+        annotation_id: "bars",
+      })
+    ).isError,
+  ).toBe(false);
+  await expect
+    .poll(() => activeMicroscope(observer))
+    .toMatchObject({
+      revision: 1,
+      focus: { step_index: 1, annotation_id: "bars" },
+    });
+  expect((await call(page, "clear_microscope_focus", microscope)).isError).toBe(
+    false,
+  );
+  await expect
+    .poll(() => activeMicroscope(observer))
+    .toMatchObject({
+      revision: 1,
+      focus: { step_index: 1, annotation_id: null },
+    });
   expect(
     (await call(page, "close_microscope", { notebook_path: names[1] })).isError,
   ).toBe(false);

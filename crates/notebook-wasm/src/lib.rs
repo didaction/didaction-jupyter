@@ -23,24 +23,43 @@ pub fn microscope_document(
     stored: Option<String>,
 ) -> Result<String, JsError> {
     if snapshot.len() > notebook_protocol::MAX_RESPONSE_BYTES
-        || stored.as_ref().is_some_and(|s| s.len() > 4096)
+        || stored
+            .as_ref()
+            .is_some_and(|s| s.len() > notebook_protocol::microscope::MAX_DOCUMENT_BYTES)
     {
         return Err(JsError::new("Microscope input exceeds limit"));
     }
     let snapshot: NotebookSnapshot = serde_json::from_str(snapshot).map_err(js_error)?;
     validate_snapshot(&snapshot).map_err(js_error)?;
-    let document =
+    let mut document =
         notebook_protocol::microscope::document(&snapshot, cell_id, id).map_err(js_error)?;
     if let Some(stored) = stored {
         let parsed: notebook_protocol::microscope::MicroscopeDocument =
             serde_json::from_str(&stored).map_err(js_error)?;
-        if document != parsed {
-            return Err(JsError::new("Microscope content identity mismatch"));
-        }
+        notebook_protocol::microscope::validate_document(&parsed, &document).map_err(js_error)?;
+        document = parsed;
     }
     let path = notebook_protocol::microscope::sidecar(&snapshot.notebook.path, cell_id, id)
         .map_err(js_error)?;
     Ok(serde_json::json!({"path":path,"document":document}).to_string())
+}
+#[wasm_bindgen(js_name = validateWalkthroughFocus)]
+pub fn validate_walkthrough_focus(document: &str, focus: &str) -> Result<(), JsError> {
+    if document.len() > notebook_protocol::microscope::MAX_DOCUMENT_BYTES || focus.len() > 1024 {
+        return Err(JsError::new("Walkthrough input exceeds limit"));
+    }
+    let doc: notebook_protocol::microscope::MicroscopeDocument =
+        serde_json::from_str(document).map_err(js_error)?;
+    let w = doc
+        .walkthrough
+        .as_ref()
+        .ok_or_else(|| JsError::new("Microscope has no walkthrough"))?;
+    notebook_protocol::microscope::validate_walkthrough(w).map_err(js_error)?;
+    notebook_protocol::microscope::validate_focus(
+        w,
+        &serde_json::from_str(focus).map_err(js_error)?,
+    )
+    .map_err(js_error)
 }
 #[wasm_bindgen(js_name = prepareRuntimeCommand)]
 pub fn prepare_runtime_command(snapshot: &str, command: &str) -> Result<String, JsError> {
@@ -285,9 +304,6 @@ impl eframe::App for MountedApp {
                 app.lock()
                     .expect("notebook app mutex poisoned")
                     .finish_command(result.command_id);
-                if let Some(doc) = result.microscope.clone() {
-                    app.lock().expect("app mutex").accept_microscope(doc);
-                }
                 if let Some(completion) = result.completion.clone() {
                     app.lock()
                         .expect("notebook app mutex poisoned")
@@ -314,6 +330,9 @@ impl eframe::App for MountedApp {
                         app.lock()
                             .expect("notebook app mutex poisoned")
                             .replace_state(next);
+                        if let Some(doc) = result.microscope {
+                            app.lock().expect("app mutex").accept_microscope(doc);
+                        }
                         repaint.request_repaint();
                     }
                 } else {
@@ -427,7 +446,7 @@ impl MountedNotebook {
     }
     #[wasm_bindgen(js_name = showMicroscope)]
     pub fn show_microscope(&self, document: &str) -> Result<(), JsError> {
-        if document.len() > 4096 {
+        if document.len() > notebook_protocol::microscope::MAX_DOCUMENT_BYTES {
             return Err(JsError::new("Microscope document exceeds limit"));
         }
         let doc = serde_json::from_str(document).map_err(js_error)?;
@@ -435,6 +454,21 @@ impl MountedNotebook {
             .lock()
             .expect("app mutex")
             .show_microscope(doc)
+            .map_err(|e| JsError::new(&e))?;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
+    #[wasm_bindgen(js_name = focusWalkthrough)]
+    pub fn focus_walkthrough(&self, focus: &str) -> Result<(), JsError> {
+        if focus.len() > 1024 {
+            return Err(JsError::new("Walkthrough focus exceeds limit"));
+        }
+        self.app
+            .lock()
+            .expect("app mutex")
+            .focus_walkthrough(serde_json::from_str(focus).map_err(js_error)?)
             .map_err(|e| JsError::new(&e))?;
         if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
             ctx.request_repaint();
@@ -570,9 +604,6 @@ impl MountedNotebook {
     pub fn apply_external_result(&self, serialized: &str, progress: bool) -> Result<(), JsError> {
         let result: CommandResult = serde_json::from_str(serialized).map_err(js_error)?;
         let mut app = self.app.lock().expect("app mutex");
-        if let Some(doc) = result.microscope.clone() {
-            app.accept_microscope(doc);
-        }
         if let Some(snapshot) = result.snapshot {
             let next = if progress {
                 apply_progress_snapshot(&app.state, snapshot)
@@ -581,6 +612,9 @@ impl MountedNotebook {
             }
             .map_err(js_error)?;
             app.replace_state(next);
+        }
+        if let Some(doc) = result.microscope {
+            app.accept_microscope(doc);
         }
         if let Some(error) = result.error {
             app.state.last_error = Some(error);

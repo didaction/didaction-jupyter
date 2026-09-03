@@ -20,6 +20,7 @@ export interface NotebookStore {
     snapshot: NotebookSnapshot,
     path: string,
     content: string | null,
+    previous?: string,
   ): Promise<void>;
   read(path: string): Promise<NotebookSnapshot | undefined>;
   write(path: string, snapshot: NotebookSnapshot): Promise<void>;
@@ -39,6 +40,7 @@ export class IndexedNotebookStore implements NotebookStore {
     snapshot: NotebookSnapshot,
     path: string,
     content: string | null,
+    previous?: string,
   ): Promise<void> {
     browserPath(path, true);
     const bytes = content === null ? null : new TextEncoder().encode(content);
@@ -55,14 +57,17 @@ export class IndexedNotebookStore implements NotebookStore {
           (f: { path: string }) => f.path === path,
         );
         if (
-          (content !== null && existing) ||
+          (previous !== undefined
+            ? !existing || new TextDecoder().decode(existing.bytes) !== previous
+            : content !== null && existing) ||
           (content !== null &&
-            (count.result + saved.result.length >= 1000 ||
+            (count.result + saved.result.length - (existing ? 1 : 0) >= 1000 ||
               saved.result.reduce(
                 (n: number, f: { bytes: Uint8Array }) => n + f.bytes.length,
                 0,
               ) +
-                bytes!.length >
+                bytes!.length -
+                (existing?.bytes.length ?? 0) >
                 20_000_000))
         ) {
           tx.abort();
@@ -70,7 +75,7 @@ export class IndexedNotebookStore implements NotebookStore {
         }
         if (content === null) files.delete(path);
         else
-          files.add(
+          files.put(
             {
               path,
               directory: false,

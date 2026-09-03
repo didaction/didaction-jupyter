@@ -4,11 +4,121 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 pub const KEY: &str = "didaction_microscopes";
+pub const MAX_DOCUMENT_BYTES: usize = 512_000;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Walkthrough {
+    pub title: String,
+    pub steps: Vec<WalkthroughStep>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WalkthroughStep {
+    pub id: String,
+    pub title: String,
+    pub code: String,
+    pub markdown: String,
+    #[serde(default)]
+    pub annotations: Vec<Annotation>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Annotation {
+    pub id: String,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub text: String,
+    #[serde(default)]
+    pub color: AnnotationColor,
+}
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AnnotationColor {
+    #[default]
+    Blue,
+    BlueLight,
+    BlueDeep,
+}
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WalkthroughFocus {
+    pub step_index: usize,
+    #[serde(default)]
+    pub annotation_id: Option<String>,
+}
+pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
+    fn title(s: &str) -> bool {
+        !s.trim().is_empty() && s.len() <= 128 && !s.chars().any(char::is_control)
+    }
+    fn id(s: &str) -> bool {
+        !s.is_empty()
+            && s.len() <= 64
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    }
+    if !title(&w.title) || w.steps.is_empty() || w.steps.len() > 64 {
+        return Err(invalid("Walkthrough needs a title and 1..64 steps"));
+    }
+    let mut steps = std::collections::BTreeSet::new();
+    for s in &w.steps {
+        if !id(&s.id)
+            || !steps.insert(&s.id)
+            || !title(&s.title)
+            || s.code.len() > 64_000
+            || s.markdown.len() > 64_000
+            || s.annotations.len() > 32
+        {
+            return Err(invalid("Invalid or oversized walkthrough step"));
+        }
+        let mut annotations = std::collections::BTreeSet::new();
+        for a in &s.annotations {
+            if !id(&a.id)
+                || !annotations.insert(&a.id)
+                || a.start_line == 0
+                || a.end_line < a.start_line
+                || a.end_line > s.code.split('\n').count()
+                || a.text.trim().is_empty()
+                || a.text.len() > 4096
+            {
+                return Err(invalid(
+                    "Invalid annotation ID, text or inclusive one-based line range",
+                ));
+            }
+        }
+    }
+    if serde_json::to_vec(w)
+        .map_err(|_| invalid("Invalid walkthrough"))?
+        .len()
+        > MAX_DOCUMENT_BYTES - 4096
+    {
+        return Err(invalid("Walkthrough exceeds aggregate size limit"));
+    }
+    Ok(())
+}
+pub fn validate_focus(w: &Walkthrough, focus: &WalkthroughFocus) -> Result<(), ProtocolError> {
+    let step = w
+        .steps
+        .get(focus.step_index)
+        .ok_or_else(|| invalid("Walkthrough step index out of range"))?;
+    if focus
+        .annotation_id
+        .as_ref()
+        .is_some_and(|id| !step.annotations.iter().any(|a| &a.id == id))
+    {
+        return Err(invalid("Annotation not found in this step"));
+    }
+    Ok(())
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MicroscopeRef {
     pub id: String,
     pub title: String,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub revision: u64,
+}
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,12 +127,18 @@ pub struct MicroscopeDocument {
     pub notebook_path: String,
     pub cell_id: String,
     pub microscope: MicroscopeRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub walkthrough: Option<Walkthrough>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MicroscopeTarget {
     pub cell_id: String,
     pub microscope_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<WalkthroughFocus>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub revision: u64,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -110,12 +226,64 @@ pub fn document(
         notebook_path: snapshot.notebook.path.clone(),
         cell_id: cell_id.into(),
         microscope: item,
+        walkthrough: None,
     })
+}
+pub fn validate_document(
+    doc: &MicroscopeDocument,
+    expected: &MicroscopeDocument,
+) -> Result<(), ProtocolError> {
+    if doc.schema_version != 1
+        || doc.notebook_path != expected.notebook_path
+        || doc.cell_id != expected.cell_id
+        || doc.microscope != expected.microscope
+    {
+        return Err(invalid("Microscope document identity or revision mismatch"));
+    }
+    if let Some(w) = &doc.walkthrough {
+        validate_walkthrough(w)?;
+    }
+    if serde_json::to_vec(doc)
+        .map_err(|_| invalid("Invalid microscope"))?
+        .len()
+        > MAX_DOCUMENT_BYTES
+    {
+        return Err(invalid("Microscope document exceeds limit"));
+    }
+    Ok(())
 }
 pub fn prepare(
     snapshot: &mut NotebookSnapshot,
     kind: &NotebookCommandKind,
 ) -> Result<(), ProtocolError> {
+    if let NotebookCommandKind::SetMicroscopeWalkthrough {
+        cell_id,
+        microscope_id,
+        walkthrough,
+    } = kind
+    {
+        validate_walkthrough(walkthrough)?;
+        document(snapshot, cell_id, microscope_id)?;
+        let cell = snapshot
+            .cells
+            .iter_mut()
+            .find(|c| &c.id == cell_id)
+            .ok_or_else(|| invalid("Cell not found"))?;
+        let mut items = list(cell)?;
+        let item = items
+            .iter_mut()
+            .find(|m| &m.id == microscope_id)
+            .ok_or_else(|| invalid("Microscope not found"))?;
+        item.revision = item
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| invalid("Microscope revision limit"))?;
+        cell.metadata
+            .as_object_mut()
+            .ok_or_else(|| invalid("Invalid metadata"))?
+            .insert(KEY.into(), json!({"schema_version":1,"items":items}));
+        return Ok(());
+    }
     let (cell_id, id, title) = match kind {
         NotebookCommandKind::CreateMicroscope {
             cell_id,
@@ -149,6 +317,7 @@ pub fn prepare(
         items.push(MicroscopeRef {
             id: id.clone(),
             title: title.clone(),
+            revision: 0,
         });
     } else {
         if !items.iter().any(|m| &m.id == id) {
@@ -198,6 +367,92 @@ pub fn preserve_references(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn walkthrough_bounds_focus_and_ownership_are_validated() {
+        let w: Walkthrough = serde_json::from_value(json!({"title":"Explain","steps":[{"id":"one","title":"First","code":"x = 42\nx","markdown":"**Value**","annotations":[{"id":"value","start_line":1,"end_line":2,"text":"Shared variable","color":"blue"}]}]})).unwrap();
+        validate_walkthrough(&w).unwrap();
+        let encoded = serde_json::to_string(&w).unwrap();
+        assert_eq!(serde_json::from_str::<Walkthrough>(&encoded).unwrap(), w);
+        assert!(
+            validate_focus(
+                &w,
+                &WalkthroughFocus {
+                    step_index: 0,
+                    annotation_id: Some("value".into())
+                }
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_focus(
+                &w,
+                &WalkthroughFocus {
+                    step_index: 1,
+                    annotation_id: None
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            validate_focus(
+                &w,
+                &WalkthroughFocus {
+                    step_index: 0,
+                    annotation_id: Some("missing".into())
+                }
+            )
+            .is_err()
+        );
+        for mutate in 0..6 {
+            let mut bad = w.clone();
+            match mutate {
+                0 => bad.steps[0].annotations[0].start_line = 0,
+                1 => bad.steps[0].annotations[0].end_line = 3,
+                2 => bad.steps.push(bad.steps[0].clone()),
+                3 => {
+                    let duplicate = bad.steps[0].annotations[0].clone();
+                    bad.steps[0].annotations.push(duplicate);
+                }
+                4 => bad.steps[0].code = "a".repeat(64001),
+                _ => bad.steps.clear(),
+            }
+            assert!(validate_walkthrough(&bad).is_err());
+        }
+        let mut state = snapshot();
+        prepare(
+            &mut state,
+            &NotebookCommandKind::CreateMicroscope {
+                cell_id: "cell-a".into(),
+                microscope_id: "abc1234".into(),
+                title: "Example".into(),
+            },
+        )
+        .unwrap();
+        let old = document(&state, "cell-a", "abc1234").unwrap();
+        prepare(
+            &mut state,
+            &NotebookCommandKind::SetMicroscopeWalkthrough {
+                cell_id: "cell-a".into(),
+                microscope_id: "abc1234".into(),
+                walkthrough: w.clone(),
+            },
+        )
+        .unwrap();
+        let expected = document(&state, "cell-a", "abc1234").unwrap();
+        assert_eq!(expected.microscope.revision, 1);
+        let mut updated = expected.clone();
+        updated.walkthrough = Some(w);
+        validate_document(&updated, &expected).unwrap();
+        assert!(validate_document(&updated, &old).is_err());
+        updated.cell_id = "different".into();
+        assert!(validate_document(&updated, &expected).is_err());
+        assert!(
+            serde_json::from_value::<Walkthrough>(
+                json!({"title":"x","steps":[],"script":"alert(1)"})
+            )
+            .is_err()
+        );
+    }
     fn snapshot() -> NotebookSnapshot {
         serde_json::from_value(json!({"protocol_version":1,"schema_version":1,"revision":0,
           "notebook":{"path":"lessons/demo.ipynb","workspace":"local"},
@@ -250,7 +505,8 @@ mod tests {
             assert!(
                 validate_ref(&MicroscopeRef {
                     id: "abc1234".into(),
-                    title: title.into()
+                    title: title.into(),
+                    revision: 0,
                 })
                 .is_err()
             );

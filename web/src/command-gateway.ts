@@ -25,6 +25,7 @@ export class CommandGateway {
         query: "query",
         modify_cells: "modifyCells",
         create_microscope: "modifyCells",
+        set_microscope_walkthrough: "modifyCells",
         delete_microscope: "modifyCells",
         read_microscope: "query",
         execute_cell: "execute",

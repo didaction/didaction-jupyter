@@ -46,6 +46,38 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
     assert not created_micro.get("error"), created_micro
     assert client.post("/api/v1/commands", headers=a, json=create_micro).json() == created_micro
     assert call("read_microscope", **micro)["microscope"]["microscope"]["title"] == "Closer look"
+    walkthrough = {
+        "title": "Explanation",
+        "steps": [
+            {
+                "id": "first",
+                "title": "Value",
+                "code": "x = 42",
+                "markdown": "The value is **42**.",
+                "annotations": [
+                    {
+                        "id": "value",
+                        "start_line": 1,
+                        "end_line": 1,
+                        "text": "Assignment",
+                        "color": "blue",
+                    }
+                ],
+            }
+        ],
+    }
+    update_micro = command("set_microscope_walkthrough", **micro, walkthrough=walkthrough)
+    updated = client.post("/api/v1/commands", headers=a, json=update_micro).json()
+    assert not updated.get("error"), updated
+    assert updated["microscope"]["walkthrough"] == walkthrough
+    assert client.post("/api/v1/commands", headers=a, json=update_micro).json() == updated
+    assert call("read_microscope", **micro)["microscope"]["walkthrough"] == walkthrough
+    denied_update = client.post(
+        "/api/v1/commands",
+        headers=b,
+        json=command("set_microscope_walkthrough", **micro, walkthrough=walkthrough),
+    ).json()
+    assert denied_update["error"]["code"] == "not_driver"
     assert (
         call("query", query="full")["snapshot"]["cells"][0]["metadata"]["didaction_microscopes"][
             "items"

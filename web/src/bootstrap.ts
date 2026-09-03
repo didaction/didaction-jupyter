@@ -2,6 +2,7 @@ import init, {
   mountNotebook,
   NotebookApplication,
   wasmBuildInfo,
+  validateWalkthroughFocus,
 } from "../pkg/notebook_wasm";
 import { CallHistory, installDiagnostics } from "./diagnostics";
 import {
@@ -254,9 +255,33 @@ async function createContext(
             "Select this notebook with open_notebook before using view tools",
           );
         const id = args.cell_id as string;
-        if (name === "open_microscope" || name === "close_microscope") {
+        if (
+          [
+            "open_microscope",
+            "close_microscope",
+            "focus_microscope_step",
+            "focus_microscope_annotation",
+            "clear_microscope_focus",
+          ].includes(name)
+        ) {
           if (name === "close_microscope") mounted.showMicroscope("null");
-          else {
+          else if (name === "clear_microscope_focus") {
+            const active = JSON.parse(mounted.activeContext());
+            if (
+              active.microscope?.cell_id !== id ||
+              active.microscope?.microscope_id !== args.microscope_id ||
+              !active.walkthrough
+            )
+              throw new Error(
+                "Open this microscope's walkthrough before clearing focus",
+              );
+            mounted.focusWalkthrough(
+              JSON.stringify({
+                step_index: active.walkthrough.step_index,
+                annotation_id: null,
+              }),
+            );
+          } else {
             mounted.assertExternalReady();
             const response = JSON.parse(
               await externalExecute(
@@ -274,7 +299,19 @@ async function createContext(
               throw new Error(
                 response.error?.message ?? "Microscope could not be loaded",
               );
+            const focus = name.startsWith("focus_microscope_")
+              ? JSON.stringify({
+                  step_index: args.step_index,
+                  annotation_id: args.annotation_id ?? null,
+                })
+              : undefined;
+            if (focus)
+              validateWalkthroughFocus(
+                JSON.stringify(response.microscope),
+                focus,
+              );
             mounted.showMicroscope(JSON.stringify(response.microscope));
+            if (focus) mounted.focusWalkthrough(focus);
           }
           const result = {
             ok: true,
@@ -375,12 +412,24 @@ async function createContext(
       const requested = target as {
         cell_id: string;
         microscope_id: string;
+        focus?: { step_index: number; annotation_id?: string | null };
+        revision?: number;
       } | null;
       if (!mounted || !current()) return;
       const active = JSON.parse(mounted.activeContext()).microscope;
       if (JSON.stringify(active) === JSON.stringify(requested)) return;
       if (!requested) {
         mounted.showMicroscope("null");
+        return;
+      }
+      if (
+        active?.cell_id === requested.cell_id &&
+        active?.microscope_id === requested.microscope_id &&
+        (active?.revision ?? 0) === (requested.revision ?? 0) &&
+        JSON.parse(mounted.activeContext()).microscope_loaded
+      ) {
+        if (requested.focus)
+          mounted.focusWalkthrough(JSON.stringify(requested.focus));
         return;
       }
       // View events can arrive before the notebook snapshot announcing creation.
@@ -390,12 +439,22 @@ async function createContext(
         await execute(JSON.stringify(command("query", { query: "full" })));
         if (!current() || !mounted) return;
         const response = JSON.parse(
-          await execute(JSON.stringify(command("read_microscope", requested))),
+          await execute(
+            JSON.stringify(
+              command("read_microscope", {
+                cell_id: requested.cell_id,
+                microscope_id: requested.microscope_id,
+              }),
+            ),
+          ),
         );
         if (response.error || !response.microscope)
           throw new Error("Microscope unavailable");
-        if (current() && mounted)
+        if (current() && mounted) {
           mounted.showMicroscope(JSON.stringify(response.microscope));
+          if (requested.focus)
+            mounted.focusWalkthrough(JSON.stringify(requested.focus));
+        }
       });
     },
     tools,

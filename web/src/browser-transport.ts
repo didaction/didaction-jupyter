@@ -151,7 +151,9 @@ export class BrowserNotebookTransport implements NotebookTransport {
       ) as BrowserSnapshot;
       let result: CommandResult;
       let microscope: Record<string, unknown> | undefined;
-      let sidecar: { path: string; content: string | null } | undefined;
+      let sidecar:
+        | { path: string; content: string | null; previous?: string }
+        | undefined;
       if (command.type === "setup") {
         if (
           command.path !== this.snapshot.notebook.path ||
@@ -166,13 +168,16 @@ export class BrowserNotebookTransport implements NotebookTransport {
         next = saved ? (structuredClone(saved) as BrowserSnapshot) : next;
         next.kernel = initialBrowserSnapshot(next.notebook.path).kernel;
       } else if (
-        ["create_microscope", "delete_microscope", "read_microscope"].includes(
-          command.type,
-        )
+        [
+          "create_microscope",
+          "delete_microscope",
+          "read_microscope",
+          "set_microscope_walkthrough",
+        ].includes(command.type)
       ) {
         const selected =
           command.type === "create_microscope" ? next : this.snapshot;
-        const identity = JSON.parse(
+        let identity = JSON.parse(
           microscopeDocument(
             JSON.stringify(selected),
             String(command.cell_id),
@@ -185,15 +190,42 @@ export class BrowserNotebookTransport implements NotebookTransport {
         const files = await this.store.artifacts();
         const stored = files.find((f) => f.path === identity.path);
         if (stored)
-          microscopeDocument(
-            JSON.stringify(selected),
-            String(command.cell_id),
-            String(command.microscope_id),
-            new TextDecoder().decode(stored.bytes),
+          identity = JSON.parse(
+            microscopeDocument(
+              JSON.stringify(selected),
+              String(command.cell_id),
+              String(command.microscope_id),
+              new TextDecoder().decode(stored.bytes),
+            ),
           );
         if (command.type === "read_microscope") {
           if (!stored) throw new Error("Microscope content file is missing");
           microscope = identity.document;
+        } else if (command.type === "set_microscope_walkthrough") {
+          if (!stored) throw new Error("Microscope content file is missing");
+          const updated = JSON.parse(
+            microscopeDocument(
+              JSON.stringify(next),
+              String(command.cell_id),
+              String(command.microscope_id),
+              undefined,
+            ),
+          );
+          updated.document.walkthrough = command.walkthrough;
+          const validated = JSON.parse(
+            microscopeDocument(
+              JSON.stringify(next),
+              String(command.cell_id),
+              String(command.microscope_id),
+              JSON.stringify(updated.document),
+            ),
+          );
+          microscope = validated.document;
+          sidecar = {
+            path: identity.path,
+            content: JSON.stringify(microscope),
+            previous: new TextDecoder().decode(stored.bytes),
+          };
         } else {
           if (command.type === "create_microscope" && stored)
             throw new Error("Microscope sidecar already exists");
@@ -317,7 +349,12 @@ export class BrowserNotebookTransport implements NotebookTransport {
       if (sidecar) {
         if (!this.store.commitMicroscope)
           throw new Error("Microscope storage unavailable");
-        await this.store.commitMicroscope(next, sidecar.path, sidecar.content);
+        await this.store.commitMicroscope(
+          next,
+          sidecar.path,
+          sidecar.content,
+          sidecar.previous,
+        );
       } else if (command.type === "rename_notebook")
         await this.store.rename(
           this.snapshot.notebook.path,

@@ -2,6 +2,8 @@
 export interface MicroscopeTarget {
   cell_id: string;
   microscope_id: string;
+  revision?: number;
+  focus?: { step_index: number; annotation_id?: string | null } | null;
 }
 export interface FollowView {
   microscope?: MicroscopeTarget | null;
@@ -27,6 +29,20 @@ export interface FollowPublisher {
 }
 export function validateFollowView(value: unknown): FollowView {
   const view = value as FollowView;
+  const target = view?.microscope;
+  if (
+    target &&
+    ((target.revision !== undefined &&
+      (!Number.isSafeInteger(target.revision) || target.revision < 0)) ||
+      (target.focus != null &&
+        (!Number.isInteger(target.focus.step_index) ||
+          target.focus.step_index < 0 ||
+          target.focus.step_index > 63 ||
+          (target.focus.annotation_id != null &&
+            (typeof target.focus.annotation_id !== "string" ||
+              !/^[a-zA-Z0-9_-]{1,64}$/.test(target.focus.annotation_id))))))
+  )
+    throw new Error("Invalid walkthrough follow focus");
   if (
     view?.microscope != null &&
     (typeof view.microscope.cell_id !== "string" ||

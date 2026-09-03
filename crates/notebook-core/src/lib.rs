@@ -81,6 +81,7 @@ impl NotebookState {
                 SyncState::Dirty
             }
             NotebookCommandKind::CreateMicroscope { .. }
+            | NotebookCommandKind::SetMicroscopeWalkthrough { .. }
             | NotebookCommandKind::DeleteMicroscope { .. } => {
                 notebook_protocol::microscope::prepare(&mut next.snapshot, &command.kind)?;
                 SyncState::Dirty
@@ -133,7 +134,7 @@ impl NotebookState {
                 &doc.cell_id,
                 &doc.microscope.id,
             )?;
-            if &expected != doc {
+            if notebook_protocol::microscope::validate_document(doc, &expected).is_err() {
                 return Err(notebook_protocol::ProtocolError {
                     code: ErrorCode::MalformedResponse,
                     message: "Microscope document identity mismatch".into(),

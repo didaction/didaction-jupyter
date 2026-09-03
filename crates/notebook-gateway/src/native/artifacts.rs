@@ -116,7 +116,7 @@ impl Jupyter {
             ));
         }
         let text = body["content"].as_str().ok_or_else(malformed)?;
-        if text.len() > 4096 {
+        if text.len() > notebook_protocol::microscope::MAX_DOCUMENT_BYTES {
             return Err(error(
                 ErrorCode::BoundsExceeded,
                 "Microscope shell file exceeds limit",
@@ -124,7 +124,7 @@ impl Jupyter {
         }
         let doc: notebook_protocol::microscope::MicroscopeDocument = serde_json::from_str(text)
             .map_err(|_| error(ErrorCode::MalformedResponse, "Invalid microscope content"))?;
-        if &doc != expected {
+        if notebook_protocol::microscope::validate_document(&doc, expected).is_err() {
             return Err(error(
                 ErrorCode::MalformedResponse,
                 "Microscope content identity mismatch",
@@ -155,6 +155,34 @@ impl Jupyter {
             return Err(error(
                 ErrorCode::TransportError,
                 "Microscope file creation was not confirmed",
+            ));
+        }
+        Ok(())
+    }
+    pub async fn replace_microscope(
+        &self,
+        previous: &notebook_protocol::microscope::MicroscopeDocument,
+        doc: &notebook_protocol::microscope::MicroscopeDocument,
+    ) -> Result<()> {
+        if self.read_microscope(previous).await?.as_ref() != Some(previous) {
+            return Err(error(
+                ErrorCode::StaleRevision,
+                "Microscope changed; refresh before editing",
+            ));
+        }
+        let path = notebook_protocol::microscope::sidecar(
+            &doc.notebook_path,
+            &doc.cell_id,
+            &doc.microscope.id,
+        )?;
+        let body = json!({"type":"file","format":"text","content":serde_json::to_string(doc).map_err(|_| malformed())?});
+        let (status, _) = self
+            .request(Method::PUT, &format!("api/contents/{path}"), Some(body))
+            .await?;
+        if status != 200 {
+            return Err(error(
+                ErrorCode::TransportError,
+                "Microscope update was not confirmed",
             ));
         }
         Ok(())

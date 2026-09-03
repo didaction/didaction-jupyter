@@ -144,6 +144,11 @@ pub enum CellMutation {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum NotebookCommandKind {
+    SetMicroscopeWalkthrough {
+        cell_id: String,
+        microscope_id: String,
+        walkthrough: microscope::Walkthrough,
+    },
     CreateMicroscope {
         cell_id: String,
         microscope_id: String,
@@ -274,6 +279,17 @@ pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> 
         return Err(bounds("timeout is outside the allowed range"));
     }
     match &command.kind {
+        NotebookCommandKind::SetMicroscopeWalkthrough {
+            cell_id,
+            microscope_id,
+            walkthrough,
+        } => {
+            if cell_id.is_empty() || cell_id.len() > 128 {
+                return Err(bounds("invalid cell id"));
+            }
+            microscope::validate_id(microscope_id)?;
+            microscope::validate_walkthrough(walkthrough)?;
+        }
         NotebookCommandKind::CreateMicroscope {
             cell_id,
             microscope_id,
@@ -285,6 +301,7 @@ pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> 
             microscope::validate_ref(&microscope::MicroscopeRef {
                 id: microscope_id.clone(),
                 title: title.clone(),
+                revision: 0,
             })?;
         }
         NotebookCommandKind::DeleteMicroscope {

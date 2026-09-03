@@ -31,7 +31,7 @@ function path(value: unknown, root = false): string {
   return value;
 }
 const result = (value: Record<string, unknown>, isError = false): ToolResult =>
-  new TextEncoder().encode(JSON.stringify(value)).length > 200000
+  new TextEncoder().encode(JSON.stringify(value)).length > 600000
     ? result(
         {
           ok: false,
