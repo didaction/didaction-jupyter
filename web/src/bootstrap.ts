@@ -13,6 +13,7 @@ import type { NotebookCommand, NotebookSnapshot } from "./types";
 import { installWebMcp } from "./webmcp";
 import { NotebookTools, type Transaction } from "./notebook-tools";
 import { installExplorer } from "./explorer";
+import { HttpArtifactTransport } from "./artifacts";
 import { WorkspaceTools, type OpenNotebook } from "./workspace-tools";
 import { NotebookCollaboration } from "./collaboration";
 import { FollowController } from "./follow";
@@ -536,6 +537,12 @@ async function boot(): Promise<void> {
       if (result.isError) throw new Error("Unable to open notebook");
     },
     browserWorkspace ? (path) => browserWorkspace!.store.list(path) : undefined,
+    browserWorkspace
+      ? undefined
+      : new HttpArtifactTransport(
+          () => activeContext()?.connection.headers() ?? {},
+        ),
+    () => activeContext()?.canWrite?.() ?? false,
   );
   const webmcp = await installWebMcp(workspace, undefined, callHistory);
   const hasWebMcp = webmcp.available;

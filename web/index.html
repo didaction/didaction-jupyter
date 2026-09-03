@@ -58,6 +58,27 @@
           ><button id="folder-refresh" type="button">Refresh</button>
         </div>
         <ul id="notebook-files"></ul>
+        <fieldset id="artifact-controls" disabled>
+          <legend>Create or upload</legend>
+          <form id="artifact-create">
+            <label for="artifact-kind">Type</label>
+            <select id="artifact-kind">
+              <option value="notebook">Notebook</option>
+              <option value="directory">Folder</option>
+              <option value="file">Empty file</option>
+            </select>
+            <label for="artifact-name">Name</label>
+            <input
+              id="artifact-name"
+              maxlength="255"
+              required
+              placeholder="Untitled"
+            />
+            <button type="submit">Create</button>
+          </form>
+          <label for="artifact-upload">Upload files (up to 1 MB each)</label>
+          <input id="artifact-upload" type="file" multiple />
+        </fieldset>
         <p id="explorer-status" role="status">Connecting…</p>
       </aside>
       <main id="notebook-shell" aria-label="Interactive notebook">

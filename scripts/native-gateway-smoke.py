@@ -1,5 +1,6 @@
 """Real native gateway contract checks. Only temporary notebooks from smoke.sh."""
 
+import base64
 import json
 import os
 import time
@@ -37,6 +38,56 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
         return value
 
     state = call("setup", path=path, kernel="python3", create=True)
+    # Create-only artifact API uses the same workspace driver capability.
+    folder = {"path": "uploads", "kind": "directory"}
+    assert client.post("/api/v1/artifacts", headers=b, json=folder).status_code == 403
+    assert client.post("/api/v1/artifacts", headers=a, json=folder).json()["ok"]
+    assert client.post("/api/v1/artifacts", headers=a, json=folder).is_error
+    for name in ["../escape", "/absolute", "uploads/.secret", "uploads/a%2fb"]:
+        assert client.post(
+            "/api/v1/artifacts", headers=a, json={"path": name, "kind": "file"}
+        ).is_error
+    assert client.post(
+        "/api/v1/artifacts", headers=a, json={"path": "uploads/nested", "kind": "directory"}
+    ).json()["ok"]
+    payload = base64.b64encode(b"x,y\n1,2\n").decode()
+    artifact = {"path": "uploads/nested/data.csv", "kind": "file", "content_base64": payload}
+    assert client.post("/api/v1/artifacts", headers=a, json=artifact).json()["ok"]
+    assert client.post("/api/v1/artifacts", headers=a, json=artifact).is_error
+    # Artifact bodies have a separately bounded allowance above command size.
+    assert client.post(
+        "/api/v1/artifacts",
+        headers=a,
+        json={
+            "path": "uploads/large.bin",
+            "kind": "file",
+            "content_base64": base64.b64encode(bytes(400_000)).decode(),
+        },
+    ).json()["ok"]
+    notebook = {"nbformat": 4, "nbformat_minor": 5, "metadata": {}, "cells": []}
+    assert client.post(
+        "/api/v1/artifacts",
+        headers=a,
+        json={
+            "path": "uploads/nested/demo.ipynb",
+            "kind": "notebook",
+            "content_base64": base64.b64encode(json.dumps(notebook).encode()).decode(),
+        },
+    ).json()["ok"]
+    entries = client.get("/api/v1/notebooks", params={"directory": "uploads/nested"}).json()[
+        "entries"
+    ]
+    assert {e["name"] for e in entries} == {"data.csv", "demo.ipynb"}
+    assert client.post(
+        "/api/v1/artifacts",
+        headers=a,
+        json={"path": "uploads/bad.ipynb", "kind": "file", "content_base64": payload},
+    ).is_error
+    assert client.post(
+        "/api/v1/artifacts",
+        headers=a,
+        json={"path": "uploads/big.bin", "kind": "file", "content_base64": "A" * 1_400_001},
+    ).is_error
     for endpoint in ["commands", "commands/stream"]:
         denied = client.post(
             f"/api/v1/{endpoint}",

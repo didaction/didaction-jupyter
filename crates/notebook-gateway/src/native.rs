@@ -1,3 +1,4 @@
+mod artifacts;
 mod config;
 mod jupyter;
 mod server;

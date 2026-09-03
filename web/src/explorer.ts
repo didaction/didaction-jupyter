@@ -1,4 +1,9 @@
 /** Accessible workspace navigation; notebook editing remains in egui/WASM. */
+import {
+  artifactPath,
+  uploadRequest,
+  type ArtifactTransport,
+} from "./artifacts";
 export function installExplorer(
   current: string,
   assertSaved: () => void,
@@ -7,6 +12,8 @@ export function installExplorer(
     directory: string;
     entries: { name: string; path: string; type: string }[];
   }>,
+  artifacts?: ArtifactTransport,
+  canWrite: () => boolean = () => false,
 ): void {
   const panel = document.querySelector<HTMLElement>("#file-explorer")!;
   const list = document.querySelector<HTMLUListElement>("#notebook-files")!;
@@ -80,6 +87,10 @@ export function installExplorer(
             void load(entry.path);
             return;
           }
+          if (entry.type === "file") {
+            status.textContent = `${entry.name} is a workspace artifact, not a notebook. It is available to the server kernel.`;
+            return;
+          }
           try {
             assertSaved();
             if (open) {
@@ -98,8 +109,8 @@ export function installExplorer(
         list.append(item);
       }
       status.textContent = data.entries.length
-        ? `${data.entries.length} folders and notebooks`
-        : "No notebooks in this folder.";
+        ? `${data.entries.length} workspace items`
+        : "This folder is empty. Create a notebook or upload a file.";
     } catch (error) {
       if (request === generation)
         status.textContent =
@@ -111,5 +122,78 @@ export function installExplorer(
   up.onclick = () => void load(directory.split("/").slice(0, -1).join("/"));
   document.querySelector<HTMLButtonElement>("#folder-refresh")!.onclick = () =>
     void load(directory);
+  const form = document.querySelector<HTMLFormElement>("#artifact-create")!;
+  const name = document.querySelector<HTMLInputElement>("#artifact-name")!;
+  const kind = document.querySelector<HTMLSelectElement>("#artifact-kind")!;
+  const upload = document.querySelector<HTMLInputElement>("#artifact-upload")!;
+  const controls =
+    document.querySelector<HTMLFieldSetElement>("#artifact-controls")!;
+  let busy = false;
+  const updateAccess = () => {
+    controls.disabled = busy || !artifacts || !canWrite();
+    controls.title = !artifacts
+      ? "Workspace uploads require the native server runtime"
+      : !canWrite()
+        ? "Only the workspace driver can create or upload files"
+        : "Create or upload in the displayed folder (1 MB per file)";
+  };
+  const observer = new MutationObserver(updateAccess);
+  observer.observe(document.querySelector("#driver-status")!, {
+    attributes: true,
+    childList: true,
+  });
+  window.addEventListener("pagehide", () => observer.disconnect(), {
+    once: true,
+  });
+  async function write(action: () => Promise<void>) {
+    if (busy) return;
+    try {
+      if (!artifacts || !canWrite())
+        throw new Error(
+          "Only the workspace driver can write files in server mode.",
+        );
+      busy = true;
+      updateAccess();
+      status.textContent = "Saving workspace item…";
+      await action();
+      await load(directory);
+    } catch (error) {
+      status.textContent =
+        error instanceof Error
+          ? error.message
+          : "Save was not confirmed. Refresh before retrying.";
+    } finally {
+      busy = false;
+      updateAccess();
+    }
+  }
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    const destination = directory;
+    void write(async () => {
+      const type = kind.value as "notebook" | "directory" | "file";
+      const filename =
+        type === "notebook" && !name.value.endsWith(".ipynb")
+          ? `${name.value}.ipynb`
+          : name.value;
+      if (!name.value.trim()) throw new Error("Enter a name first.");
+      await artifacts!.create({
+        path: artifactPath(destination, filename),
+        kind: type,
+      });
+      name.value = "";
+    });
+  };
+  upload.onchange = () => {
+    const files = Array.from(upload.files ?? []);
+    const destination = directory;
+    void write(async () => {
+      for (const file of files)
+        await artifacts!.create(await uploadRequest(destination, file));
+    }).finally(() => {
+      upload.value = "";
+    });
+  };
+  updateAccess();
   void load(directory);
 }

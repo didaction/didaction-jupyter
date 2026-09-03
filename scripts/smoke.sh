@@ -47,7 +47,7 @@ for _ in {1..400}; do
     if [[ "${DIDACTION_GATEWAY_IMPLEMENTATION:-rust}" == rust ]]; then
       uv run python scripts/native-gateway-smoke.py
       if [[ "${DIDACTION_NATIVE_BROWSER_CHECK:-0}" == 1 ]]; then
-        for spec in collaboration explorer follow tools; do
+        for spec in collaboration explorer follow tools artifacts; do
           kill "${pids[1]}"
           wait "${pids[1]}" || true
           bash scripts/gateway.sh >"$SMOKE_RUNTIME/gateway.log" 2>&1 & pids[1]="$!"

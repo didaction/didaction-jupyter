@@ -171,6 +171,33 @@ body {
   gap: 8px;
   margin-bottom: 12px;
 }
+#artifact-controls {
+  margin: 16px 0 0;
+  padding: 10px;
+  min-width: 0;
+  border: 1px solid #d7dcdf;
+  font-size: 0.82rem;
+}
+#artifact-create {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+#artifact-controls input,
+#artifact-controls select {
+  min-width: 0;
+  width: 100%;
+  color: #263238;
+  background: #fff;
+  border: 1px solid #84949c;
+  padding: 6px;
+}
+#artifact-upload {
+  margin-top: 6px;
+}
+#artifact-controls:disabled {
+  opacity: 0.65;
+}
 #notebook-files {
   list-style: none;
   padding: 0;

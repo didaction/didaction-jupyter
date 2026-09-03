@@ -111,7 +111,10 @@ impl Jupyter {
         }
         let mut entries = Vec::new();
         for entry in raw["content"].as_array().ok_or_else(malformed)? {
-            if !matches!(entry["type"].as_str(), Some("directory" | "notebook")) {
+            if !matches!(
+                entry["type"].as_str(),
+                Some("directory" | "notebook" | "file")
+            ) {
                 continue;
             }
             let Some(candidate) = entry["path"].as_str() else {

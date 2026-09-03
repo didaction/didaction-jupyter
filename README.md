@@ -1,5 +1,31 @@
 # didaction Jupyter
 
+### Workspace creation and uploads
+
+In the native Rust server runtime, the explorer's **Create or upload** controls
+create notebooks, empty files, and folders in the displayed directory. Enter
+subfolders by clicking them; create parents before children. Upload accepts
+multiple files, including `.ipynb`, CSV, images, and binary artifacts, up to
+1,000,000 bytes each. Existing names are rejected rather than overwritten.
+Uploaded notebooks are validated but never executed automatically. Click a
+notebook to open it; other artifacts are listed for use by the server kernel.
+Use Refresh in other clients to see new files. Batch uploads are sequential:
+files saved before a failure remain saved; inspect the folder before retrying.
+
+The `ArtifactTransport` interface owns workspace creation independently of
+notebook execution. Its HTTP adapter calls the driver's authenticated
+`POST /api/v1/artifacts` endpoint, which uses Jupyter Contents under the configured
+root. Paths, payloads, notebook snapshots, and driver ownership are checked
+server-side; no Jupyter credential enters the browser. Creation is serialized
+with gateway notebook writes. Direct external Jupyter/filesystem writers are
+outside this coordination: do not write the same destination concurrently.
+Browser-only WASM mode and the legacy Python gateway do not yet implement this
+artifact adapter. No file preview, deletion, replacement, folder-tree upload,
+or artifact WebMCP tools are exposed in this first version.
+
+`examples/sine-cosine.ipynb` contains the plotted example from the active notebook
+(source only; run it in an IPython kernel with NumPy and Matplotlib).
+
 A standalone local-first notebook frontend: egui compiled to WebAssembly, a
 same-origin Rust gateway, and a real Jupyter Server/IPython kernel. It uses
 Jupyter's native Contents, Sessions, Kernels, and kernel-channel protocols. No

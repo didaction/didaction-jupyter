@@ -46,6 +46,7 @@ struct Host {
     jupyter: Jupyter,
     authority: Mutex<Authority>,
     started: Instant,
+    artifact_lock: Mutex<()>,
 }
 impl Host {
     fn now(&self) -> u64 {
@@ -114,12 +115,17 @@ pub async fn serve() -> Result<()> {
         config: config.clone(),
         authority: Mutex::new(Authority::default()),
         started: Instant::now(),
+        artifact_lock: Mutex::new(()),
     });
     let mut router = Router::new()
         .route("/healthz", get(|| async { Json(json!({"status":"ok"})) }))
         .route("/readyz", get(ready))
         .route("/api/v1/config", get(configuration))
         .route("/api/v1/notebooks", get(list))
+        .route(
+            "/api/v1/artifacts",
+            post(create_artifact).layer(DefaultBodyLimit::max(1_400_000)),
+        )
         .route("/api/v1/download", get(download))
         .route("/api/v1/commands", post(command))
         .route("/api/v1/commands/stream", post(stream))
@@ -209,6 +215,54 @@ async fn list(State(host): State<App>, Query(query): Query<HashMap<String, Strin
     {
         Ok(value) => Json(value).into_response(),
         Err(e) => public_error(e),
+    }
+}
+async fn create_artifact(
+    State(host): State<App>,
+    headers: HeaderMap,
+    Json(input): Json<super::artifacts::CreateArtifact>,
+) -> Response {
+    // An accepted upload must finish even if its browser disconnects.
+    let task = tokio::spawn(async move {
+        let _serial = host.artifact_lock.try_lock().map_err(|_| {
+            error(
+                ErrorCode::ExecutionRejected,
+                "Another workspace upload is running; wait for it to finish",
+            )
+        })?;
+        let scope = path(&host, &headers)?;
+        let target = host.config.path(&input.path, true)?;
+        input.body()?;
+        let lock = {
+            let mut authority = host.authority.lock().await;
+            authority.collaboration.require_driver(
+                &scope,
+                headers_value(&headers, "x-notebook-client"),
+                host.now(),
+            )?;
+            if authority.locks.len() >= 4096 {
+                return Err(error(
+                    ErrorCode::BoundsExceeded,
+                    "Workspace operation limit reached; restart gateway",
+                ));
+            }
+            authority.collaboration.room(&scope)?.active += 1;
+            authority.locks.entry(target).or_default().clone()
+        };
+        let _target = lock.lock().await;
+        let result = host.jupyter.create_artifact(input).await;
+        if let Ok(room) = host.authority.lock().await.collaboration.room(&scope) {
+            room.active = room.active.saturating_sub(1);
+        }
+        result
+    });
+    match task.await {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(e)) => public_error(e),
+        Err(_) => public_error(error(
+            ErrorCode::Internal,
+            "Upload outcome unknown; refresh before retrying",
+        )),
     }
 }
 async fn download(State(host): State<App>, headers: HeaderMap) -> Response {
@@ -405,6 +459,28 @@ async fn dispatch(
     if let Err(e) = validate_command(&command) {
         return failed(&command, e);
     }
+    // Namespace changes share the create-only upload guard, including rename
+    // whose destination differs from its normal notebook lock key.
+    let _namespace = if matches!(
+        command.kind,
+        NotebookCommandKind::Setup { create: true, .. }
+            | NotebookCommandKind::RenameNotebook { .. }
+    ) {
+        match host.artifact_lock.try_lock() {
+            Ok(guard) => Some(guard),
+            Err(_) => {
+                return failed(
+                    &command,
+                    error(
+                        ErrorCode::ExecutionRejected,
+                        "Another workspace file operation is running; wait for it to finish",
+                    ),
+                );
+            }
+        }
+    } else {
+        None
+    };
     let mut path = match path(&host, &headers) {
         Ok(path) => path,
         Err(e) => return failed(&command, e),
