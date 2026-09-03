@@ -64,33 +64,50 @@
       </div>
     </header>
     <section id="browser-launch" aria-labelledby="browser-launch-title" hidden>
-      <h1 id="browser-launch-title">Open a browser workspace</h1>
+      <h1 id="browser-launch-title">Choose a workspace and kernel</h1>
       <p>
-        Run Python notebooks locally in this browser. Choose the examples or
-        import your notebooks and data together.
+        Run notebooks locally in this browser. Choose what to open and which
+        Python kernel should run it; either choice can be changed independently.
       </p>
-      <label for="browser-kernel">Kernel</label>
-      <select id="browser-kernel">
-        <option value="pyodide">Python (Pyodide)</option>
-      </select>
-      <button id="browser-demo" type="button">Open demo workspace</button>
-      <label for="browser-zip">Import a ZIP workspace</label>
-      <input id="browser-zip" type="file" accept=".zip,application/zip" />
-      <p>
-        Up to 20 MB, 1,000 items, and 1 MB per file. Folder structure is
-        preserved. Existing files are never replaced; notebooks are not run
-        automatically.
-      </p>
-      <div id="browser-continue" hidden>
-        <label for="browser-saved">Saved workspace</label>
-        <select id="browser-saved"></select>
-        <details open>
-          <summary>Notebooks in this workspace</summary>
-          <ul id="browser-workspace-contents"></ul>
-        </details>
-        <button id="browser-resume" type="button">
-          Continue saved workspace
-        </button>
+      <div class="browser-launch-choices">
+        <fieldset class="browser-workspace-choice">
+          <legend>Notebook workspace</legend>
+          <p>Open the example, import a folder, or continue saved work.</p>
+          <button id="browser-demo" type="button">Open demo workspace</button>
+          <label for="browser-zip">Import a ZIP workspace</label>
+          <input id="browser-zip" type="file" accept=".zip,application/zip" />
+          <p class="browser-choice-note">
+            Up to 20 MB, 1,000 items, and 1 MB per file. Folder structure is
+            preserved. Existing files are never replaced; notebooks are not run
+            automatically.
+          </p>
+          <div id="browser-continue" hidden>
+            <label for="browser-saved">Saved workspace</label>
+            <select id="browser-saved"></select>
+            <details open>
+              <summary>Notebooks in this workspace</summary>
+              <ul id="browser-workspace-contents"></ul>
+            </details>
+            <button id="browser-resume" type="button">
+              Continue saved workspace
+            </button>
+          </div>
+        </fieldset>
+        <fieldset class="browser-kernel-choice">
+          <legend>Kernel</legend>
+          <p>
+            Select the Python runtime for the workspace. This choice is separate
+            from the notebook workspace.
+          </p>
+          <label for="browser-kernel">Python runtime</label>
+          <select id="browser-kernel">
+            <option value="pyodide">Python (Pyodide)</option>
+          </select>
+          <p class="browser-choice-note">
+            The kernel starts only after you open a workspace. Changing kernels
+            does not rename, replace, or modify its notebooks.
+          </p>
+        </fieldset>
       </div>
       <p id="browser-launch-status" role="status">
         Only import notebooks you trust. Browser storage may be cleared; keep

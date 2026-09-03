@@ -849,7 +849,7 @@ async function boot(): Promise<void> {
     const active = activeContext();
     const notebookName = document.querySelector<HTMLElement>("#notebook-name")!;
     const path = active?.path?.() ?? "";
-    notebookName.textContent = path.split("/").pop() ?? "";
+    notebookName.textContent = path;
     notebookName.title = path;
     permissionButton.hidden =
       !!browserWorkspace ||

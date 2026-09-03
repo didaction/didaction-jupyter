@@ -177,7 +177,7 @@ body {
   max-height: calc(100dvh - 144px);
   margin: 48px auto;
   padding: 24px;
-  max-width: 640px;
+  max-width: 920px;
   width: calc(100% - 32px);
   overflow-y: auto;
   color: #263238;
@@ -193,12 +193,37 @@ body {
 }
 #browser-launch label {
   display: block;
-  margin: 20px 0 8px;
+  margin: 16px 0 8px;
 }
-#browser-kernel {
+.browser-launch-choices {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 24px;
+}
+.browser-launch-choices fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid #d7dcdf;
+}
+.browser-launch-choices legend {
+  padding: 0 6px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.browser-launch-choices fieldset > p:first-of-type {
+  margin-top: 0;
+}
+.browser-choice-note {
+  color: #53636b;
+  font-size: 0.82rem;
+}
+#browser-kernel,
+#browser-saved {
   display: block;
-  min-width: 240px;
-  margin-bottom: 20px;
+  width: 100%;
 }
 #browser-launch input,
 #browser-launch select {
@@ -216,6 +241,15 @@ body {
   overflow-y: auto;
   overflow-wrap: anywhere;
   padding-left: 24px;
+}
+@media (max-width: 720px) {
+  #browser-launch {
+    margin: 16px auto;
+    max-height: calc(100dvh - 80px);
+  }
+  .browser-launch-choices {
+    grid-template-columns: 1fr;
+  }
 }
 #file-explorer {
   width: 248px;

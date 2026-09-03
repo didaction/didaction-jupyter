@@ -1111,13 +1111,6 @@ impl NotebookEguiApp {
             combines_with_markdown(&cell, &self.state.snapshot.cells[index - 1].id)
         });
         ui.vertical(|ui| {
-            ui.horizontal(|ui| {
-                ui.heading(
-                    RichText::new(self.state.snapshot.notebook.path.trim_end_matches(".ipynb"))
-                        .size(18.0)
-                        .color(Color32::from_rgb(38, 50, 56)),
-                );
-            });
             ui.horizontal_wrapped(|ui| {
                 if self.read_only {
                     ui.disable();

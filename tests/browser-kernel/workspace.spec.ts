@@ -74,11 +74,24 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Open a browser workspace" }),
+    page.getByRole("heading", { name: "Choose a workspace and kernel" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Kernel", { exact: true })).toHaveValue(
+  await expect(page.getByLabel("Python runtime", { exact: true })).toHaveValue(
     "pyodide",
   );
+  const workspaceChoice = page.locator(".browser-workspace-choice");
+  const kernelChoice = page.locator(".browser-kernel-choice");
+  await expect(workspaceChoice).toContainText("Notebook workspace");
+  await expect(kernelChoice).toContainText(
+    "This choice is separate from the notebook workspace.",
+  );
+  const [workspaceBox, kernelBox] = await Promise.all([
+    workspaceChoice.boundingBox(),
+    kernelChoice.boundingBox(),
+  ]);
+  expect(workspaceBox).not.toBeNull();
+  expect(kernelBox).not.toBeNull();
+  expect(workspaceBox!.x).toBeLessThan(kernelBox!.x);
   await expect(
     page.locator('#browser-kernel option[value="pyodide"]'),
   ).toHaveCount(1);
@@ -120,6 +133,7 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
   );
   await expect(page).toHaveURL(/notebook=lesson%2Fdemo.ipynb/);
   await expect(page).toHaveURL(/kernel=pyodide/);
+  await expect(page.locator("#notebook-name")).toHaveText("lesson/demo.ipynb");
   expect(
     await page.evaluate(async () => {
       const { IndexedNotebookStore } = await import(
