@@ -23,6 +23,7 @@ test("status-bar diagnostics show WASM provenance and memory-only bounded WebMCP
     Object.assign(window, { diagnosticTestTools: tools });
   });
   await page.goto("/?runtime=browser");
+  await page.getByRole("button", { name: "Open demo workspace" }).click();
   await expect(page.locator("#connection-status")).toContainText(
     "WebMCP ready",
   );

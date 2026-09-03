@@ -12,6 +12,12 @@ export interface BrowserKernel {
   close(): void;
 }
 export class WorkerKernel implements BrowserKernel {
+  constructor(
+    private readonly workspace?: () => Promise<{
+      files: { path: string; directory: boolean; bytes: Uint8Array }[];
+      directory: string;
+    }>,
+  ) {}
   private worker?: Worker;
   private buffer?: Uint8Array;
   private ready?: Promise<unknown>;
@@ -66,6 +72,7 @@ export class WorkerKernel implements BrowserKernel {
     cursor: number,
     timeout: number,
     progress?: (event: KernelEvent) => void,
+    workspace?: unknown,
   ): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
@@ -85,6 +92,7 @@ export class WorkerKernel implements BrowserKernel {
         code,
         cursor,
         buffer: method === "initialize" ? this.buffer?.buffer : undefined,
+        workspace,
       });
     });
   }
@@ -104,6 +112,15 @@ export class WorkerKernel implements BrowserKernel {
     );
     try {
       await this.initialize();
+      if (this.workspace)
+        await this.send(
+          "workspace",
+          "",
+          0,
+          timeout,
+          undefined,
+          await this.workspace(),
+        );
       if (this.buffer) Atomics.store(this.buffer, 0, 0);
       return await this.send(method, code, cursor, timeout, progress);
     } finally {

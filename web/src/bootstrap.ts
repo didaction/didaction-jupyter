@@ -420,7 +420,15 @@ async function boot(): Promise<void> {
     const { BrowserWorkspace } = await import("./browser-workspace");
     browserWorkspace = new BrowserWorkspace();
     await browserWorkspace.acquire();
-    startup = { path: "browser-demo.ipynb", kernel: "pyodide" };
+    const { chooseBrowserWorkspace } = await import("./browser-launch");
+    const chosen = await chooseBrowserWorkspace(
+      browserWorkspace,
+      new URL(location.href).searchParams.get("notebook"),
+    );
+    const browserUrl = new URL(location.href);
+    browserUrl.searchParams.set("notebook", chosen);
+    history.replaceState(null, "", browserUrl);
+    startup = { path: chosen, kernel: "pyodide" };
     document.querySelector<HTMLOutputElement>("#driver-status")!.textContent =
       "Local";
   } else {
@@ -538,7 +546,7 @@ async function boot(): Promise<void> {
     },
     browserWorkspace ? (path) => browserWorkspace!.store.list(path) : undefined,
     browserWorkspace
-      ? undefined
+      ? browserWorkspace.artifacts
       : new HttpArtifactTransport(
           () => activeContext()?.connection.headers() ?? {},
         ),

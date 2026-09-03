@@ -88,7 +88,7 @@ export function installExplorer(
             return;
           }
           if (entry.type === "file") {
-            status.textContent = `${entry.name} is a workspace artifact, not a notebook. It is available to the server kernel.`;
+            status.textContent = `${entry.name} is a workspace artifact, not a notebook. It is available to the kernel.`;
             return;
           }
           try {

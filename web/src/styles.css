@@ -146,6 +146,41 @@ body {
   min-height: 0;
   overflow: hidden;
 }
+.workspace-layout[hidden],
+#browser-launch[hidden] {
+  display: none;
+}
+#browser-launch {
+  align-self: start;
+  max-height: calc(100dvh - 144px);
+  margin: 48px auto;
+  padding: 24px;
+  max-width: 640px;
+  width: calc(100% - 32px);
+  overflow-y: auto;
+  color: #263238;
+  background: #fff;
+  border: 1px solid #d7dcdf;
+}
+#browser-launch h1 {
+  margin-top: 0;
+  font-size: 18px;
+}
+#browser-launch p {
+  line-height: 1.4;
+}
+#browser-launch label {
+  display: block;
+  margin: 20px 0 8px;
+}
+#browser-launch input,
+#browser-launch select {
+  max-width: 100%;
+  padding: 8px;
+}
+#browser-launch-status {
+  color: #53636b;
+}
 #file-explorer {
   width: 248px;
   flex: 0 0 248px;

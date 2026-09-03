@@ -1,9 +1,63 @@
 import { PyodideRemoteKernel } from "@jupyterlite/pyodide-kernel/lib/worker";
 import type { IPyodideWorkerKernel } from "@jupyterlite/pyodide-kernel/lib/tokens";
 import type { PyodideAPI } from "pyodide";
+import { browserPath } from "./browser-store";
 
 /** JupyterLite owns IPython semantics; this host owns only worker I/O/policy. */
 class Kernel extends PyodideRemoteKernel {
+  private mounted = new Set<string>();
+  mountWorkspace(workspace: {
+    files: { path: string; directory: boolean; bytes: Uint8Array }[];
+    directory: string;
+  }) {
+    const fs = this._pyodide.FS;
+    browserPath(workspace.directory, true);
+    if (
+      workspace.files.length > 1000 ||
+      workspace.files.reduce((n, f) => n + f.bytes.length, 0) > 20_000_000
+    )
+      throw new Error("Workspace exceeds limit");
+    const checkLinks = (target: string) => {
+      let current = "";
+      for (const part of target.split("/").filter(Boolean)) {
+        current += "/" + part;
+        if (
+          fs.analyzePath(current, true).exists &&
+          fs.isLink(fs.lstat(current).mode)
+        )
+          throw new Error("Workspace symlinks are unsupported");
+      }
+    };
+    checkLinks("/workspace");
+    fs.mkdirTree("/workspace");
+    for (const file of workspace.files) {
+      browserPath(file.path, true);
+      if (!file.path || file.bytes.length > 1_000_000)
+        throw new Error("Invalid workspace file");
+      const target = `/workspace/${file.path}`;
+      // Do not follow a link created by notebook code, even inside the worker FS.
+      const parts = target.split("/").filter(Boolean);
+      let current = "";
+      for (const part of parts) {
+        current += `/${part}`;
+        if (
+          fs.analyzePath(current, true).exists &&
+          fs.isLink(fs.lstat(current).mode)
+        )
+          throw new Error("Workspace symlinks are unsupported");
+      }
+      if (this.mounted.has(file.path)) continue;
+      fs.mkdirTree(
+        file.directory ? target : target.slice(0, target.lastIndexOf("/")),
+      );
+      if (!file.directory) fs.writeFile(target, file.bytes);
+      this.mounted.add(file.path);
+    }
+    const cwd = `/workspace${workspace.directory ? `/${workspace.directory}` : ""}`;
+    checkLinks(cwd);
+    fs.mkdirTree(cwd);
+    fs.chdir(cwd);
+  }
   interrupt?: Uint8Array;
   executionCount(): number {
     return Number(this._interpreter.execution_count) - 1;
@@ -39,7 +93,7 @@ kernel.registerWorkerMessageCallback((event: unknown) => {
 });
 let tail = Promise.resolve();
 self.onmessage = (message: MessageEvent) => {
-  const { id, method, code, cursor, buffer } = message.data;
+  const { id, method, code, cursor, buffer, workspace } = message.data;
   tail = tail.then(async () => {
     activeId = id;
     try {
@@ -61,6 +115,9 @@ self.onmessage = (message: MessageEvent) => {
             packages: [],
           },
         });
+        result = {};
+      } else if (method === "workspace") {
+        kernel.mountWorkspace(workspace);
         result = {};
       } else {
         const parent = { header: { msg_id: id } };

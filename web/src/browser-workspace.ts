@@ -3,6 +3,7 @@ import type { CollaborationState } from "./collaboration";
 import { IndexedNotebookStore } from "./browser-store";
 import { BrowserNotebookTransport } from "./browser-transport";
 import { WorkerKernel } from "./browser-kernel";
+import { BrowserArtifactTransport } from "./browser-artifacts";
 
 /** Explicit single-user policy, not a simulated collaboration server. */
 export class LocalNotebookConnection {
@@ -41,6 +42,7 @@ export class LocalNotebookConnection {
 }
 export class BrowserWorkspace {
   readonly store = new IndexedNotebookStore();
+  readonly artifacts = new BrowserArtifactTransport(this.store);
   private release?: () => void;
   async acquire(): Promise<void> {
     if (!navigator.locks)
@@ -72,7 +74,10 @@ export class BrowserWorkspace {
     return new BrowserNotebookTransport(
       path,
       this.store,
-      new WorkerKernel(),
+      new WorkerKernel(async () => ({
+        files: await this.store.artifacts(),
+        directory: path.split("/").slice(0, -1).join("/"),
+      })),
       (snapshot) => new NotebookApplication(snapshot),
     );
   }

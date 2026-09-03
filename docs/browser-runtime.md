@@ -1,7 +1,7 @@
 # Browser kernel spike
 
-An opt-in, real browser-only Python runtime. It does not replace the existing
-Python gateway or migrate it to Rust yet. Server mode and its workspace-wide
+An opt-in, real browser-only Python runtime. The native Rust gateway is separate;
+browser mode requires no gateway. Server mode and its workspace-wide
 driver coordination are unchanged.
 
 ## Start and stop
@@ -15,7 +15,39 @@ pnpm dev:browser
 Open `http://127.0.0.1:5175/?runtime=browser`. Stop the foreground process with
 Ctrl+C. Existing Docker notebooks on ports 5173/5174 are unaffected. The starter
 notebook includes arithmetic, Matplotlib, and intermediate output replacement
-examples. Use the normal cell play button or Shift+Enter.
+examples. Choose **Open demo workspace** to load it, or **Import ZIP workspace**
+to load your own notebooks and files. Use the normal cell play button or Shift+Enter.
+
+## Browser workspace startup and files
+
+- Launch without a notebook query parameter to show the chooser. Saved notebooks
+  also appear under **Continue saved workspace**. Reloading a valid notebook URL
+  reopens it directly; opening the demo never replaces an existing demo.
+- A ZIP must contain at least one nbformat 4 notebook. Subfolders, empty folders
+  and binary/text artifacts are imported together. Notebooks are normalized to
+  the bounded runtime schema and validated by Rust/WASM; unsupported notebook
+  features are not preserved as raw files. Uploading never runs code.
+- ZIP import is atomic and create-only: conflicting files or invalid notebooks
+  reject the whole batch. Existing directories may merge. The explorer can
+  subsequently create notebooks, files and folders, or upload individual files.
+- Limits: 20 MB ZIP and expanded batch, 1 MB per entry, 1,000 stored items and
+  20 MB persisted non-notebook file data. Ordinary stored/deflate ZIPs with UTF-8
+  (or ASCII) names are supported. Encrypted, multi-disk and ZIP64 archives,
+  symlinks, absolute/traversal paths and dot-prefixed path components are rejected.
+  Exclude OS metadata such as `.DS_Store` before zipping.
+- Uploads and normalized notebooks persist in origin-local IndexedDB; its v2
+  upgrade preserves previously saved v1 notebooks. Nothing is sent to a server.
+- Before kernel requests, uploaded artifacts are copied to `/workspace` inside
+  that notebook's worker. The working directory is the notebook's parent folder:
+  a notebook in `lesson/` can read `lesson/data.csv` using `open("data.csv")`.
+  New uploads are copied on the next request; already mounted files are not
+  repeatedly overwritten. Normalized notebook snapshots are not mounted as
+  raw `.ipynb` files.
+- This is a one-way copy, not a bidirectional filesystem mount. Files written
+  or changed by Python disappear on worker restart; uploaded originals remain
+  saved. Renaming an open notebook does not move its existing worker directory.
+  Keep originals/backups outside browser storage. Only the bundled Python
+  environment executes; importing a Julia notebook does not install Julia.
 
 `pnpm build:browser` creates a static deployment in `dist`. Serve it with
 `pnpm exec vite preview --host 127.0.0.1 --port 5175`, then use the same query
@@ -47,8 +79,8 @@ Jupyter forwarding are not exposed. Bounded normalized outputs return through
 the existing frontend result/progress path.
 
 `IndexedNotebookStore` owns origin-local notebook persistence, separately from
-`BrowserKernel`. Kernel files currently live in temporary Pyodide memory, **not**
-the notebook store or the server's configured workspace folder.
+`BrowserKernel`. Saved artifacts are copied into temporary Pyodide memory;
+kernel writes do not update IndexedDB or the server's configured workspace folder.
 
 ## Pinned runtime
 
@@ -104,7 +136,9 @@ The dedicated browser suite uses port 43175, not a live user gateway. It exercis
 actual Python/WASM execution, egui/WebMCP convergence, plots, output replacement,
 completion, inspection, interruption, restart, persistence and the second-tab
 guard. Unit tests cover output ordering/coalescing, clear-after-wait, display IDs,
-bounds, malformed output and paths.
+bounds, malformed output, paths and ZIP admission. Workspace browser tests import
+a real compressed ZIP, read its data using Python, mount subsequent uploads,
+check persistence, and reject conflicting imports without partial writes.
 
 The browser contract tests also use real WASM validation with injected storage
 failures to check rollback and idempotency after uncertain execution outcomes.

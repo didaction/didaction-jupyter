@@ -33,6 +33,7 @@ test("real JupyterLite worker through egui/WebMCP: execute, plot, persist and re
     Object.assign(window, { testNotebookTools: tools });
   });
   await page.goto("/?runtime=browser");
+  await page.getByRole("button", { name: "Open demo workspace" }).click();
   await expect(page.locator("#connection-status")).toContainText(
     "Browser kernel",
   );
@@ -131,6 +132,7 @@ test("real worker protocol streams intermediate clear/display updates, completes
 }) => {
   test.setTimeout(45_000);
   await page.goto("/?runtime=browser");
+  await page.getByRole("button", { name: "Open demo workspace" }).click();
   await expect(page.locator("#connection-status")).toContainText(
     "Browser kernel",
   );

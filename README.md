@@ -19,8 +19,9 @@ root. Paths, payloads, notebook snapshots, and driver ownership are checked
 server-side; no Jupyter credential enters the browser. Creation is serialized
 with gateway notebook writes. Direct external Jupyter/filesystem writers are
 outside this coordination: do not write the same destination concurrently.
-Browser-only WASM mode and the legacy Python gateway do not yet implement this
-artifact adapter. No file preview, deletion, replacement, folder-tree upload,
+Browser-only WASM mode implements this adapter using IndexedDB and also imports
+folder trees from ZIP at startup (see below). The legacy Python gateway does not.
+No file preview, deletion, replacement,
 or artifact WebMCP tools are exposed in this first version.
 
 `examples/sine-cosine.ipynb` contains the plotted example from the active notebook
@@ -35,6 +36,14 @@ An opt-in [browser-only Python runtime](docs/browser-runtime.md) is available:
 `pnpm build:wasm && pnpm dev:browser`, then open
 `http://127.0.0.1:5175/?runtime=browser`. It runs JupyterLite/Pyodide in a Worker
 through the same egui/WebMCP command path, with browser-local notebook storage.
+At launch, choose **Open demo workspace**, **Import ZIP workspace**, or
+**Continue saved workspace**. ZIP imports preserve subfolders and include notebooks
+and data files; they never execute uploaded notebooks automatically. Files are
+copied into the Python worker, with relative paths resolved from the notebook's
+folder. Notebook reloads reopen saved work without showing the chooser.
+ZIP limits: 20 MB compressed/expanded, 1 MB per file, 1,000 entries; stored/deflate
+ZIP only, no encrypted archives, symlinks, hidden paths or overwriting.
+Browser storage persists uploads, but files created/changed by Python are temporary.
 It is a single-user spike; the server runtime remains the default.
 
 ## Frontend diagnostics

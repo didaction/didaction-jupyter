@@ -49,6 +49,32 @@
         <output id="follow-status" role="status" aria-live="polite"></output>
       </div>
     </header>
+    <section id="browser-launch" aria-labelledby="browser-launch-title" hidden>
+      <h1 id="browser-launch-title">Open a browser workspace</h1>
+      <p>
+        Run Python notebooks locally in this browser. Choose the examples or
+        import your notebooks and data together.
+      </p>
+      <button id="browser-demo" type="button">Open demo workspace</button>
+      <label for="browser-zip">Import a ZIP workspace</label>
+      <input id="browser-zip" type="file" accept=".zip,application/zip" />
+      <p>
+        Up to 20 MB, 1,000 items, and 1 MB per file. Folder structure is
+        preserved. Existing files are never replaced; notebooks are not run
+        automatically.
+      </p>
+      <div id="browser-continue" hidden>
+        <label for="browser-saved">Saved notebook</label>
+        <select id="browser-saved"></select>
+        <button id="browser-resume" type="button">
+          Continue saved workspace
+        </button>
+      </div>
+      <p id="browser-launch-status" role="status">
+        Only import notebooks you trust. Browser storage may be cleared; keep
+        your ZIP as a backup.
+      </p>
+    </section>
     <div class="workspace-layout">
       <aside id="file-explorer" aria-label="Notebook file explorer">
         <h2>Notebooks</h2>
