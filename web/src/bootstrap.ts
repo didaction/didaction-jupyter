@@ -11,9 +11,15 @@ import { installExplorer } from "./explorer";
 import { WorkspaceTools, type OpenNotebook } from "./workspace-tools";
 import { NotebookCollaboration } from "./collaboration";
 import { FollowController } from "./follow";
+import type {
+  BrowserWorkspace,
+  LocalNotebookConnection,
+} from "./browser-workspace";
+
+let browserWorkspace: BrowserWorkspace | undefined;
 
 interface NotebookContext extends OpenNotebook {
-  connection: NotebookCollaboration;
+  connection: NotebookCollaboration | LocalNotebookConnection;
   scrollFraction(): number;
   followSelection(cellId: string | null): void;
   followScroll(fraction: number | null): void;
@@ -42,20 +48,28 @@ async function createContext(
   startup: { path: string; kernel: string },
   create = false,
 ): Promise<NotebookContext> {
-  const collaboration = new NotebookCollaboration(
-    startup.path,
-    (path) =>
-      [...openContexts].find((context) => context.path?.() === path)
-        ?.connection,
-  );
+  const collaboration = browserWorkspace
+    ? new (await import("./browser-workspace")).LocalNotebookConnection(
+        startup.path,
+      )
+    : new NotebookCollaboration(startup.path, (path) => {
+        const connection = [...openContexts].find(
+          (context) => context.path?.() === path,
+        )?.connection;
+        return connection instanceof NotebookCollaboration
+          ? connection
+          : undefined;
+      });
   await collaboration.join();
   let readOnly = !collaboration.state?.is_driver;
-  const transport = new GatewayNotebookTransport(
-    "/api/v1/commands",
-    startup.path,
-    () => collaboration.headers(),
-    (path) => collaboration.rename(path),
-  );
+  const transport =
+    browserWorkspace?.transport(startup.path) ??
+    new GatewayNotebookTransport(
+      "/api/v1/commands",
+      startup.path,
+      () => collaboration.headers(),
+      (path) => collaboration.rename(path),
+    );
   const inFlight = collaboration.state?.snapshot;
   const setup =
     (inFlight?.kernel as { state?: string } | undefined)?.state === "busy"
@@ -357,9 +371,19 @@ async function createContext(
 
 async function boot(): Promise<void> {
   await init();
-  const response = await fetch("/api/v1/config");
-  if (!response.ok) throw new Error("Gateway configuration unavailable");
-  const startup = (await response.json()) as { path: string; kernel: string };
+  let startup: { path: string; kernel: string };
+  if (new URL(location.href).searchParams.get("runtime") === "browser") {
+    const { BrowserWorkspace } = await import("./browser-workspace");
+    browserWorkspace = new BrowserWorkspace();
+    await browserWorkspace.acquire();
+    startup = { path: "browser-demo.ipynb", kernel: "pyodide" };
+    document.querySelector<HTMLOutputElement>("#driver-status")!.textContent =
+      "Local";
+  } else {
+    const response = await fetch("/api/v1/config");
+    if (!response.ok) throw new Error("Gateway configuration unavailable");
+    startup = (await response.json()) as { path: string; kernel: string };
+  }
   const selected = new URL(location.href).searchParams.get("notebook");
   if (selected) startup.path = selected;
   const initial = await createContext(startup, !selected);
@@ -367,6 +391,7 @@ async function boot(): Promise<void> {
     initial.tools.listTools(),
     (path) => createContext({ path, kernel: startup.kernel }),
     async (directory) => {
+      if (browserWorkspace) return browserWorkspace.store.list(directory);
       const response = await fetch(
         `/api/v1/notebooks?directory=${encodeURIComponent(directory)}`,
       );
@@ -466,12 +491,15 @@ async function boot(): Promise<void> {
       });
       if (result.isError) throw new Error("Unable to open notebook");
     },
+    browserWorkspace ? (path) => browserWorkspace!.store.list(path) : undefined,
   );
   const webmcp = await installWebMcp(workspace);
   const hasWebMcp = webmcp.available;
   status.textContent = hasWebMcp
     ? "Connected · WebMCP ready"
     : "Connected · WebMCP unavailable";
+  if (browserWorkspace)
+    status.textContent = `Browser kernel · ${hasWebMcp ? "WebMCP ready" : "WebMCP unavailable"}`;
   document.documentElement.dataset.webmcp = hasWebMcp
     ? "available"
     : "unavailable";
@@ -488,6 +516,7 @@ async function boot(): Promise<void> {
       resizeObserver.disconnect();
       webmcp.dispose();
       workspace.dispose();
+      browserWorkspace?.close();
     },
     { once: true },
   );

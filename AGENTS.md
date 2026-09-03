@@ -22,6 +22,15 @@ Execution progress travels as bounded NDJSON snapshots from kernel IOPub through
 the same command gateway. TypeScript passes progress through the narrow mounted
 WASM callback; only the final result commits the command and ends executing state.
 
+Browser mode (`?runtime=browser`) substitutes `BrowserNotebookTransport` through
+that same command gateway. A separate Rust/WASM model prepares cell mutations;
+JavaScript hosts JupyterLite/Pyodide Workers and IndexedDB storage. Keep kernel
+filesystem state separate from saved notebooks. Browser mode is single-user;
+the existing server gateway remains the collaboration authority in server mode.
+For browser kernel, asset, persistence or interrupt changes, read
+`docs/browser-runtime.md` and run `pnpm test:browser-kernel`. Preserve the explicit
+warning when Stop must terminate a worker and discard its live variables.
+
 ## Invariants
 
 - Rust/WASM never fetches, opens sockets/files, launches processes, or knows URLs.

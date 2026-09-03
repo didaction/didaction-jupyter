@@ -13,6 +13,8 @@ uv run ruff check services scripts tests deploy
 uv run mypy
 uv run pytest -q
 uv run python -m pip --version
+pnpm prepare:browser-kernel
 pnpm run build
 pnpm run test:browser
+pnpm run test:browser-kernel
 scripts/smoke.sh

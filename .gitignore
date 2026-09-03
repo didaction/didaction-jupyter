@@ -11,4 +11,5 @@ node_modules/
 /test-results/
 /playwright-report/
 /web/pkg/
+/web/public/browser-kernel/
 .DS_Store

@@ -4,6 +4,7 @@
 target
 node_modules
 web/pkg
+web/public/browser-kernel
 __pycache__
 *.pyc
 .env*

@@ -3,6 +3,10 @@ export function installExplorer(
   current: string,
   assertSaved: () => void,
   open?: (path: string) => Promise<void>,
+  listDirectory?: (path: string) => Promise<{
+    directory: string;
+    entries: { name: string; path: string; type: string }[];
+  }>,
 ): void {
   const panel = document.querySelector<HTMLElement>("#file-explorer")!;
   const list = document.querySelector<HTMLUListElement>("#notebook-files")!;
@@ -26,12 +30,16 @@ export function installExplorer(
     status.textContent = "Loading folder…";
     list.replaceChildren();
     try {
-      const response = await fetch(
-        `/api/v1/notebooks?directory=${encodeURIComponent(path)}`,
-      );
-      if (!response.ok)
+      const response = listDirectory
+        ? undefined
+        : await fetch(
+            `/api/v1/notebooks?directory=${encodeURIComponent(path)}`,
+          );
+      if (response && !response.ok)
         throw new Error("Folder unavailable. Use Up or Refresh to retry.");
-      const data = (await response.json()) as {
+      const data = (
+        listDirectory ? await listDirectory(path) : await response!.json()
+      ) as {
         directory: string;
         entries: { name: string; path: string; type: string }[];
       };

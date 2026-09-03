@@ -5,6 +5,12 @@ same-origin FastAPI gateway, and a real Jupyter Server/IPython kernel. It uses
 Jupyter's native Contents, Sessions, Kernels, and kernel-channel protocols. No
 MCP server sits between the gateway and Jupyter.
 
+An opt-in [browser-only Python runtime](docs/browser-runtime.md) is available:
+`pnpm build:wasm && pnpm dev:browser`, then open
+`http://127.0.0.1:5175/?runtime=browser`. It runs JupyterLite/Pyodide in a Worker
+through the same egui/WebMCP command path, with browser-local notebook storage.
+It is a single-user spike; the server runtime remains the default.
+
 ## Architecture
 
 ```text
