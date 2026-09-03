@@ -2,7 +2,8 @@ import { build } from "esbuild";
 import { cp, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
-if (!existsSync("web/public/xeus/didaction-xeus/xpython/kernel.json")) {
+const output = process.argv[2] ?? "web/public/xeus";
+if (!existsSync(join(output, "didaction-xeus/xpython/kernel.json"))) {
   console.log(
     "Optional xeus runtime not prepared; keeping Pyodide-only build.",
   );
@@ -10,7 +11,7 @@ if (!existsSync("web/public/xeus/didaction-xeus/xpython/kernel.json")) {
 }
 const result = await build({
   entryPoints: ["web/src/xeus-kernel.worker.ts"],
-  outfile: "web/public/xeus/worker.js",
+  outfile: join(output, "worker.js"),
   bundle: true,
   format: "iife",
   platform: "browser",
@@ -27,6 +28,6 @@ for (const directory of new Set(
 )) {
   for (const file of await readdir(directory)) {
     if (file.endsWith(".wasm"))
-      await cp(join(directory, file), join("web/public/xeus", file));
+      await cp(join(directory, file), join(output, file));
   }
 }

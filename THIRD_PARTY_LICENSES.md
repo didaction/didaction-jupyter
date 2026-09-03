@@ -31,7 +31,8 @@ Fonts embedded through Typst must also be checked against their upstream notices
 The upstream notice for the Julia deployment integration is retained separately
 in [deploy/julia/LICENSE.upstream](deploy/julia/LICENSE.upstream).
 
-The optional xeus environment adds CPython, xeus-python, NumPy, Matplotlib and
+The optional xeus environment adds CPython, xeus-python, NumPy, Matplotlib,
+Numba, llvmlite, Graphviz and
 their dependencies. Its exact package inventory is `deploy/xeus/explicit.lock`;
 these have their own licenses and are not relicensed Apache-2.0. The packaging
 excludes the incompatible optional pyodide-http module, and our worker build

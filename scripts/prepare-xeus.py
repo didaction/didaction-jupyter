@@ -1,5 +1,6 @@
 """Build the optional, lockfile-pinned xeus browser assets (no host kernel)."""
 
+import argparse
 import hashlib
 import shutil
 import subprocess
@@ -10,7 +11,12 @@ import empack
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCK = ROOT / "deploy/xeus/explicit.lock"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--lock", type=Path, default=ROOT / "deploy/xeus/explicit.lock")
+parser.add_argument("--output", type=Path, default=ROOT / "web/public/xeus")
+args = parser.parse_args()
+LOCK = args.lock.resolve()
+output = args.output.resolve()
 RUNTIME = ROOT / ".runtime"
 RUNTIME.mkdir(exist_ok=True)
 fingerprint = hashlib.sha256(LOCK.read_bytes()).hexdigest()[:16]
@@ -50,22 +56,39 @@ with tempfile.TemporaryDirectory(prefix="xeus-pack-", dir=RUNTIME) as temp:
     settings["packages"]["pyodide-http"] = {"exclude_patterns": [{"pattern": "**"}]}
     local_config = build / "empack.yaml"
     local_config.write_text(yaml.safe_dump(settings))
+    lite_config = build / "jupyter_lite_config.json"
+    lite_config.write_text(
+        '{"XeusAddon":{"default_channels":["https://prefix.dev/emscripten-forge-4x",'
+        '"https://prefix.dev/conda-forge"]}}'
+    )
     subprocess.run(  # noqa: S603 - fixed build command, no user input
         [  # noqa: S607 - uv supplies the locked environment's jupyter on PATH
             "jupyter",
             "lite",
             "build",
+            f"--config={lite_config}",
             "--lite-dir",
             str(build),
             "--output-dir",
             str(build / "site"),
             f"--XeusAddon.prefix={prefix}",
-            "--XeusAddon.default_channels=https://prefix.dev/emscripten-forge-4x,https://prefix.dev/conda-forge",
             f"--XeusAddon.empack_config={local_config}",
         ],
         cwd=build,
         check=True,
     )
-    shutil.copytree(build / "site/xeus", ROOT / "web/public/xeus", dirs_exist_ok=True)
-subprocess.run(["node", "scripts/build-xeus-worker.mjs"], cwd=ROOT, check=True)  # noqa: S607
-print("Prepared xeus-python browser assets in web/public/xeus")
+    # This directory contains only generated assets. Replace it so removed
+    # packages cannot remain distributable after a lockfile upgrade.
+    if output.exists():
+        if any(output.iterdir()) and not (
+            output / "didaction-xeus/xpython/kernel.json"
+        ).is_file():
+            raise SystemExit(f"Refusing to replace unrecognized output directory: {output}")
+        shutil.rmtree(output)
+    shutil.copytree(build / "site/xeus", output)
+subprocess.run(  # noqa: S603 - explicit build output, no shell
+    ["node", "scripts/build-xeus-worker.mjs", str(output)],  # noqa: S607
+    cwd=ROOT,
+    check=True,
+)
+print(f"Prepared xeus-python browser assets in {output}")

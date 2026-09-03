@@ -40,9 +40,10 @@ workspace. Existing notebook URLs may select it with `kernel=xeus-python`; sourc
 and saved outputs are preserved, but kernels never share live Python variables.
 Playgrounds inherit the selected runtime in their own isolated worker.
 
-The optional bundle adds approximately 48 MB before HTTP compression. It uses
-`@jupyterlite/xeus` 5.0.0, xeus-python 0.19.0, Python 3.13.1, NumPy 2.5.2 and
-Matplotlib 3.11.1. `deploy/xeus/explicit.lock` pins all 42 conda package URLs,
+The optional bundle adds approximately 60 MB before HTTP compression. It uses
+`@jupyterlite/xeus` 5.0.0, xeus-python 0.19.0, Python 3.13.1, NumPy 2.4.6,
+Numba 0.67.0, llvmlite 0.49.0 and Matplotlib 3.11.1.
+`deploy/xeus/explicit.lock` pins all 48 conda package URLs,
 builds and MD5 checksums; `deploy/xeus/uv.lock` pins the isolated asset builder.
 `environment.yml` documents the original solve, but normal preparation uses the
 explicit lock, not a fresh solve. Build products stay ignored under `.runtime/`
@@ -71,6 +72,28 @@ export exact package URLs/checksums into `explicit.lock`, update the npm and uv
 locks, rebuild, and rerun both browser suites. Recheck the HTTP exclusion and
 disabled installer against upstream. Never silently re-solve at deployment time.
 See [source investigation](xeus-python-browser-investigation.md).
+
+### Numba and Qrisp
+
+`examples/xeus-numba.ipynb` demonstrates real `@njit` compilation, asserts a
+nopython signature, and plots compiled results. The WASM Numba/llvmlite builds
+come from emscripten-forge; ordinary native wheels cannot replace them. No xeus
+source patch was needed. Kernel-generated cache files are still ephemeral;
+persistent cross-session JIT caching is not promised by our one-way file mount.
+
+Qrisp is **not installed or supported in this browser bundle**. Qrisp 0.9.7
+requires unavailable WASM `jaxlib==0.7.1`. The older 0.5.4 release avoids JAX,
+but its Qiskit dependency also failed the target-platform solve. Keep using
+the native kernel for the quantum-school notebooks. See the exact candidates,
+commands and primary-source evidence in [Qrisp compatibility](qrisp-wasm-compatibility.md).
+
+To test an environment without replacing the working assets, use
+`pnpm prepare:xeus --lock /absolute/candidate.lock --output /absolute/candidate/xeus`.
+Then set `DIDACTION_XEUS_TEST_ASSETS=/absolute/candidate/xeus` when running
+`pnpm exec playwright test --config playwright.browser-kernel.config.ts xeus-numba.spec.ts`.
+The test serves those actual artifacts under the same worker URLs; it does not
+mock kernel execution. Promote only after compiled-result and existing-runtime
+regression tests pass.
 
 ## Deployment separation
 
