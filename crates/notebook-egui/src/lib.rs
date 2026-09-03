@@ -1674,6 +1674,7 @@ impl NotebookEguiApp {
                             });
                     });
                 }
+                let output_start = ui.cursor().min;
                 match output_view {
                     OutputViewMode::Collapsed if !cell.outputs.is_empty() => {
                         let summary = output_collapse_summary(cell.outputs.len());
@@ -1715,6 +1716,20 @@ impl NotebookEguiApp {
                             render_output(ui, output);
                         }
                     }
+                }
+                let output_rect = egui::Rect::from_min_max(
+                    output_start,
+                    egui::pos2(ui.max_rect().right(), ui.min_rect().bottom()),
+                );
+                // Observe rather than capture the click: output links, text selection,
+                // and scrollbars keep their own interaction behavior.
+                if !cell.outputs.is_empty()
+                    && ui.rect_contains_pointer(output_rect)
+                    && ui.input(|input| input.pointer.primary_clicked())
+                {
+                    self.select_cell(index, false);
+                    self.edit_mode = false;
+                    self.pending_editor_focus = None;
                 }
             }
         });
@@ -3193,6 +3208,67 @@ mod tests {
             egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
         });
         assert!(app.agent_highlights.is_empty());
+    }
+
+    #[test]
+    fn clicking_output_selects_its_cell_in_all_output_modes() {
+        for mode in [
+            OutputViewMode::Expanded,
+            OutputViewMode::Windowed,
+            OutputViewMode::Collapsed,
+        ] {
+            let mut app = app();
+            app.state.snapshot.cells[0].outputs = vec![CellOutput::Text {
+                text: "Output to select".into(),
+            }];
+            let mut other = app.state.snapshot.cells[0].clone();
+            other.id = "markdown".into();
+            other.cell_type = CellType::Markdown;
+            other.outputs.clear();
+            app.state.snapshot.cells.push(other);
+            app.select_cell(1, false);
+            app.edit_mode = true;
+            app.set_output_view("code", mode);
+            let ctx = egui::Context::default();
+            let cell = app.state.snapshot.cells[0].clone();
+            let mut input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(800.0, 600.0),
+                )),
+                ..Default::default()
+            };
+            app.capture_target = Some(("code".into(), 0));
+            let _ = ctx.run(input.clone(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    app.cell(ui, 0, cell.clone());
+                });
+            });
+            let bottom = app.capture_region.as_ref().unwrap().0.bottom();
+            let position = egui::pos2(40.0, bottom - 16.0);
+            for pressed in [true, false] {
+                input.events = vec![
+                    egui::Event::PointerMoved(position),
+                    egui::Event::PointerButton {
+                        pos: position,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ];
+                let _ = ctx.run(input.clone(), |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
+                });
+            }
+            assert_eq!(
+                app.state.snapshot.selected_cell_id.as_deref(),
+                Some("code"),
+                "{mode:?}"
+            );
+            assert!(!app.selected_cells.contains("markdown"));
+            assert!(!app.edit_mode);
+            assert!(app.drain_commands().is_empty());
+        }
     }
 
     #[test]

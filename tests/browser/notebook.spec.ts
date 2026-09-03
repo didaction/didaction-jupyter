@@ -232,6 +232,21 @@ test("Markdown keyboard run returns to rendered mode and highlights remain separ
         (await call("get_active_context")).structuredContent.context.cell_id,
     )
     .toBe("markdown");
+  // Click the rendered "42" output in this fixed desktop fixture, not its editor.
+  await canvas.click({ position: { x: 40, y: 377 } });
+  await expect
+    .poll(
+      async () =>
+        (await call("get_active_context")).structuredContent.context.cell_id,
+    )
+    .toBe("code");
+  await page.keyboard.press("ArrowUp");
+  await expect
+    .poll(
+      async () =>
+        (await call("get_active_context")).structuredContent.context.cell_id,
+    )
+    .toBe("markdown");
   await page.keyboard.press("Enter");
   await expect
     .poll(
