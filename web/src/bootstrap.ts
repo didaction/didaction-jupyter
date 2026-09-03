@@ -724,22 +724,7 @@ async function createContext(
 }
 
 async function boot(): Promise<void> {
-  if (import.meta.env.VITE_NOTEBOOK_RUNTIME === "browser") {
-    const response = await fetch(
-      new URL("../pkg/notebook_wasm_bg.wasm.gz", import.meta.url),
-    );
-    if (!response.ok || !response.body) {
-      throw new Error(`Unable to load notebook runtime (${response.status})`);
-    }
-    const body = response.body.pipeThrough(new DecompressionStream("gzip"));
-    await init(
-      new Response(body, {
-        headers: { "Content-Type": "application/wasm" },
-      }),
-    );
-  } else {
-    await init();
-  }
+  await init();
   const callHistory = new CallHistory();
   const diagnostics = installDiagnostics(
     callHistory,
