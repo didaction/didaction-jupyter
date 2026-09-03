@@ -27,7 +27,7 @@ test("xeus worker: completion, inspection, async streaming, files, restart and i
         ],
         directory: "lesson",
       }),
-      "xeus-python",
+      "xeus-python-019",
     );
     const events: { type: string; bundle?: Record<string, unknown> }[] = [];
     const execute = (code: string) =>
@@ -39,6 +39,9 @@ test("xeus worker: completion, inspection, async streaming, files, restart and i
         (event: (typeof events)[number]) => events.push(event),
       );
     try {
+      await execute(
+        "import numpy, scipy, pandas, matplotlib, networkx, sympy, ipywidgets\nprint('scientific-baseline', numpy.__version__, scipy.__version__, pandas.__version__)",
+      );
       await execute("value = 40 + 2\nvalue");
       const complete = await kernel.request("complete", "str.up", 6, 30_000);
       const inspect = await kernel.request("inspect", "len", 3, 30_000);
@@ -88,6 +91,7 @@ test("xeus worker: completion, inspection, async streaming, files, restart and i
     expect.arrayContaining(["clear_output", "update_display_data"]),
   );
   expect(JSON.stringify(result.events)).toContain("uploaded data");
+  expect(JSON.stringify(result.events)).toContain("scientific-baseline");
   expect(result.missing).toMatchObject({ status: "error" });
   expect(result.missing.ename).toContain("NameError");
   expect(result.interrupted).toContain("variables were lost");
@@ -109,7 +113,7 @@ test("real xeus worker through egui and WebMCP: execute, plot and persist", asyn
   });
   await installMicroscopeTools(page);
   await page.goto("/");
-  await page.locator("#browser-kernel").selectOption("xeus-python");
+  await page.locator("#browser-kernel").selectOption("xeus-python-019");
   await page.getByRole("button", { name: "Open demo workspace" }).click();
   await expect(page.locator("#notebook-canvas")).toBeVisible();
   await expect(page.locator("#connection-status")).toContainText(
@@ -153,6 +157,6 @@ test("real xeus worker through egui and WebMCP: execute, plot and persist", asyn
     cell_id: first.structuredContent.cell_id,
   });
   expect(JSON.stringify(saved)).toContain("42");
-  expect(page.url()).toContain("kernel=xeus-python");
+  expect(page.url()).toContain("kernel=xeus-python-019");
   expect(forbidden).toEqual([]);
 });

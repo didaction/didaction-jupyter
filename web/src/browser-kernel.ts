@@ -1,3 +1,8 @@
+import {
+  DEFAULT_BROWSER_KERNEL,
+  type BrowserKernelName,
+} from "./browser-kernel-profile";
+
 export type KernelEvent = { type: string; bundle?: Record<string, unknown> };
 export interface BrowserKernel {
   request(
@@ -17,7 +22,7 @@ export class WorkerKernel implements BrowserKernel {
       files: { path: string; directory: boolean; bytes: Uint8Array }[];
       directory: string;
     }>,
-    private readonly kernelName: "pyodide" | "xeus-python" = "pyodide",
+    private readonly kernelName: BrowserKernelName = DEFAULT_BROWSER_KERNEL,
   ) {}
   private worker?: Worker;
   private buffer?: Uint8Array;
@@ -35,13 +40,18 @@ export class WorkerKernel implements BrowserKernel {
   private initialize(): Promise<unknown> {
     if (this.ready) return this.ready;
     this.worker =
-      this.kernelName === "xeus-python"
+      this.kernelName === "xeus-python-019"
         ? new Worker("/xeus/worker.js")
-        : new Worker(new URL("./browser-kernel.worker.ts", import.meta.url), {
-            type: "module",
-          });
+        : this.kernelName === "pyodide-027"
+          ? new Worker(
+              new URL("./browser-kernel-py312.worker.ts", import.meta.url),
+              { type: "module" },
+            )
+          : new Worker(new URL("./browser-kernel.worker.ts", import.meta.url), {
+              type: "module",
+            });
     this.buffer =
-      this.kernelName === "pyodide" && globalThis.crossOriginIsolated
+      this.kernelName !== "xeus-python-019" && globalThis.crossOriginIsolated
         ? new Uint8Array(new SharedArrayBuffer(1))
         : undefined;
     this.worker.onmessage = ({ data }) => {

@@ -13,6 +13,11 @@ import {
 } from "../pkg/notebook_wasm";
 import { OutputReducer, type Output } from "./browser-outputs";
 import { browserPath, type NotebookStore } from "./browser-store";
+import {
+  BROWSER_KERNELS,
+  DEFAULT_BROWSER_KERNEL,
+  type BrowserKernelName,
+} from "./browser-kernel-profile";
 
 export interface BrowserSnapshot extends NotebookSnapshot {
   schema_version: 1;
@@ -35,7 +40,7 @@ export interface BrowserSnapshot extends NotebookSnapshot {
 }
 export function initialBrowserSnapshot(
   path: string,
-  kernelName: "pyodide" | "xeus-python" = "pyodide",
+  kernelName: BrowserKernelName = DEFAULT_BROWSER_KERNEL,
 ): BrowserSnapshot {
   return {
     protocol_version: 1,
@@ -43,10 +48,7 @@ export function initialBrowserSnapshot(
     notebook: { path: browserPath(path), workspace: "browser-local" },
     kernel: {
       name: kernelName,
-      display_name:
-        kernelName === "pyodide"
-          ? "Python (browser · Pyodide)"
-          : "Python (browser · xeus-python)",
+      display_name: BROWSER_KERNELS[kernelName].displayName,
       session_id: null,
       state: "idle",
     },
@@ -108,7 +110,7 @@ export class BrowserNotebookTransport implements NotebookTransport {
     private readonly store: NotebookStore,
     private readonly kernel: BrowserKernel,
     private readonly model: (snapshot: string) => WasmApplication,
-    private readonly kernelName: "pyodide" | "xeus-python" = "pyodide",
+    private readonly kernelName: BrowserKernelName = DEFAULT_BROWSER_KERNEL,
   ) {
     this.snapshot = initialBrowserSnapshot(path, kernelName);
   }

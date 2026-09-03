@@ -50,6 +50,10 @@ JupyterLite/Pyodide runs in a Worker
 through the same egui/WebMCP command path, with browser-local notebook storage.
 An optional **xeus-python** WASM kernel can be prepared with `pnpm prepare:xeus`
 before building. See [setup and experimental limitations](docs/browser-runtime.md#experimental-xeus-python).
+The picker identifies exact runtimes: Pyodide 314.0.5 with Python 3.14,
+Pyodide 0.27.7 with Python 3.12 and a preloaded scientific baseline, and
+xeus-python 0.19.0 with Python 3.13 plus the scientific baseline and
+Numba/llvmlite.
 At launch, select **Python (Pyodide)**, then choose **Open demo workspace**, **Import ZIP workspace**, or
 **Continue saved workspace**. ZIP imports preserve subfolders and include notebooks
 and data files; they never execute uploaded notebooks automatically. Files are

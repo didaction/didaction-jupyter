@@ -742,8 +742,10 @@ async function boot(): Promise<void> {
       new URL(location.href).searchParams.get("kernel"),
     );
     const browserUrl = new URL(location.href);
-    browserWorkspace.kernelName =
-      chosen.kernel === "xeus-python" ? "xeus-python" : "pyodide";
+    const { isBrowserKernelName } = await import("./browser-kernel-profile");
+    if (!isBrowserKernelName(chosen.kernel))
+      throw new Error("Unsupported browser kernel");
+    browserWorkspace.kernelName = chosen.kernel;
     browserUrl.searchParams.set("notebook", chosen.path);
     browserUrl.searchParams.set("kernel", chosen.kernel);
     browserUrl.searchParams.set("workspace", chosen.workspace);

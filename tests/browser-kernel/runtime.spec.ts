@@ -1,5 +1,39 @@
 import { expect, test } from "@playwright/test";
 
+test("Python 3.12 scientific baseline is preloaded without runtime downloads", async ({
+  page,
+}) => {
+  const externalRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.protocol.startsWith("http") && url.hostname !== "127.0.0.1")
+      externalRequests.push(url.href);
+  });
+  await page.goto("/");
+  await expect(page.locator("#browser-launch")).toBeVisible();
+  const result = await page.evaluate(async () => {
+    const { WorkerKernel } = await import(String("/src/browser-kernel.ts"));
+    const kernel = new WorkerKernel(undefined, "pyodide-027");
+    const events: unknown[] = [];
+    await kernel.request(
+      "execute",
+      [
+        "import sys, micropip",
+        "import numpy, scipy, pandas, matplotlib, networkx, sympy",
+        "print(sys.version_info[:2])",
+        "print(numpy.__version__, scipy.__version__, pandas.__version__)",
+      ].join("\n"),
+      0,
+      60_000,
+      (event: unknown) => events.push(event),
+    );
+    kernel.close();
+    return events;
+  });
+  expect(JSON.stringify(result)).toContain("(3, 12)");
+  expect(externalRequests).toEqual([]);
+});
+
 test("real JupyterLite worker through egui/WebMCP: execute, plot, persist and restart", async ({
   page,
   context,

@@ -34,8 +34,10 @@
   },
   "dependencies": {
     "@jupyterlite/pyodide-kernel": "0.8.5",
+    "@jupyterlite/pyodide-kernel-py312": "npm:@jupyterlite/pyodide-kernel@0.6.1",
     "@jupyterlite/xeus": "5.0.0",
     "assemblyscript": "0.28.9",
-    "pyodide": "314.0.5"
+    "pyodide": "314.0.5",
+    "pyodide-py312": "npm:pyodide@0.27.7"
   }
 }
