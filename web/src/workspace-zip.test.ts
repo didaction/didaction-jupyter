@@ -19,6 +19,26 @@ test.each([false, true])(
     expect(new TextDecoder().decode(items[1]!.bytes)).toBe("x,y\n1,42");
   },
 );
+test("ignores OS and VCS metadata instead of exposing it", async () => {
+  const items = await read(
+    zipFixture([
+      { name: ".DS_Store", text: "finder metadata" },
+      { name: "lesson/.DS_Store", text: "finder metadata" },
+      { name: "__MACOSX/", text: "" },
+      { name: "__MACOSX/._notebook.ipynb", text: "appledouble" },
+      { name: "lesson/._data.csv", text: "appledouble" },
+      { name: "Thumbs.db", text: "windows metadata" },
+      { name: "desktop.ini", text: "windows metadata" },
+      { name: ".git/", text: "" },
+      { name: ".git/config", text: "git metadata" },
+      { name: ".gitignore", text: "*.pyc" },
+      { name: ".gitattributes", text: "* text=auto" },
+      { name: "lesson/notebook.ipynb", text: "{}" },
+    ]),
+  );
+
+  expect(items.map((item) => item.path)).toEqual(["lesson/notebook.ipynb"]);
+});
 test.each([
   "../bad",
   "/absolute",

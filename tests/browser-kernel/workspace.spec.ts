@@ -103,6 +103,9 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
   });
   const buffer = zipFixture(
     [
+      { name: ".DS_Store", text: "finder metadata" },
+      { name: "__MACOSX/._demo.ipynb", text: "appledouble metadata" },
+      { name: "lesson/.gitignore", text: "*.pyc" },
       { name: "lesson/demo.ipynb", text: notebook },
       { name: "lesson/practice.ipynb", text: notebook },
       { name: "lesson/data.csv", text: "value\n42" },
@@ -117,6 +120,16 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
   );
   await expect(page).toHaveURL(/notebook=lesson%2Fdemo.ipynb/);
   await expect(page).toHaveURL(/kernel=pyodide/);
+  expect(
+    await page.evaluate(async () => {
+      const { IndexedNotebookStore } = await import(
+        String("/src/browser-store.ts")
+      );
+      return (await new IndexedNotebookStore().artifacts()).map(
+        (entry: { path: string }) => entry.path,
+      );
+    }),
+  ).toEqual(["lesson/data.csv"]);
   const execute = () =>
     page.evaluate(async () => {
       const { IndexedNotebookStore } = await import(

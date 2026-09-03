@@ -141,7 +141,10 @@ regression tests pass.
   20 MB persisted non-notebook file data. Ordinary stored/deflate ZIPs with UTF-8
   (or ASCII) names are supported. Encrypted, multi-disk and ZIP64 archives,
   symlinks, absolute/traversal paths and dot-prefixed path components are rejected.
-  Exclude OS metadata such as `.DS_Store` before zipping.
+  Known OS and VCS metadata (`.DS_Store`, `__MACOSX`, AppleDouble `._*`,
+  `Thumbs.db`, `desktop.ini`, Git control files, and `.git` contents) is ignored
+  during import and is neither persisted nor displayed. Other hidden paths,
+  including `.env`, remain rejected rather than silently imported.
 - Uploads and normalized notebooks persist in origin-local IndexedDB; its v2
   upgrade preserves previously saved v1 notebooks. Nothing is sent to a server.
 - Before kernel requests, uploaded artifacts are copied to `/workspace` inside

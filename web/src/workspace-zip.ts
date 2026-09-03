@@ -8,6 +8,40 @@ export interface WorkspaceEntry {
 export const ZIP_LIMIT = 20_000_000;
 export const ENTRY_LIMIT = 1_000_000;
 export const COUNT_LIMIT = 1000;
+const GIT_CONTROL_FILES = new Set([
+  ".gitattributes",
+  ".gitignore",
+  ".gitmodules",
+]);
+
+/** Generated workspace metadata that is safe to discard during import. */
+function isIgnoredMetadataPath(path: string): boolean {
+  const parts = path.split("/");
+  if (
+    !path ||
+    path.startsWith("/") ||
+    parts.some(
+      (part) =>
+        !part ||
+        part === "." ||
+        part === ".." ||
+        /[\\%?#:\u0000-\u001f]/u.test(part),
+    )
+  )
+    return false;
+
+  const basename = parts.at(-1)!;
+  return (
+    parts.includes("__MACOSX") ||
+    parts.includes(".git") ||
+    basename === ".DS_Store" ||
+    basename.startsWith("._") ||
+    GIT_CONTROL_FILES.has(basename) ||
+    basename.toLowerCase() === "thumbs.db" ||
+    basename.toLowerCase() === "desktop.ini"
+  );
+}
+
 export function crc32(bytes: Uint8Array): number {
   let crc = 0xffffffff;
   for (const byte of bytes) {
@@ -81,8 +115,9 @@ export async function readWorkspaceZip(
     if (!(flags & 0x800) && nameBytes.some((b) => b > 127)) throw fail();
     const name = decoder.decode(nameBytes),
       directory = name.endsWith("/"),
-      path = directory ? name.slice(0, -1) : name;
-    browserPath(path, true);
+      path = directory ? name.slice(0, -1) : name,
+      ignored = isIgnoredMetadataPath(path);
+    if (!ignored) browserPath(path, true);
     if (!path || names.has(path))
       throw new Error("ZIP contains an empty or duplicate path.");
     names.add(path);
@@ -136,7 +171,7 @@ export async function readWorkspaceZip(
     )
       throw fail();
     total += output.length;
-    entries.push({ path, directory, bytes: output });
+    if (!ignored) entries.push({ path, directory, bytes: output });
     offset += 46 + nameLength + extra + comment;
   }
   if (offset !== end) throw fail();
