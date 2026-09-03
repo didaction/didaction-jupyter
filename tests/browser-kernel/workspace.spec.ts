@@ -15,10 +15,13 @@ test("optional xeus assets may be absent without breaking Pyodide startup", asyn
     page.getByRole("button", { name: "Open demo workspace" }),
   ).toBeVisible();
   await expect(
-    page.locator('#browser-kernel option[value="pyodide"]'),
-  ).toHaveCount(1);
+    page.locator('#browser-kernel option[value="pyodide-314"]'),
+  ).toHaveText("Pyodide 314.0.5 · Python 3.14");
   await expect(
-    page.locator('#browser-kernel option[value="xeus-python"]'),
+    page.locator('#browser-kernel option[value="pyodide-027"]'),
+  ).toHaveText("Pyodide 0.27.7 · Python 3.12");
+  await expect(
+    page.locator('#browser-kernel option[value="xeus-python-019"]'),
   ).toHaveCount(0);
 });
 import { zipFixture } from "../fixtures/workspace-zip";
@@ -77,10 +80,10 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
     page.getByRole("heading", { name: "Open a browser workspace" }),
   ).toBeVisible();
   await expect(page.getByLabel("Kernel", { exact: true })).toHaveValue(
-    "pyodide",
+    "pyodide-314",
   );
   await expect(
-    page.locator('#browser-kernel option[value="pyodide"]'),
+    page.locator('#browser-kernel option[value="pyodide-314"]'),
   ).toHaveCount(1);
   for (const width of [1280, 739]) {
     await page.setViewportSize({ width, height: 900 });
@@ -119,7 +122,7 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
     "Browser kernel",
   );
   await expect(page).toHaveURL(/notebook=lesson%2Fdemo.ipynb/);
-  await expect(page).toHaveURL(/kernel=pyodide/);
+  await expect(page).toHaveURL(/kernel=pyodide-314/);
   expect(
     await page.evaluate(async () => {
       const { IndexedNotebookStore } = await import(
@@ -224,7 +227,7 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
     await transport.setup(
       command("setup", {
         path: "lesson/demo.ipynb",
-        kernel: "pyodide",
+        kernel: "pyodide-314",
         create: false,
       }),
     );

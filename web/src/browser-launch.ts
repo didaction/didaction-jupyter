@@ -4,6 +4,11 @@ import {
   savedWorkspaces,
   rememberWorkspace,
 } from "./browser-workspace-catalog";
+import {
+  BROWSER_KERNELS,
+  DEFAULT_BROWSER_KERNEL,
+  isBrowserKernelName,
+} from "./browser-kernel-profile";
 
 export async function chooseBrowserWorkspace(
   workspace: BrowserWorkspace,
@@ -12,11 +17,10 @@ export async function chooseBrowserWorkspace(
 ): Promise<{ path: string; kernel: string; workspace: string }> {
   let workspaceId =
     new URL(location.href).searchParams.get("workspace") ?? "legacy";
-  const supportedKernels = new Set(["pyodide", "xeus-python"]);
-  const directKernel = requestedKernel ?? "pyodide";
-  if (!supportedKernels.has(directKernel))
+  const directKernel = requestedKernel ?? DEFAULT_BROWSER_KERNEL;
+  if (!isBrowserKernelName(directKernel))
     throw new Error(
-      "Unsupported browser kernel. Open / and choose Python (Pyodide).",
+      "Unsupported browser kernel. Open / and choose a versioned Python runtime.",
     );
   if (requested && (await workspace.store.read(requested)))
     return { path: requested, kernel: directKernel, workspace: workspaceId };
@@ -39,10 +43,10 @@ export async function chooseBrowserWorkspace(
     .catch(() => false);
   if (xeusAvailable) {
     kernel.add(
-      new Option("Python (xeus-python · experimental)", "xeus-python"),
+      new Option(BROWSER_KERNELS["xeus-python-019"].label, "xeus-python-019"),
     );
   }
-  if (directKernel === "xeus-python" && xeusAvailable)
+  if (directKernel === "xeus-python-019" && xeusAvailable)
     kernel.value = directKernel;
   const saved = (await savedWorkspaces()).filter((w) => w.notebooks.length);
   for (const entry of saved) {
@@ -77,7 +81,7 @@ export async function chooseBrowserWorkspace(
       demo.disabled = resume.disabled = file.disabled = true;
       message.textContent = "Preparing browser workspace…";
       try {
-        if (!supportedKernels.has(kernel.value))
+        if (!isBrowserKernelName(kernel.value))
           throw new Error("Select a supported browser kernel.");
         const selectedKernel = kernel.value;
         const path = await action();

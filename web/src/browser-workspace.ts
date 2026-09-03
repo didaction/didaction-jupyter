@@ -4,6 +4,10 @@ import { IndexedNotebookStore } from "./browser-store";
 import { BrowserNotebookTransport } from "./browser-transport";
 import { WorkerKernel } from "./browser-kernel";
 import { BrowserArtifactTransport } from "./browser-artifacts";
+import {
+  DEFAULT_BROWSER_KERNEL,
+  type BrowserKernelName,
+} from "./browser-kernel-profile";
 
 /** Explicit single-user policy, not a simulated collaboration server. */
 export class LocalNotebookConnection {
@@ -44,7 +48,7 @@ export class LocalNotebookConnection {
   };
 }
 export class BrowserWorkspace {
-  kernelName: "pyodide" | "xeus-python" = "pyodide";
+  kernelName: BrowserKernelName = DEFAULT_BROWSER_KERNEL;
   readonly store = new IndexedNotebookStore();
   readonly artifacts = new BrowserArtifactTransport(this.store);
   private release?: () => void;

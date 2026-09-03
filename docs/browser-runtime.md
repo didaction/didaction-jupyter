@@ -18,8 +18,10 @@ notebook includes arithmetic, Matplotlib, and intermediate output replacement
 examples. Choose **Open demo workspace** to load it, or **Import ZIP workspace**
 to load your own notebooks and files. Use the normal cell play button or Shift+Enter.
 
-Select the workspace kernel before opening it: **Python (Pyodide)** is the default;
-**Python (xeus-python · experimental)** appears after the optional build below.
+Select the versioned workspace kernel before opening it. **Pyodide 314.0.5 ·
+Python 3.14** is the default; **Pyodide 0.27.7 · Python 3.12** is the broad
+scientific compatibility profile; **xeus-python 0.19.0 · Python 3.13** appears
+after the optional build below.
 The chosen kernel is carried in the notebook URL for reloads.
 Unsupported browser kernel names fail closed. For frontend development,
 `pnpm build:wasm && pnpm dev:browser` serves the same environment with Vite HMR.
@@ -35,15 +37,16 @@ pnpm build:browser
 pnpm serve:browser
 ```
 
-Choose **Python (xeus-python · experimental)** on the home page before opening a
-workspace. Existing notebook URLs may select it with `kernel=xeus-python`; sources
+Choose **xeus-python 0.19.0 · Python 3.13** on the home page before opening a
+workspace. Notebook URLs select it with `kernel=xeus-python-019`; sources
 and saved outputs are preserved, but kernels never share live Python variables.
 Playgrounds inherit the selected runtime in their own isolated worker.
 
-The optional bundle adds approximately 60 MB before HTTP compression. It uses
+The optional bundle adds approximately 75 MB of conda package payload before
+packing and HTTP compression. It uses
 `@jupyterlite/xeus` 5.0.0, xeus-python 0.19.0, Python 3.13.1, NumPy 2.4.6,
 Numba 0.67.0, llvmlite 0.49.0 and Matplotlib 3.11.1.
-`deploy/xeus/explicit.lock` pins all 48 conda package URLs,
+`deploy/xeus/explicit.lock` pins all 59 conda package URLs,
 builds and MD5 checksums; `deploy/xeus/uv.lock` pins the isolated asset builder.
 `environment.yml` documents the original solve, but normal preparation uses the
 explicit lock, not a fresh solve. Build products stay ignored under `.runtime/`
@@ -63,7 +66,9 @@ Automatic urllib/requests browser HTTP patching is therefore not supported.
 This is not a security sandbox: Python's browser bridge still has browser powers.
 
 Stop terminates the xeus worker and loses live variables, even with isolation
-headers. No widgets/comms or stdin integration is claimed. Reload preserves
+headers. `ipywidgets` can be imported for notebook compatibility, but the egui
+frontend does not implement widget comms or views, so interactive controls are
+not rendered. No stdin integration is claimed. Reload preserves
 notebooks, not kernel memory. Missing assets require `pnpm prepare:xeus` followed
 by rebuilding the browser distribution.
 
@@ -192,14 +197,26 @@ kernel writes do not update IndexedDB or the server's configured workspace folde
 
 ## Pinned runtime
 
-- `@jupyterlite/pyodide-kernel` 0.8.5 and `pyodide` 314.0.5 are exact npm dependencies,
-  with transitive versions/integrities in `pnpm-lock.yaml`.
+- `@jupyterlite/pyodide-kernel` 0.8.5 with `pyodide` 314.0.5 embeds Python
+  3.14 and remains the default profile. The aliased kernel 0.6.1 with Pyodide
+  0.27.7 embeds Python 3.12.7. Both exact dependency trees and integrities are
+  pinned in `pnpm-lock.yaml` and use separate same-origin asset roots.
 - JupyterLite's bundled kernel, piplite and compatibility wheels are checked
   against their bundled index.
 - `comm` 0.2.3 is pinned by URL and SHA-256 in the asset preparation script.
-- IPython 9.12.0, Matplotlib 3.10.8, NumPy 2.4.6, Jedi 0.19.2 and dependencies come
-  from the npm-pinned Pyodide lockfile. The preparation script walks that closure
-  and verifies each downloaded package.
+- NumPy 2.0.2, SciPy 1.14.1, pandas 2.2.3, Matplotlib 3.8.4, NetworkX
+  3.4.2, SymPy 1.13.3, IPython 8.23.0, Jedi 0.19.1, micropip 0.9.0 and their
+  dependencies come from the npm-pinned Pyodide lockfile. The preparation script
+  walks that closure and verifies each downloaded package.
+
+The kernels are intentionally complementary rather than falsely identical:
+the additional Pyodide profile is pinned to Python 3.12 for broader legacy
+scientific-wheel compatibility, while the Python 3.14 profile tracks the newer ABI;
+the current `emscripten-forge-4x` and legacy `emscripten-forge-dev` indexes only
+publish Python 3.13 for xeus-python. Pinning Xeus to 3.12 therefore does not
+resolve. Xeus stays on its tested Python 3.13 ABI and adds the same scientific
+imports plus Numba/llvmlite. Revisit this only when a Python 3.12 Xeus artifact
+set is actually published or a replacement ABI is tested end to end.
 
 Upstream exported TypeScript declarations have dependency errors. `skipLibCheck`
 skips declaration-file checking, not our application source checks. Actual

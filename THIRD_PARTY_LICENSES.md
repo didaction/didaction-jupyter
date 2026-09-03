@@ -11,20 +11,20 @@ This starting inventory is based on the resolved Cargo metadata and installed
 npm package metadata. It is **not a complete distribution license manifest**.
 Lockfiles identify versions, but do not replace license texts or attribution.
 
-| Component                  | Version | Declared license                                    |
-| -------------------------- | ------- | --------------------------------------------------- |
-| egui / eframe              | 0.32.3  | MIT OR Apache-2.0                                   |
-| egui_code_editor           | 0.2.17  | MIT                                                 |
-| egui_commonmark            | 0.21.0  | MIT OR Apache-2.0                                   |
-| Typst                      | 0.14.2  | Apache-2.0                                          |
-| MiTeX                      | 0.2.4   | Apache-2.0                                          |
-| typst-as-lib               | 0.15.4  | MIT                                                 |
-| JupyterLite Pyodide kernel | 0.8.5   | BSD-3-Clause                                        |
-| JupyterLite Xeus loader    | 5.0.0   | BSD-3-Clause                                        |
-| Pyodide                    | 314.0.5 | MPL-2.0                                             |
-| AssemblyScript             | 0.28.9  | Apache-2.0                                          |
-| option-ext                 | 0.2.0   | MPL-2.0                                             |
-| epaint_default_fonts       | 0.32.3  | (MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0 |
+| Component                  | Version         | Declared license                                    |
+| -------------------------- | --------------- | --------------------------------------------------- |
+| egui / eframe              | 0.32.3          | MIT OR Apache-2.0                                   |
+| egui_code_editor           | 0.2.17          | MIT                                                 |
+| egui_commonmark            | 0.21.0          | MIT OR Apache-2.0                                   |
+| Typst                      | 0.14.2          | Apache-2.0                                          |
+| MiTeX                      | 0.2.4           | Apache-2.0                                          |
+| typst-as-lib               | 0.15.4          | MIT                                                 |
+| JupyterLite Pyodide kernel | 0.8.5, 0.6.1    | BSD-3-Clause                                        |
+| JupyterLite Xeus loader    | 5.0.0           | BSD-3-Clause                                        |
+| Pyodide                    | 314.0.5, 0.27.7 | MPL-2.0                                             |
+| AssemblyScript             | 0.28.9          | Apache-2.0                                          |
+| option-ext                 | 0.2.0           | MPL-2.0                                             |
+| epaint_default_fonts       | 0.32.3          | (MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0 |
 
 `OR` licenses offer a choice; `AND` means the additional licenses also apply.
 Fonts embedded through Typst must also be checked against their upstream notices.

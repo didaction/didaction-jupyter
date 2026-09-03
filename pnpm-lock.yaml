@@ -10,6 +10,9 @@ importers:
       "@jupyterlite/pyodide-kernel":
         specifier: 0.8.5
         version: 0.8.5(react@18.3.1)
+      "@jupyterlite/pyodide-kernel-py312":
+        specifier: npm:@jupyterlite/pyodide-kernel@0.6.1
+        version: "@jupyterlite/pyodide-kernel@0.6.1(react@18.3.1)"
       "@jupyterlite/xeus":
         specifier: 5.0.0
         version: 5.0.0(react@18.3.1)
@@ -19,6 +22,9 @@ importers:
       pyodide:
         specifier: 314.0.5
         version: 314.0.5
+      pyodide-py312:
+        specifier: npm:pyodide@0.27.7
+        version: pyodide@0.27.7
     devDependencies:
       "@playwright/test":
         specifier: 1.55.0
@@ -322,6 +328,12 @@ packages:
         integrity: sha512-1a8awgvvP9J9pCV5vBRuQxdBk29764qiMJsJYEndrWH3cB/FlaO+sZIBm4OTf56Eqdgl8R3/ZSLM1+3mgXOkPg==,
       }
 
+  "@jupyter/ydoc@3.5.0":
+    resolution:
+      {
+        integrity: sha512-kY/p4vP4tB606AxoEUZDBDKjKLVTF2q6AJE0bMHA5l2lL0SxrjufjkXCK/EEI/vUCOpHRakysNS8644tVAvhDg==,
+      }
+
   "@jupyter/ydoc@4.1.1":
     resolution:
       {
@@ -332,6 +344,12 @@ packages:
     resolution:
       {
         integrity: sha512-ezgIa7xE7PsPi5s3xhOY2QsfGyDcn/0KBHBm2M+jKKs79eh6Au9CEyfJ+vmZoquroEn2JVSNI9k/5LE8sK0wpA==,
+      }
+
+  "@jupyterlab/coreutils@6.4.10":
+    resolution:
+      {
+        integrity: sha512-B4DRg+F9fBctq/KENdbzUproHtQB0FxJX4NkCDFGGqzoEi+LEbghYi3XH/qSJeTKbwDxX+FEJsN995n53HWScQ==,
       }
 
   "@jupyterlab/coreutils@6.6.3":
@@ -346,10 +364,22 @@ packages:
         integrity: sha512-zsZaUbXfQ9vhoHsMQupJUqVKcmGw6TVk3iNEUDRtn1p8P/WsLf9wWQIVL5iysqoYTyiXgQagA1FWgN0dV19FFA==,
       }
 
+  "@jupyterlab/nbformat@4.4.10":
+    resolution:
+      {
+        integrity: sha512-saSsowYR9r5nQ7ixWpRJXAzvRwPWeEhQf+1ZbE0Sue3gBelPQPPlAI1Dvzvyjxx1R6HPImFVa7gQ+ZFjKXpQdw==,
+      }
+
   "@jupyterlab/nbformat@4.6.3":
     resolution:
       {
         integrity: sha512-MohoKGpjsqX0xXnnEt/HCzCLVYSLQyhmOktw2EipdzqJW59Y5SCZAQdILzYuvkEVtKmsXWRskIBTf5mG3bgflQ==,
+      }
+
+  "@jupyterlab/observables@5.4.10":
+    resolution:
+      {
+        integrity: sha512-I3Wqs9PtAdtOcQQmKvSUKM+v4N0EaYL0qJQemPzkBaYN+7QSkCe+JFnfmq/S+h5Su4bl+lCxxc9g3ByrhQOfQw==,
       }
 
   "@jupyterlab/observables@5.6.3":
@@ -374,6 +404,12 @@ packages:
     resolution:
       {
         integrity: sha512-LrptxGG3rDwVlJjT5YiO5q4oOqAKuD5yOgx72ajMIlQiFCvBU8o8coGrRXdLTXzL2Eh4qinzleFGtKb2m9zCfg==,
+      }
+
+  "@jupyterlab/services@7.4.10":
+    resolution:
+      {
+        integrity: sha512-XkDaKl4kyG9K49IU6/7zAhhseqiFNroWU9fxaSRYQIkxToMsg9242yW+TqU52AiJL+ptha1ucwniLclhUNKPZw==,
       }
 
   "@jupyterlab/services@7.6.3":
@@ -416,10 +452,34 @@ packages:
     peerDependencies:
       react: ^18.2.0
 
+  "@jupyterlite/contents@0.6.4":
+    resolution:
+      {
+        integrity: sha512-pNM1EJr8ZLHQoHeq1uiePHw8gWU8rHzetrQDimilXZdeqwBrfQqfxQi5VmNX3mbS9v3xVnRrszySOxM55VJokA==,
+      }
+
+  "@jupyterlite/kernel@0.6.4":
+    resolution:
+      {
+        integrity: sha512-PjvRHUpVUMIPjqrIRWg4KdH2ygJqAIFixgq72JmYpfWLQ+owIbZHX3ZcNYKCZhRRbd+6ZMj3sCGPltSk08w87g==,
+      }
+
+  "@jupyterlite/localforage@0.6.4":
+    resolution:
+      {
+        integrity: sha512-fIaJ0QU6SYHiwR/5gxtj3InIyB4TZ5ULqT9z4vdhcmCMvKuUfRyCpUnu5G0aKwduOOvIaWv2bwi3rB6BR4TtCw==,
+      }
+
   "@jupyterlite/localforage@0.8.3":
     resolution:
       {
         integrity: sha512-x6GbLmYk8bYB8N+qGwbl57tptoNhIy4zZCoO4z3JfH0BhtuuswOa8Wx5x+9ov6DwokqONgrIIoCKPfVVXSnfzA==,
+      }
+
+  "@jupyterlite/pyodide-kernel@0.6.1":
+    resolution:
+      {
+        integrity: sha512-oqYRD5ls0i4EDBrVCwzkmXt7aHVinHgMrv1aj9slydZ79Hxw8DlXh1udppk3TWB9qoZlgHzCRwzTq7mu4WC6Gg==,
       }
 
   "@jupyterlite/pyodide-kernel@0.8.5":
@@ -1790,6 +1850,13 @@ packages:
         integrity: sha512-jmYNElW7yvO7TV33CjSmvSiE2yco3bV2czu/OzDKdMNVZQWfxCblURLhf+47syQRBntjfLdd/H0egrzIG+oaFQ==,
       }
 
+  pyodide@0.27.7:
+    resolution:
+      {
+        integrity: sha512-RUSVJlhQdfWfgO9hVHCiXoG+nVZQRS5D9FzgpLJ/VcgGBLSAKoPL8kTiOikxbHQm1kRISeWUBdulEgO26qpSRA==,
+      }
+    engines: { node: ">=18.0.0" }
+
   pyodide@314.0.5:
     resolution:
       {
@@ -2353,6 +2420,15 @@ snapshots:
       "@microsoft/fast-foundation": 2.50.0
       "@microsoft/fast-web-utilities": 5.4.1
 
+  "@jupyter/ydoc@3.5.0":
+    dependencies:
+      "@jupyterlab/nbformat": 4.6.3
+      "@lumino/coreutils": 2.2.3
+      "@lumino/disposable": 2.1.6
+      "@lumino/signaling": 2.1.6
+      y-protocols: 1.0.7(yjs@13.6.32)
+      yjs: 13.6.32
+
   "@jupyter/ydoc@4.1.1":
     dependencies:
       "@jupyterlab/nbformat": 4.6.3
@@ -2389,6 +2465,15 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  "@jupyterlab/coreutils@6.4.10":
+    dependencies:
+      "@lumino/coreutils": 2.2.3
+      "@lumino/disposable": 2.1.6
+      "@lumino/signaling": 2.1.6
+      minimist: 1.2.8
+      path-browserify: 1.0.1
+      url-parse: 1.5.10
+
   "@jupyterlab/coreutils@6.6.3":
     dependencies:
       "@lumino/coreutils": 2.2.3
@@ -2416,9 +2501,21 @@ snapshots:
       - react
       - utf-8-validate
 
+  "@jupyterlab/nbformat@4.4.10":
+    dependencies:
+      "@lumino/coreutils": 2.2.3
+
   "@jupyterlab/nbformat@4.6.3":
     dependencies:
       "@lumino/coreutils": 2.2.3
+
+  "@jupyterlab/observables@5.4.10":
+    dependencies:
+      "@lumino/algorithm": 2.0.5
+      "@lumino/coreutils": 2.2.3
+      "@lumino/disposable": 2.1.6
+      "@lumino/messaging": 2.0.5
+      "@lumino/signaling": 2.1.6
 
   "@jupyterlab/observables@5.6.3":
     dependencies:
@@ -2468,6 +2565,24 @@ snapshots:
       "@lumino/signaling": 2.1.6
       "@lumino/widgets": 2.9.0
       lodash.escape: 4.0.1
+    transitivePeerDependencies:
+      - bufferutil
+      - react
+      - utf-8-validate
+
+  "@jupyterlab/services@7.4.10(react@18.3.1)":
+    dependencies:
+      "@jupyter/ydoc": 3.5.0
+      "@jupyterlab/coreutils": 6.6.3
+      "@jupyterlab/nbformat": 4.6.3
+      "@jupyterlab/settingregistry": 4.6.3(react@18.3.1)
+      "@jupyterlab/statedb": 4.6.3
+      "@lumino/coreutils": 2.2.3
+      "@lumino/disposable": 2.1.6
+      "@lumino/polling": 2.1.6
+      "@lumino/properties": 2.0.5
+      "@lumino/signaling": 2.1.6
+      ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - react
@@ -2565,12 +2680,62 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  "@jupyterlite/contents@0.6.4(react@18.3.1)":
+    dependencies:
+      "@jupyterlab/nbformat": 4.4.10
+      "@jupyterlab/services": 7.4.10(react@18.3.1)
+      "@jupyterlite/localforage": 0.6.4
+      "@lumino/coreutils": 2.2.3
+      "@types/emscripten": 1.41.6
+      localforage: 1.10.0
+      mime: 3.0.0
+    transitivePeerDependencies:
+      - bufferutil
+      - react
+      - utf-8-validate
+
+  "@jupyterlite/kernel@0.6.4(react@18.3.1)":
+    dependencies:
+      "@jupyterlab/coreutils": 6.4.10
+      "@jupyterlab/observables": 5.4.10
+      "@jupyterlab/services": 7.4.10(react@18.3.1)
+      "@lumino/coreutils": 2.2.3
+      "@lumino/disposable": 2.1.6
+      "@lumino/signaling": 2.1.6
+      async-mutex: 0.3.2
+      comlink: 4.4.2
+      mock-socket: 9.3.1
+    transitivePeerDependencies:
+      - bufferutil
+      - react
+      - utf-8-validate
+
+  "@jupyterlite/localforage@0.6.4":
+    dependencies:
+      "@jupyterlab/coreutils": 6.4.10
+      "@lumino/coreutils": 2.2.3
+      localforage: 1.10.0
+      localforage-memoryStorageDriver: 0.9.2
+
   "@jupyterlite/localforage@0.8.3":
     dependencies:
       "@jupyterlab/coreutils": 6.6.3
       "@lumino/coreutils": 2.2.3
       localforage: 1.10.0
       localforage-memoryStorageDriver: 0.9.2
+
+  "@jupyterlite/pyodide-kernel@0.6.1(react@18.3.1)":
+    dependencies:
+      "@jupyterlab/coreutils": 6.6.3
+      "@jupyterlab/logconsole": 4.6.3(react@18.3.1)
+      "@jupyterlite/contents": 0.6.4(react@18.3.1)
+      "@jupyterlite/kernel": 0.6.4(react@18.3.1)
+      coincident: 1.2.3
+      comlink: 4.4.2
+    transitivePeerDependencies:
+      - bufferutil
+      - react
+      - utf-8-validate
 
   "@jupyterlite/pyodide-kernel@0.8.5(react@18.3.1)":
     dependencies:
@@ -3387,6 +3552,13 @@ snapshots:
   proxy-target@3.0.2: {}
 
   punycode@1.4.1: {}
+
+  pyodide@0.27.7:
+    dependencies:
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   pyodide@314.0.5:
     dependencies:

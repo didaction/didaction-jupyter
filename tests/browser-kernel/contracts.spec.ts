@@ -53,7 +53,7 @@ test("browser transport validates in WASM and preserves state across storage fai
     await transport.setup(
       command("setup", {
         path: "contract.ipynb",
-        kernel: "pyodide",
+        kernel: "pyodide-314",
         create: true,
       }),
     );

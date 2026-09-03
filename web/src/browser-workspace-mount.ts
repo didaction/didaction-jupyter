@@ -1,7 +1,12 @@
-import type { PyodideAPI } from "pyodide";
+import type { PyodideInterface } from "pyodide";
 import { browserPath } from "./browser-path";
+type WorkspaceFs = PyodideInterface["FS"] & {
+  analyzePath(path: string, dontResolveLastLink?: boolean): { exists: boolean };
+  isLink(mode: number): boolean;
+  lstat(path: string): { mode: number };
+};
 export function mountWorkspace(
-  fs: PyodideAPI["FS"],
+  fs: WorkspaceFs,
   mounted: Set<string>,
   workspace: {
     files: { path: string; directory: boolean; bytes: Uint8Array }[];

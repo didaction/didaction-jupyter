@@ -210,10 +210,16 @@ export class PlaygroundController {
             import("./browser-transport"),
             import("./browser-kernel"),
           ]);
+        const { DEFAULT_BROWSER_KERNEL, isBrowserKernelName } = await import(
+          "./browser-kernel-profile"
+        );
+        const requestedKernel = new URL(location.href).searchParams.get(
+          "kernel",
+        );
         const kernelName =
-          new URL(location.href).searchParams.get("kernel") === "xeus-python"
-            ? "xeus-python"
-            : "pyodide";
+          requestedKernel && isBrowserKernelName(requestedKernel)
+            ? requestedKernel
+            : DEFAULT_BROWSER_KERNEL;
         const snapshot = JSON.parse(
           playgroundSnapshot(JSON.stringify(doc), stepIndex, kernelName),
         ) as NotebookSnapshot;
