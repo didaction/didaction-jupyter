@@ -12,8 +12,9 @@ export default defineConfig({
       "Cross-Origin-Embedder-Policy": "require-corp",
     },
     proxy: {
-      "/api": "http://127.0.0.1:8080",
-      "/readyz": "http://127.0.0.1:8080",
+      // Keep the browser's Host aligned with Origin for the gateway's origin guard.
+      "/api": { target: "http://127.0.0.1:8080", changeOrigin: false },
+      "/readyz": { target: "http://127.0.0.1:8080", changeOrigin: false },
     },
   },
   preview: {
