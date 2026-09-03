@@ -2,7 +2,8 @@
 //! Display-only content; all durable authoring uses validated notebook commands.
 use super::*;
 use notebook_protocol::microscope::{
-    AnnotationColor, Walkthrough, WalkthroughFocus, validate_focus,
+    AnnotationColor, OverlayBounds, Walkthrough, WalkthroughFocus, WalkthroughOverlayKind,
+    validate_focus,
 };
 
 impl NotebookEguiApp {
@@ -84,8 +85,6 @@ impl NotebookEguiApp {
             .and_then(|t| t.focus.clone())
             .unwrap_or_default();
         let mut index = focus.step_index;
-        ui.heading(&w.title);
-        ui.add_space(8.0);
         ui.horizontal_wrapped(|ui| {
             if toolbar_icon_button(
                 ui,
@@ -139,6 +138,10 @@ impl NotebookEguiApp {
             "{}-{}-{}-{}",
             target.cell_id, target.microscope_id, target.revision, step.id
         );
+        if step.graphics.is_some() || !step.overlays.is_empty() {
+            self.walkthrough_stage(ui, step, &scope, &focus);
+            return;
+        }
         egui::ScrollArea::vertical()
             .id_salt((&scope, "step"))
             .show(ui, |ui| {
@@ -338,6 +341,218 @@ impl NotebookEguiApp {
                 ui.add_space(24.0);
             });
     }
+
+    fn walkthrough_stage(
+        &mut self,
+        ui: &mut egui::Ui,
+        step: &notebook_protocol::microscope::WalkthroughStep,
+        scope: &str,
+        focus: &WalkthroughFocus,
+    ) {
+        let stage = ui.available_rect_before_wrap();
+        ui.allocate_rect(stage, egui::Sense::hover());
+        if let Some(frames) = self.microscope_capture_frames {
+            if frames == 0 {
+                let visible = stage.intersect(ui.clip_rect());
+                self.capture_region =
+                    Some((visible, ui.ctx().pixels_per_point(), visible != stage));
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
+                        "notebook-cell",
+                    )));
+                self.microscope_capture_frames = None;
+            } else {
+                self.microscope_capture_frames = Some(frames - 1);
+                ui.ctx().request_repaint();
+            }
+        }
+        if step.graphics.is_some() {
+            self.graphics_background(ui, stage);
+        } else {
+            ui.painter()
+                .rect_filled(stage, 0.0, Color32::from_rgb(247, 249, 250));
+        }
+        let defaults = [
+            (
+                WalkthroughOverlayKind::Markdown,
+                OverlayBounds {
+                    x: 20,
+                    y: 20,
+                    width: 620,
+                    height: 150,
+                },
+            ),
+            (
+                WalkthroughOverlayKind::Code,
+                OverlayBounds {
+                    x: 20,
+                    y: 190,
+                    width: 600,
+                    height: 760,
+                },
+            ),
+            (
+                WalkthroughOverlayKind::Annotations,
+                OverlayBounds {
+                    x: 650,
+                    y: 190,
+                    width: 330,
+                    height: 460,
+                },
+            ),
+            (
+                WalkthroughOverlayKind::GraphicsControls,
+                OverlayBounds {
+                    x: 650,
+                    y: 20,
+                    width: 330,
+                    height: 150,
+                },
+            ),
+            (
+                WalkthroughOverlayKind::Playground,
+                OverlayBounds {
+                    x: 650,
+                    y: 670,
+                    width: 200,
+                    height: 90,
+                },
+            ),
+        ];
+        let overlays = if step.overlays.is_empty() {
+            defaults
+                .iter()
+                .enumerate()
+                .map(|(position, (kind, bounds))| {
+                    (
+                        *kind,
+                        bounds.clone(),
+                        Some(step.markdown.clone()),
+                        format!("default-{position}"),
+                    )
+                })
+                .collect::<Vec<_>>()
+        } else {
+            step.overlays
+                .iter()
+                .map(|overlay| {
+                    (
+                        overlay.kind,
+                        overlay.bounds.clone(),
+                        overlay.markdown.clone(),
+                        overlay.id.clone(),
+                    )
+                })
+                .collect()
+        };
+        for (kind, bounds, markdown, id) in overlays {
+            if matches!(kind, WalkthroughOverlayKind::Playground) && step.playground_code.is_none()
+                || matches!(kind, WalkthroughOverlayKind::GraphicsControls)
+                    && step.graphics.is_none()
+                || matches!(kind, WalkthroughOverlayKind::Annotations)
+                    && step.annotations.is_empty()
+                || matches!(kind, WalkthroughOverlayKind::Markdown)
+                    && markdown.as_deref().unwrap_or_default().is_empty()
+            {
+                continue;
+            }
+            let rect = overlay_rect(stage, &bounds);
+            ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                ui.set_clip_rect(rect);
+                match kind {
+                    WalkthroughOverlayKind::Markdown => {
+                        egui::Frame::new()
+                            .fill(Color32::from_white_alpha(235))
+                            .inner_margin(Margin::same(8))
+                            .show(ui, |ui| {
+                                rendered_markdown_response(
+                                    ui,
+                                    &format!("{scope}-{id}"),
+                                    markdown.as_deref().unwrap_or_default(),
+                                    &mut self.markdown_cache,
+                                    &self.math_cache,
+                                );
+                            });
+                    }
+                    WalkthroughOverlayKind::Code => {
+                        egui::Frame::new()
+                            .fill(Color32::from_white_alpha(240))
+                            .stroke(Stroke::new(1.0, Color32::from_gray(205)))
+                            .inner_margin(Margin::same(8))
+                            .show(ui, |ui| {
+                                egui::ScrollArea::both().show(ui, |ui| {
+                                    for (line, source) in step.code.split('\n').enumerate() {
+                                        let selected = step.annotations.iter().any(|a| {
+                                            focus.annotation_id.as_ref() == Some(&a.id)
+                                                && a.start_line <= line + 1
+                                                && a.end_line > line
+                                        });
+                                        let text =
+                                            RichText::new(format!("{:>4}  {source}", line + 1))
+                                                .monospace();
+                                        if selected {
+                                            ui.colored_label(Color32::from_rgb(45, 105, 145), text);
+                                        } else {
+                                            ui.label(text);
+                                        }
+                                    }
+                                });
+                            });
+                    }
+                    WalkthroughOverlayKind::Annotations => {
+                        egui::Frame::new()
+                            .fill(Color32::from_white_alpha(235))
+                            .inner_margin(Margin::same(8))
+                            .show(ui, |ui| {
+                                ui.label(RichText::new("Code annotations").strong());
+                                for annotation in &step.annotations {
+                                    if ui
+                                        .selectable_label(
+                                            focus.annotation_id.as_ref() == Some(&annotation.id),
+                                            &annotation.text,
+                                        )
+                                        .clicked()
+                                    {
+                                        let _ = self.focus_walkthrough(WalkthroughFocus {
+                                            step_index: focus.step_index,
+                                            annotation_id: Some(annotation.id.clone()),
+                                        });
+                                    }
+                                }
+                            });
+                    }
+                    WalkthroughOverlayKind::Playground => {
+                        if toolbar_icon_button(
+                            ui,
+                            !self.read_only,
+                            ToolbarIcon::Run,
+                            "Open playground window",
+                        ) {
+                            self.playground_requested = Some(focus.step_index);
+                        }
+                    }
+                    WalkthroughOverlayKind::GraphicsControls => {
+                        self.graphics_controls(ui, &step.graphics.as_ref().unwrap().description);
+                    }
+                }
+            });
+        }
+    }
+}
+
+fn overlay_rect(stage: egui::Rect, bounds: &OverlayBounds) -> egui::Rect {
+    let scale = |value: u16| f32::from(value) / 1000.0;
+    egui::Rect::from_min_size(
+        stage.min
+            + egui::vec2(
+                stage.width() * scale(bounds.x),
+                stage.height() * scale(bounds.y),
+            ),
+        egui::vec2(
+            stage.width() * scale(bounds.width),
+            stage.height() * scale(bounds.height),
+        ),
+    )
 }
 fn navigation_focus(
     w: &Walkthrough,

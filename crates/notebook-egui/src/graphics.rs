@@ -162,4 +162,63 @@ impl NotebookEguiApp {
             ui.allocate_space(size);
         }
     }
+
+    pub(super) fn graphics_background(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
+        let key = self.graphics_key().expect("graphics step");
+        if self.graphics.key != key {
+            self.graphics = GraphicsSurface {
+                key,
+                retry: self.graphics.retry,
+                ..Default::default()
+            };
+        }
+        let size = rect.size().max(egui::vec2(1.0, 1.0));
+        let scale = ui
+            .ctx()
+            .pixels_per_point()
+            .min(2.0)
+            .min(1024.0 / size.x)
+            .min(768.0 / size.y);
+        self.graphics.width = (size.x * scale).round().clamp(1.0, 1024.0) as u32;
+        self.graphics.height = (size.y * scale).round().clamp(1.0, 768.0) as u32;
+        ui.painter()
+            .rect_filled(rect, 0.0, Color32::from_rgb(247, 249, 250));
+        if let Some(texture) = &self.graphics.texture {
+            ui.painter().image(
+                texture.id(),
+                rect,
+                egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                Color32::WHITE,
+            );
+        }
+    }
+
+    pub(super) fn graphics_controls(&mut self, ui: &mut egui::Ui, description: &str) {
+        egui::Frame::new()
+            .fill(Color32::from_white_alpha(235))
+            .stroke(Stroke::new(1.0, Color32::from_gray(210)))
+            .inner_margin(Margin::same(8))
+            .show(ui, |ui| {
+                ui.label(description);
+                if self.reduced_motion {
+                    ui.label("Paused · reduced motion");
+                } else if let Some(error) = self.graphics.error.clone() {
+                    ui.colored_label(Color32::from_rgb(198, 40, 40), error);
+                    if ui.button("Retry graphics").clicked() {
+                        self.graphics.retry += 1;
+                    }
+                } else if ui
+                    .small_button(if self.graphics.paused {
+                        "Resume"
+                    } else {
+                        "Pause"
+                    })
+                    .clicked()
+                {
+                    self.graphics.paused = !self.graphics.paused;
+                } else if self.graphics.texture.is_none() {
+                    ui.label("Compiling graphics…");
+                }
+            });
+    }
 }

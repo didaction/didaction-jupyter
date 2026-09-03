@@ -156,6 +156,37 @@ const annotation: Field = {
     color: { type: "string", enum: ["blue", "blue-light", "blue-deep"] },
   },
 };
+const overlayBounds: Field = {
+  type: "object",
+  additionalProperties: false,
+  required: ["x", "y", "width", "height"],
+  properties: {
+    x: { type: "integer", minimum: 0, maximum: 975 },
+    y: { type: "integer", minimum: 0, maximum: 975 },
+    width: { type: "integer", minimum: 25, maximum: 1000 },
+    height: { type: "integer", minimum: 25, maximum: 1000 },
+  },
+};
+const walkthroughOverlay: Field = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "kind", "bounds"],
+  properties: {
+    id: shortId,
+    kind: {
+      type: "string",
+      enum: [
+        "code",
+        "markdown",
+        "annotations",
+        "playground",
+        "graphics_controls",
+      ],
+    },
+    bounds: overlayBounds,
+    markdown: source,
+  },
+};
 const walkthrough: Field = {
   type: "object",
   additionalProperties: false,
@@ -200,6 +231,13 @@ const walkthrough: Field = {
             },
           },
           annotations: { type: "array", maxItems: 32, items: annotation },
+          overlays: {
+            type: "array",
+            maxItems: 32,
+            items: walkthroughOverlay,
+            description:
+              "Workspace-relative overlays in thousandths (0..1000). Markdown may appear multiple times; navigation remains fixed above the stage.",
+          },
         },
       },
     },
@@ -269,6 +307,13 @@ define(
   "capture_cell",
   "Scroll to a cell and capture its currently rendered visible portion as PNG. Does not expand hidden content. Tall cells may be clipped; see clipped in result.",
   { cell_id: id },
+);
+define(
+  "capture_microscope_step",
+  "Capture the currently rendered microscope stage as PNG for visual design feedback. Includes the graphics background and all overlays, but not fixed navigation.",
+  microScope,
+  undefined,
+  true,
 );
 define(
   "highlight_cell",
@@ -512,6 +557,7 @@ export class NotebookTools implements NotebookToolInvoker {
           "execute_playground",
           "set_output_visibility",
           "capture_cell",
+          "capture_microscope_step",
           "highlight_cell",
           "clear_cell_highlight",
           "open_microscope",

@@ -490,14 +490,15 @@ button:hover {
     animation-duration: 0.01ms !important;
   }
 }
-/* A temporary notebook fills only the notebook window; the workspace stays intact. */
+/* Temporary playground is a workspace-relative window; closing it destroys its session. */
 .playground-shell {
   position: absolute;
-  inset: 0;
-  z-index: 5;
+  inset: clamp(24px, 7%, 72px);
+  z-index: 8;
   display: flex;
   flex-direction: column;
   background: #f7f7f7;
+  border: 2px solid #53636b;
 }
 .playground-bar {
   display: flex;

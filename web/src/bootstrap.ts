@@ -413,7 +413,7 @@ async function createContext(
                 isError: false,
               };
             }
-            if (name !== "capture_cell") {
+            if (!["capture_cell", "capture_microscope_step"].includes(name)) {
               syncMotion();
               mounted.cellView(
                 id,
@@ -443,7 +443,19 @@ async function createContext(
                 isError: false,
               };
             }
-            mounted.cellView(id, "capture", "");
+            if (name === "capture_microscope_step") {
+              const active = JSON.parse(mounted.activeContext());
+              if (
+                active.microscope?.cell_id !== id ||
+                active.microscope?.microscope_id !== args.microscope_id
+              )
+                throw new Error(
+                  "Open the addressed microscope before capturing it",
+                );
+              mounted.captureMicroscopeStep();
+            } else {
+              mounted.cellView(id, "capture", "");
+            }
             const deadline = performance.now() + 10000;
             while (performance.now() < deadline) {
               await new Promise((resolve) => setTimeout(resolve, 50));
@@ -475,6 +487,9 @@ async function createContext(
               const result = {
                 ok: true,
                 cell_id: id,
+                ...(name === "capture_microscope_step"
+                  ? { microscope_id: args.microscope_id }
+                  : {}),
                 width: capture.width,
                 height: capture.height,
                 clipped: capture.clipped,

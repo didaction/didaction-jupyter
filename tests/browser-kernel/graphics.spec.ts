@@ -53,6 +53,40 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
         markdown: "Sine and cosine share a frequency, but differ in phase.",
         graphics: waveGraphics,
         playground_code: "print(40 + 2)",
+        overlays: [
+          {
+            id: "code",
+            kind: "code",
+            bounds: { x: 35, y: 180, width: 430, height: 700 },
+          },
+          {
+            id: "intro",
+            kind: "markdown",
+            bounds: { x: 35, y: 35, width: 430, height: 120 },
+            markdown: "**Foreground explanation** over the animated stage.",
+          },
+          {
+            id: "detail",
+            kind: "markdown",
+            bounds: { x: 520, y: 600, width: 430, height: 140 },
+            markdown: "A second independently positioned Markdown overlay.",
+          },
+          {
+            id: "notes",
+            kind: "annotations",
+            bounds: { x: 520, y: 180, width: 300, height: 220 },
+          },
+          {
+            id: "graphics",
+            kind: "graphics_controls",
+            bounds: { x: 700, y: 35, width: 250, height: 120 },
+          },
+          {
+            id: "play",
+            kind: "playground",
+            bounds: { x: 840, y: 780, width: 110, height: 90 },
+          },
+        ],
       },
       {
         id: "empty",
@@ -103,17 +137,22 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
     .toBeGreaterThan(3);
   const width = (await status())!.width;
   const canvas = (await page.locator("#notebook-canvas").boundingBox())!;
-  await page.mouse.click(canvas.x + 590, canvas.y + 240);
+  await page.screenshot({ path: ".runtime/graphics-stage-before-controls.png" });
+  await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 180);
   await expect.poll(async () => (await status())?.paused).toBe(true);
   await page.waitForTimeout(150);
   const pausedFrames = (await status())!.frames;
   await page.waitForTimeout(150);
   expect((await status())!.frames).toBe(pausedFrames);
-  await page.mouse.click(canvas.x + 590, canvas.y + 240);
+  await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 180);
   await expect
     .poll(async () => (await status())?.frames ?? 0)
     .toBeGreaterThan(pausedFrames);
   await page.screenshot({ path: ".runtime/graphics-desktop.png" });
+  const captured = await call("capture_microscope_step");
+  expect(captured.isError).toBe(false);
+  expect(Number(captured.structuredContent.width)).toBeGreaterThan(100);
+  expect(Number(captured.structuredContent.height)).toBeGreaterThan(100);
   await page.setViewportSize({ width: 900, height: 800 });
   await expect.poll(async () => (await status())?.width).toBeLessThan(width);
   await page.screenshot({ path: ".runtime/graphics-narrow.png" });
@@ -133,7 +172,7 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
     .poll(
       () => page.workers().filter((w) => w.url().includes("graphics")).length,
     )
-    .toBe(0);
+    .toBeGreaterThan(0);
   expect(
     (
       await microscopeCall(page, "execute_playground", {
@@ -148,6 +187,7 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
   await microscopeCall(page, "close_playground", {
     notebook_path: cell.notebook_path,
   });
+  await expect(page.locator("#playground-canvas")).toHaveCount(0);
   await expect
     .poll(async () => (await status())?.frames ?? 0, { timeout: 15000 })
     .toBeGreaterThan(2);

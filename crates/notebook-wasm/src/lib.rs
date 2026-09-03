@@ -563,6 +563,18 @@ impl MountedNotebook {
     pub fn take_cell_capture(&self) -> Option<String> {
         self.app.lock().expect("app mutex").captured_cell.take()
     }
+    #[wasm_bindgen(js_name = captureMicroscopeStep)]
+    pub fn capture_microscope_step(&self) -> Result<(), JsError> {
+        self.app
+            .lock()
+            .expect("app mutex")
+            .capture_microscope_step()
+            .map_err(|error| JsError::new(&error))?;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
     #[wasm_bindgen(js_name = setWorkspaceVisible)]
     pub fn set_workspace_visible(&self, visible: bool) {
         self.app.lock().expect("app mutex").workspace_visible = visible;

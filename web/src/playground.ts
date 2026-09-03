@@ -329,7 +329,11 @@ export class PlaygroundController {
     const bar = document.createElement("div");
     bar.className = "playground-bar";
     const back = document.createElement("button");
-    back.textContent = "Back to microscope";
+    back.textContent = "Close playground";
+    back.setAttribute(
+      "aria-label",
+      "Close playground and stop temporary session",
+    );
     back.onclick = () => {
       void this.close().catch((error) => {
         message.textContent = String(error);
@@ -348,9 +352,6 @@ export class PlaygroundController {
     viewport.append(canvas);
     panel.append(bar, viewport);
     document.querySelector("#notebook-shell")!.append(panel);
-    document.querySelector<HTMLCanvasElement>(
-      "#notebook-canvas",
-    )!.style.visibility = "hidden";
     this.panel = panel;
     this.message = message;
     const mounted = await mountNotebook(
@@ -452,9 +453,6 @@ export class PlaygroundController {
     this.panel = undefined;
     this.current = undefined;
     this.executingSource = undefined;
-    const canvas =
-      document.querySelector<HTMLCanvasElement>("#notebook-canvas");
-    if (canvas) canvas.style.visibility = "";
     await transport?.close();
   }
   private async refresh() {

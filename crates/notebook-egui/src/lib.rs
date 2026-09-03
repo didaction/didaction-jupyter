@@ -204,6 +204,7 @@ pub struct NotebookEguiApp {
     capture_target: Option<(String, u32)>,
     capture_region: Option<(egui::Rect, f32, bool)>,
     pub captured_cell: Option<String>,
+    microscope_capture_frames: Option<u32>,
     pub workspace_visible: bool,
     pub workspace_toggle_requested: bool,
     pub follow_toggle_requested: bool,
@@ -350,6 +351,7 @@ impl NotebookEguiApp {
             capture_target: None,
             capture_region: None,
             captured_cell: None,
+            microscope_capture_frames: None,
             workspace_visible: true,
             workspace_toggle_requested: false,
             follow_toggle_requested: false,
@@ -722,6 +724,14 @@ impl NotebookEguiApp {
             "microscope": microscope,
             "playground": null,
         })
+    }
+    pub fn capture_microscope_step(&mut self) -> Result<(), String> {
+        if self.microscope_target.is_none() || self.microscope_document.is_none() {
+            return Err("Open a microscope step before capturing it".into());
+        }
+        self.captured_cell = None;
+        self.microscope_capture_frames = Some(2);
+        Ok(())
     }
     fn selected_cell(&self) -> Option<(usize, Cell)> {
         let selected = self.state.snapshot.selected_cell_id.as_ref()?;

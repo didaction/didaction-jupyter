@@ -33,11 +33,19 @@ manual inspection; no automatic retry is claimed safe.
 
 ## UI behavior
 
-The walkthrough preserves the notebook's light, restrained UI: the step title and
-explanation sit above a shared bordered surface with read-only code on the left
-and graphics on the right. The graphics description remains visible above the
-image; AssemblyScript running in a worker supplies the raw RGBA pixels, not a DSL
-or an additional editor.
+For a graphics step, the animation fills the complete Microscope stage beneath
+the fixed navigation strip. It receives the stage's current physical dimensions
+after every resize. egui overlays paint afterward, accept input normally, and use
+stage-relative coordinates rather than browser-window coordinates. The top
+Microscope title is the only title row; the former repeated walkthrough title is
+removed.
+
+Steps may define up to 32 `overlays`. Bounds are integer thousandths of stage
+width/height (`x`, `y`, `width`, `height`), remain inside 0..1000, and have a
+minimum 25/1000 size. Kinds are `code`, `markdown`, `annotations`, `playground`,
+and `graphics_controls`. Markdown overlays carry their own bounded `markdown`
+source, so a step can contain multiple independently positioned explanations.
+When overlays are omitted, the same elements use a readable default composition.
 
 A compact Pause/Resume control freezes or resumes the animation clock. With
 reduced motion enabled, it is replaced by the honest status
@@ -98,7 +106,8 @@ frame; this is a ceiling, not a frame-rate guarantee. `init` runs once per entry
   deadlines. A timeout, trap, invalid buffer or compiler error stays in the graphics
   area with Retry. Source diagnostics remain in the UI, not routine logs.
 - Leaving the step, hiding the notebook for a playground, or disposing the view
-  stops its workers. Dispose is best-effort with forced termination after 50 ms.
+  stops its workers. Opening a playground window no longer hides or replaces the
+  stage. Dispose is best-effort with forced termination after 50 ms.
   Re-entry creates fresh state; late worker messages are ignored.
 - Pause freezes the animation clock; reduced-motion preferences freeze it too.
   Resize can still request a frame. A hidden tab is suspended when its animation
@@ -112,6 +121,9 @@ has a deadline but no browser-enforced heap cap; keep source bounds conservative
 
 `get_active_context().context.microscope.walkthrough` includes graphics frame count, dimensions, pause
 state and localized error for diagnosis. It never includes pixel buffers.
+`capture_microscope_step` returns a bounded PNG of the current stage—background
+and overlays, excluding fixed navigation—so an agent can inspect its composition
+and iterate with visual feedback.
 
 Run `pnpm test`, `cargo test -p notebook-protocol -p notebook-egui`, and
 `pnpm exec playwright test --config playwright.browser-kernel.config.ts graphics.spec.ts`.

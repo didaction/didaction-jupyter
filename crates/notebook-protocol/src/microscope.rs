@@ -25,6 +25,37 @@ pub struct WalkthroughStep {
     pub graphics: Option<GraphicsDefinition>,
     #[serde(default)]
     pub annotations: Vec<Annotation>,
+    /// Optional stage composition. Empty retains the canonical readable layout.
+    #[serde(default)]
+    pub overlays: Vec<WalkthroughOverlay>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WalkthroughOverlayKind {
+    Code,
+    Markdown,
+    Annotations,
+    Playground,
+    GraphicsControls,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OverlayBounds {
+    /// Thousandths of the stage width/height.
+    pub x: u16,
+    pub y: u16,
+    pub width: u16,
+    pub height: u16,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WalkthroughOverlay {
+    pub id: String,
+    pub kind: WalkthroughOverlayKind,
+    pub bounds: OverlayBounds,
+    /// Required only for Markdown overlays; permits multiple independent blocks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markdown: Option<String>,
 }
 /// Executable source, not a scene description. Imports/capabilities are checked
 /// again by the browser before instantiation; validating source never executes it.
@@ -89,6 +120,7 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
     let mut steps = std::collections::BTreeSet::new();
     let mut artifacts = std::collections::BTreeSet::new();
     for s in &w.steps {
+        let mut overlay_ids = std::collections::BTreeSet::new();
         if let Some(name) = s.graphics.as_ref().and_then(|g| g.artifact.as_ref())
             && (!valid_graphics_artifact(name) || !artifacts.insert(name))
         {
@@ -105,6 +137,22 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
                 .as_ref()
                 .is_some_and(|code| code.len() > 64_000 || code.trim().is_empty())
             || s.annotations.len() > 32
+            || s.overlays.len() > 32
+            || s.overlays.iter().any(|overlay| {
+                !id(&overlay.id)
+                    || !overlay_ids.insert(&overlay.id)
+                    || overlay.bounds.width < 25
+                    || overlay.bounds.height < 25
+                    || u32::from(overlay.bounds.x) + u32::from(overlay.bounds.width) > 1000
+                    || u32::from(overlay.bounds.y) + u32::from(overlay.bounds.height) > 1000
+                    || match overlay.kind {
+                        WalkthroughOverlayKind::Markdown => overlay
+                            .markdown
+                            .as_ref()
+                            .is_none_or(|text| text.len() > 64_000),
+                        _ => overlay.markdown.is_some(),
+                    }
+            })
             || s.graphics.as_ref().is_some_and(|g| {
                 g.source.trim().is_empty()
                     || g.source.len() > 64_000
@@ -531,10 +579,13 @@ mod tests {
     use super::*;
     #[test]
     fn walkthrough_bounds_focus_and_ownership_are_validated() {
-        let w: Walkthrough = serde_json::from_value(json!({"title":"Explain","steps":[{"id":"one","title":"First","code":"x = 42\nx","markdown":"**Value**","annotations":[{"id":"value","start_line":1,"end_line":2,"text":"Shared variable","color":"blue"}]}]})).unwrap();
+        let w: Walkthrough = serde_json::from_value(json!({"title":"Explain","steps":[{"id":"one","title":"First","code":"x = 42\nx","markdown":"**Value**","annotations":[{"id":"value","start_line":1,"end_line":2,"text":"Shared variable","color":"blue"}],"overlays":[{"id":"code","kind":"code","bounds":{"x":20,"y":20,"width":500,"height":800}},{"id":"note","kind":"markdown","bounds":{"x":550,"y":20,"width":400,"height":200},"markdown":"Placed note"}]}]})).unwrap();
         validate_walkthrough(&w).unwrap();
         let encoded = serde_json::to_string(&w).unwrap();
         assert_eq!(serde_json::from_str::<Walkthrough>(&encoded).unwrap(), w);
+        let mut outside = w.clone();
+        outside.steps[0].overlays[0].bounds.x = 900;
+        assert!(validate_walkthrough(&outside).is_err());
         assert!(
             validate_focus(
                 &w,

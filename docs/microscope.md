@@ -65,10 +65,11 @@ displayed excerpt: include imports and setup because the kernel starts fresh,
 without the parent notebook's variables. `playground_code` is optional, nonblank
 when present, and bounded to 64,000 UTF-8 bytes within the document aggregate limit.
 
-The playground fills the notebook area with the existing single-cell editor,
-completion, run/interrupt and output controls. **Back to microscope** stops the
-temporary kernel and discards edits, outputs and variables, returning to the same
-walkthrough. Saved step source and the original notebook remain unchanged.
+The playground opens as a bounded window above the still-visible Microscope stage,
+using the existing single-cell editor, completion, run/interrupt and output
+controls. **Close playground** stops the temporary kernel and discards edits,
+outputs and variables. Closing the window and the WebMCP close operation share
+that cleanup path. Saved step source and the original notebook remain unchanged.
 Only one playground is active at a time. While mounted,
 `get_active_context().context` reports `view: "playground"`; its `playground`
 object keeps owner and step identity, draft text, exact executing source/status,
@@ -106,6 +107,8 @@ Browser-to-browser following is intentionally unsupported.
 - `clear_microscope_focus` clears the pulse in the addressed, currently open
   microscope. The step and saved annotations remain. Humans can also use Clear
   focus or select another annotation.
+- `capture_microscope_step` captures the current stage background and positioned
+  overlays as a bounded PNG for agent visual feedback; fixed navigation is omitted.
 - `get_active_context().context.microscope.walkthrough` reports `title`, `step_index`,
   `step_count`, `step_id`, and nullable `annotation_id`. UI numbering starts at 1.
 
