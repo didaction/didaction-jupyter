@@ -2894,7 +2894,13 @@ impl MathRenderCache {
         });
         match self.textures.get(&key) {
             Some(Ok((texture, size))) if inline => {
-                ui.add(egui::Image::new((texture.id(), *size)));
+                let (rect, _) = ui.allocate_exact_size(*size, egui::Sense::hover());
+                ui.painter().image(
+                    texture.id(),
+                    rect.translate(egui::vec2(0.0, INLINE_MATH_BASELINE_OFFSET_POINTS)),
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    Color32::WHITE,
+                );
             }
             Some(Ok((texture, size))) => {
                 ui.vertical_centered(|ui| {
@@ -2915,6 +2921,7 @@ impl MathRenderCache {
 const MATH_PIXELS_PER_POINT: f32 = 2.0;
 const MATH_RASTER_PADDING_POINTS: f32 = 4.0;
 const INLINE_MATH_RASTER_PADDING_POINTS: f32 = 1.0;
+const INLINE_MATH_BASELINE_OFFSET_POINTS: f32 = 1.5;
 
 const MATH_PREAMBLE: &str = r#"
 #let mitexmathbf(it) = math.bold(math.upright(it))
@@ -2979,7 +2986,7 @@ fn render_math_formula(latex: &str, inline: bool) -> Result<egui::ColorImage, St
     } else {
         format!("$ {typst_math} $")
     };
-    let text_size = if inline { 14 } else { 16 };
+    let text_size = 16;
     let source = format!(
         "{MATH_PREAMBLE}\n#set page(width: auto, height: auto, margin: 8pt, fill: none)\n#set text(size: {text_size}pt, fill: black)\n{equation}"
     );
@@ -4288,6 +4295,48 @@ mod tests {
 
         assert!(inline.height() < display.height());
         assert!(inline.width() < display.width());
+    }
+
+    #[test]
+    fn inline_markdown_math_is_not_painted_above_the_text_run() {
+        let context = egui::Context::default();
+        let output = context.run(egui::RawInput::default(), |context| {
+            egui::CentralPanel::default().show(context, |ui| {
+                let mut cache = CommonMarkCache::default();
+                let math_cache = Arc::new(Mutex::new(MathRenderCache::default()));
+                rendered_markdown_response(
+                    ui,
+                    "inline-math",
+                    r"Before $x^2$ after",
+                    &mut cache,
+                    &math_cache,
+                );
+            });
+        });
+        let text_top = output
+            .shapes
+            .iter()
+            .filter_map(|clipped| match &clipped.shape {
+                egui::Shape::Text(_) => Some(clipped.shape.visual_bounding_rect().top()),
+                _ => None,
+            })
+            .reduce(f32::min)
+            .expect("surrounding text shape");
+        let math_top = output
+            .shapes
+            .iter()
+            .find_map(|clipped| match &clipped.shape {
+                egui::Shape::Mesh(mesh) if mesh.texture_id != egui::TextureId::default() => {
+                    Some(clipped.shape.visual_bounding_rect().top())
+                }
+                _ => None,
+            })
+            .expect("inline math texture");
+
+        assert!(
+            math_top >= text_top,
+            "inline math starts above text: math={math_top}, text={text_top}"
+        );
     }
 
     #[test]
