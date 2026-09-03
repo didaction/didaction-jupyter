@@ -289,6 +289,11 @@ describe("transport-neutral notebook tools", () => {
     expect(installed.available).toBe(true);
     expect(registered).toHaveLength(33);
     expect(
+      registered.find((tool) => tool.name === "create_microscope")!.inputSchema
+        .properties.walkthrough!.properties?.steps?.items?.properties?.markdown
+        ?.description,
+    ).toContain("$...$");
+    expect(
       (
         await registered
           .find((tool) => tool.name === "read_cell")!

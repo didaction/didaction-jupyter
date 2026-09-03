@@ -2914,6 +2914,7 @@ impl MathRenderCache {
 
 const MATH_PIXELS_PER_POINT: f32 = 2.0;
 const MATH_RASTER_PADDING_POINTS: f32 = 4.0;
+const INLINE_MATH_RASTER_PADDING_POINTS: f32 = 1.0;
 
 const MATH_PREAMBLE: &str = r#"
 #let mitexmathbf(it) = math.bold(math.upright(it))
@@ -2978,8 +2979,9 @@ fn render_math_formula(latex: &str, inline: bool) -> Result<egui::ColorImage, St
     } else {
         format!("$ {typst_math} $")
     };
+    let text_size = if inline { 14 } else { 16 };
     let source = format!(
-        "{MATH_PREAMBLE}\n#set page(width: auto, height: auto, margin: 8pt, fill: none)\n#set text(size: 16pt, fill: black)\n{equation}"
+        "{MATH_PREAMBLE}\n#set page(width: auto, height: auto, margin: 8pt, fill: none)\n#set text(size: {text_size}pt, fill: black)\n{equation}"
     );
     let engine = typst_as_lib::TypstEngine::builder()
         .main_file(source)
@@ -3004,15 +3006,40 @@ fn render_math_formula(latex: &str, inline: bool) -> Result<egui::ColorImage, St
         .chunks_exact(4)
         .map(|rgba| Color32::from_rgba_premultiplied(rgba[0], rgba[1], rgba[2], rgba[3]))
         .collect();
-    let padding = (MATH_RASTER_PADDING_POINTS * MATH_PIXELS_PER_POINT).ceil() as usize;
-    let width = rendered_width + padding * 2;
-    let height = rendered_height + padding * 2;
+    let mut min_x = rendered_width;
+    let mut min_y = rendered_height;
+    let mut max_x = 0;
+    let mut max_y = 0;
+    for (index, pixel) in rendered_pixels.iter().enumerate() {
+        if pixel.a() == 0 {
+            continue;
+        }
+        let x = index % rendered_width;
+        let y = index / rendered_width;
+        min_x = min_x.min(x);
+        min_y = min_y.min(y);
+        max_x = max_x.max(x);
+        max_y = max_y.max(y);
+    }
+    if min_x > max_x || min_y > max_y {
+        return Err("typesetter returned transparent math".into());
+    }
+    let content_width = max_x - min_x + 1;
+    let content_height = max_y - min_y + 1;
+    let padding_points = if inline {
+        INLINE_MATH_RASTER_PADDING_POINTS
+    } else {
+        MATH_RASTER_PADDING_POINTS
+    };
+    let padding = (padding_points * MATH_PIXELS_PER_POINT).ceil() as usize;
+    let width = content_width + padding * 2;
+    let height = content_height + padding * 2;
     let mut pixels = vec![Color32::TRANSPARENT; width * height];
-    for row in 0..rendered_height {
-        let source_start = row * rendered_width;
+    for row in 0..content_height {
+        let source_start = (min_y + row) * rendered_width + min_x;
         let target_start = (row + padding) * width + padding;
-        pixels[target_start..target_start + rendered_width]
-            .copy_from_slice(&rendered_pixels[source_start..source_start + rendered_width]);
+        pixels[target_start..target_start + content_width]
+            .copy_from_slice(&rendered_pixels[source_start..source_start + content_width]);
     }
     Ok(egui::ColorImage {
         size: [width, height],
@@ -4255,6 +4282,15 @@ mod tests {
     }
 
     #[test]
+    fn inline_markdown_math_is_tighter_than_display_math() {
+        let inline = render_math_formula(r"x^2", true).unwrap();
+        let display = render_math_formula(r"x^2", false).unwrap();
+
+        assert!(inline.height() < display.height());
+        assert!(inline.width() < display.width());
+    }
+
+    #[test]
     fn markdown_math_preserves_padding_around_matrix_glyphs() {
         let image = render_math_formula(
             r"H = \frac{1}{\sqrt{2}} \begin{pmatrix} 1 & 1 \\ 1 & -1 \end{pmatrix}",
@@ -4271,15 +4307,6 @@ mod tests {
         assert!(
             !(top || bottom || left || right),
             "math glyphs touch bitmap boundary: top={top}, bottom={bottom}, left={left}, right={right}"
-        );
-        let padding = (MATH_RASTER_PADDING_POINTS * MATH_PIXELS_PER_POINT).ceil() as usize;
-        let inner_top =
-            (padding..width - padding).any(|x| image.pixels[padding * width + x].a() > 0);
-        let inner_bottom = (padding..width - padding)
-            .any(|x| image.pixels[(height - padding - 1) * width + x].a() > 0);
-        assert!(
-            !(inner_top || inner_bottom),
-            "typeset math is already clipped before raster padding"
         );
     }
 

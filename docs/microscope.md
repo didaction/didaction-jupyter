@@ -57,6 +57,9 @@ inclusive**. Available colors are `blue`, `blue-light`, and `blue-deep`.
 Annotations and code are saved content; code is never executed or copied into
 the owning notebook cell. Highlighted code is shown in a numbered, read-only left
 pane; Markdown is rendered above it using the existing bounded renderer.
+Walkthrough explanations and Markdown overlays use the same CommonMark renderer
+as notebook Markdown cells. WebMCP advertises inline math as `$...$` and display
+math as `$$...$$`; both are typeset locally by the egui frontend.
 
 ## Temporary playgrounds
 
@@ -97,10 +100,11 @@ Browser-to-browser following is intentionally unsupported.
 
 - `read_microscope` returns the saved document, including its walkthrough.
 - `focus_microscope_step` opens a **zero-based** `step_index`, clearing temporary
-  annotation focus. Humans use the left/right chevron buttons, Left/Right arrow
-  keys, or the step dropdown. Up/Down cycles the current step's annotations;
+  annotation focus. Humans use the painted previous/next buttons, Left/Right
+  arrow keys, or the clickable progress lights beneath the prominent step title.
+  Up/Down cycles the current step's annotations;
   Backspace returns to the notebook. These shortcuts are microscope-only and
-  do not override playground editing or an open step dropdown.
+  do not override playground editing.
 - `focus_microscope_annotation` takes `step_index` and `annotation_id`, opens the
   step, scrolls the code range into view and pulses its outline. Reduced-motion
   viewers get a static outline instead.

@@ -85,6 +85,8 @@ impl NotebookEguiApp {
             .and_then(|t| t.focus.clone())
             .unwrap_or_default();
         let mut index = focus.step_index;
+        ui.heading(&w.steps[index].title);
+        ui.add_space(4.0);
         ui.horizontal_wrapped(|ui| {
             if toolbar_icon_button(
                 ui,
@@ -94,19 +96,11 @@ impl NotebookEguiApp {
             ) {
                 index -= 1;
             }
-            egui::ComboBox::from_id_salt("walkthrough-step")
-                .selected_text(format!(
-                    "Step {} of {}: {}",
-                    index + 1,
-                    w.steps.len(),
-                    w.steps[index].title
-                ))
-                .width(280.0)
-                .show_ui(ui, |ui| {
-                    for (i, step) in w.steps.iter().enumerate() {
-                        ui.selectable_value(&mut index, i, format!("{}. {}", i + 1, step.title));
-                    }
-                });
+            for (position, step) in w.steps.iter().enumerate() {
+                if walkthrough_light(ui, position == index, position, &step.title) {
+                    index = position;
+                }
+            }
             if toolbar_icon_button(
                 ui,
                 index + 1 < w.steps.len(),
@@ -145,8 +139,6 @@ impl NotebookEguiApp {
         egui::ScrollArea::vertical()
             .id_salt((&scope, "step"))
             .show(ui, |ui| {
-                ui.heading(&step.title);
-                ui.add_space(8.0);
                 rendered_markdown_response(
                     ui,
                     &format!("{scope}-explanation"),
@@ -174,7 +166,7 @@ impl NotebookEguiApp {
                                 {
                                     self.playground_requested = Some(index);
                                 }
-                                ui.label(RichText::new("Code · read-only").strong());
+                                ui.label(RichText::new("Code | read-only").strong());
                             });
                             egui::ScrollArea::both()
                                 .id_salt((&scope, "code"))
@@ -323,9 +315,9 @@ impl NotebookEguiApp {
                         let selected = focus.annotation_id.as_ref() == Some(&a.id);
                         let location = match (a.start_column, a.end_column) {
                             (Some(start), Some(end)) => {
-                                format!("Line {}, characters {}–{}", a.start_line, start, end)
+                                format!("Line {}, characters {}-{}", a.start_line, start, end)
                             }
-                            _ => format!("Lines {}–{}", a.start_line, a.end_line),
+                            _ => format!("Lines {}-{}", a.start_line, a.end_line),
                         };
                         if ui
                             .selectable_label(selected, format!("{location}: {}", a.text))
@@ -499,36 +491,86 @@ impl NotebookEguiApp {
                                     {
                                         self.playground_requested = Some(focus.step_index);
                                     }
-                                    ui.label(RichText::new("Code · read-only").strong());
+                                    ui.label(RichText::new("Code | read-only").strong());
                                 });
                                 egui::ScrollArea::both().show(ui, |ui| {
                                     for (line, source) in step.code.split('\n').enumerate() {
-                                        let selected = step.annotations.iter().any(|a| {
-                                            focus.annotation_id.as_ref() == Some(&a.id)
-                                                && a.start_line <= line + 1
-                                                && a.end_line > line
+                                        let focused_annotation =
+                                            step.annotations.iter().find(|a| {
+                                                focus.annotation_id.as_ref() == Some(&a.id)
+                                                    && a.start_line <= line + 1
+                                                    && a.end_line > line
+                                            });
+                                        let annotated = step.annotations.iter().find(|a| {
+                                            a.start_line <= line + 1 && a.end_line > line
                                         });
                                         let text =
                                             RichText::new(format!("{:>4}  {source}", line + 1))
                                                 .monospace();
-                                        if selected {
-                                            ui.colored_label(Color32::from_rgb(45, 105, 145), text);
-                                        } else {
-                                            ui.label(text);
-                                        }
+                                        let accent = focused_annotation
+                                            .or(annotated)
+                                            .map(|a| color(a.color));
+                                        egui::Frame::new()
+                                            .fill(accent.map_or(Color32::TRANSPARENT, |color| {
+                                                color.gamma_multiply(
+                                                    if focused_annotation.is_some() {
+                                                        0.18
+                                                    } else {
+                                                        0.07
+                                                    },
+                                                )
+                                            }))
+                                            .stroke(focused_annotation.map_or(Stroke::NONE, |a| {
+                                                Stroke::new(2.0, color(a.color))
+                                            }))
+                                            .inner_margin(Margin::symmetric(6, 3))
+                                            .show(ui, |ui| {
+                                                ui.label(text);
+                                            });
                                     }
                                     if !step.annotations.is_empty() {
                                         ui.separator();
                                         ui.label(RichText::new("Code annotations").strong());
                                         for annotation in &step.annotations {
-                                            if ui
-                                                .selectable_label(
-                                                    focus.annotation_id.as_ref()
-                                                        == Some(&annotation.id),
-                                                    &annotation.text,
-                                                )
-                                                .clicked()
-                                            {
+                                            let selected = focus.annotation_id.as_ref()
+                                                == Some(&annotation.id);
+                                            let location =
+                                                if annotation.start_line == annotation.end_line {
+                                                    format!("L{}", annotation.start_line)
+                                                } else {
+                                                    format!(
+                                                        "L{}-{}",
+                                                        annotation.start_line, annotation.end_line
+                                                    )
+                                                };
+                                            let response = egui::Frame::new()
+                                                .fill(if selected {
+                                                    color(annotation.color).gamma_multiply(0.14)
+                                                } else {
+                                                    Color32::TRANSPARENT
+                                                })
+                                                .stroke(if selected {
+                                                    Stroke::new(2.0, color(annotation.color))
+                                                } else {
+                                                    Stroke::new(
+                                                        1.0,
+                                                        Color32::from_rgb(215, 220, 223),
+                                                    )
+                                                })
+                                                .inner_margin(Margin::symmetric(8, 6))
+                                                .show(ui, |ui| {
+                                                    ui.horizontal_wrapped(|ui| {
+                                                        ui.label(
+                                                            RichText::new(location)
+                                                                .monospace()
+                                                                .strong(),
+                                                        );
+                                                        ui.label(&annotation.text);
+                                                    });
+                                                })
+                                                .response
+                                                .interact(egui::Sense::click());
+                                            if response.clicked() {
                                                 let _ = self.focus_walkthrough(WalkthroughFocus {
                                                     step_index: focus.step_index,
                                                     annotation_id: Some(annotation.id.clone()),
@@ -546,6 +588,28 @@ impl NotebookEguiApp {
             });
         }
     }
+}
+
+fn walkthrough_light(ui: &mut egui::Ui, active: bool, position: usize, title: &str) -> bool {
+    let response = ui
+        .add_sized([22.0, 22.0], egui::Button::new("").frame(false))
+        .on_hover_text(format!("{}: {title}", position + 1));
+    let center = response.rect.center();
+    let color = if active || response.hovered() {
+        Color32::from_rgb(45, 105, 143)
+    } else {
+        Color32::from_rgb(215, 220, 223)
+    };
+    ui.painter()
+        .circle_filled(center, if active { 6.0 } else { 4.0 }, color);
+    if active {
+        ui.painter().circle_stroke(
+            center,
+            8.0,
+            Stroke::new(1.0, Color32::from_rgb(45, 105, 143)),
+        );
+    }
+    response.clicked()
 }
 
 fn overlay_rect(stage: egui::Rect, bounds: &OverlayBounds) -> egui::Rect {

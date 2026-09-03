@@ -50,7 +50,17 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
         id: "waves",
         title: "Two waves, one phase",
         code: "sin(x - t)\ncos(x - t)",
-        markdown: "Sine and cosine share a frequency, but differ in phase.",
+        markdown:
+          "Sine and cosine share a frequency: $\\omega$. Their phase relation is $$\\cos(x)=\\sin(x+\\pi/2).$$",
+        annotations: [
+          {
+            id: "sine-wave",
+            start_line: 1,
+            end_line: 1,
+            text: "This line draws the sine wave.",
+            color: "blue",
+          },
+        ],
         graphics: waveGraphics,
         playground_code: "print(40 + 2)",
         overlays: [
@@ -63,7 +73,8 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
             id: "intro",
             kind: "markdown",
             bounds: { x: 35, y: 35, width: 430, height: 120 },
-            markdown: "**Foreground explanation** over the animated stage.",
+            markdown:
+              "**Foreground explanation:** inline $\\omega t$ stays aligned with this text.\n\n$$\\cos(x)=\\sin(x+\\pi/2)$$",
             style: {
               opacity: 225,
               font: "proportional",
@@ -105,6 +116,14 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
   const call = (name: string, args: Record<string, unknown> = {}) =>
     microscopeCall(page, name, { ...scope, ...args });
   await call("open_microscope");
+  expect(
+    (
+      await call("focus_microscope_annotation", {
+        step_index: 0,
+        annotation_id: "sine-wave",
+      })
+    ).isError,
+  ).toBe(false);
   const status = async () => {
     const context = (await microscopeCall(page, "get_active_context"))
       .structuredContent.context as {
@@ -136,13 +155,13 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
   await page.screenshot({
     path: ".runtime/graphics-stage-before-controls.png",
   });
-  await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 180);
+  await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 215);
   await expect.poll(async () => (await status())?.paused).toBe(true);
   await page.waitForTimeout(150);
   const pausedFrames = (await status())!.frames;
   await page.waitForTimeout(150);
   expect((await status())!.frames).toBe(pausedFrames);
-  await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 180);
+  await page.mouse.click(canvas.x + canvas.width * 0.73, canvas.y + 215);
   await expect
     .poll(async () => (await status())?.frames ?? 0)
     .toBeGreaterThan(pausedFrames);

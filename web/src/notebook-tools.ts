@@ -59,6 +59,12 @@ type Cell = {
 const markdownGroupMetadataKey = "didaction_markdown_group";
 const id: Field = { type: "string", minLength: 1, maxLength: 128 };
 const source: Field = { type: "string", maxLength: 64000 };
+const walkthroughMarkdown: Field = {
+  type: "string",
+  maxLength: 64000,
+  description:
+    "Rendered CommonMark. Inline math uses $...$ and display math uses $$...$$; both are typeset in the notebook and microscope UI.",
+};
 const index: Field = { type: "integer", minimum: 0, maximum: 2047 };
 const timeout: Field = { type: "integer", minimum: 1, maximum: 120000 };
 const definitions: ToolDefinition[] = [];
@@ -178,7 +184,7 @@ const walkthroughOverlay: Field = {
       enum: ["code", "markdown", "graphics_controls"],
     },
     bounds: overlayBounds,
-    markdown: source,
+    markdown: walkthroughMarkdown,
     style: {
       type: "object",
       additionalProperties: false,
@@ -210,7 +216,7 @@ const walkthrough: Field = {
           id: shortId,
           title,
           code: source,
-          markdown: source,
+          markdown: walkthroughMarkdown,
           playground_code: { ...source, minLength: 1 },
           graphics: {
             type: "object",
