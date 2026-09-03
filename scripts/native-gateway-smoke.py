@@ -31,6 +31,13 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
     observer = client.post("/api/v1/collaboration/join", headers=b).json()
     b["x-notebook-client"] = observer["token"]
     assert not observer["is_driver"], observer
+    assert client.post("/api/v1/collaboration/claim", headers=b).status_code == 403
+    assert client.post("/api/v1/collaboration/release", headers=b).status_code == 403
+    assert client.post("/api/v1/collaboration/release", headers=a).status_code == 200
+    assert client.post("/api/v1/collaboration/claim", headers=b).status_code == 200
+    assert client.post("/api/v1/collaboration/claim", headers=a).status_code == 403
+    assert client.post("/api/v1/collaboration/release", headers=b).status_code == 200
+    assert client.post("/api/v1/collaboration/claim", headers=a).status_code == 200
 
     def call(kind: str, **kwargs: object) -> dict:
         value = client.post("/api/v1/commands", headers=a, json=command(kind, **kwargs)).json()
@@ -63,6 +70,12 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
                 "code": "x = 42",
                 "playground_code": "temporary_value = 40 + 2\nprint(temporary_value)",
                 "markdown": "The value is **42**.",
+                "graphics": {
+                    "language": "assemblyscript-rgba-1",
+                    "source": "export function render(): usize { return 0; }",
+                    "description": "Source persistence test",
+                    "artifact": "example.ts",
+                },
                 "annotations": [
                     {
                         "id": "value",
@@ -192,9 +205,22 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
     entries_micro = client.get("/api/v1/notebooks", params={"directory": ""}).json()["entries"]
     sidecar_micro = next(e["path"] for e in entries_micro if e["path"].endswith(".micro01"))
     assert sidecar_micro.startswith(path + ".")
+    graphics_path = sidecar_micro + ".example.ts"
+    exported = client.get("/api/v1/workspace-export").json()["entries"]
+    saved_graphics = next(e for e in exported if e["path"] == graphics_path)
+    assert (
+        base64.b64decode(saved_graphics["content_base64"]).decode()
+        == walkthrough["steps"][0]["graphics"]["source"]
+    )
+    walkthrough["steps"][0]["graphics"]["artifact"] = "replaced.ts"
+    call("set_microscope_walkthrough", **micro, walkthrough=walkthrough)
+    exported = client.get("/api/v1/workspace-export").json()["entries"]
+    assert not any(e["path"] == graphics_path for e in exported)
+    graphics_path = sidecar_micro + ".replaced.ts"
+    assert any(e["path"] == graphics_path for e in exported)
     call("delete_microscope", **micro)
     assert not any(
-        e["path"] == sidecar_micro
+        e["path"] in (sidecar_micro, graphics_path)
         for e in client.get("/api/v1/notebooks", params={"directory": ""}).json()["entries"]
     )
     assert (
@@ -292,6 +318,17 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
     call("create_checkpoint")
     exported = client.get("/api/v1/download", headers=a)
     assert exported.json()["nbformat"] == 4
+    workspace_export = client.get("/api/v1/workspace-export").json()
+    exported_files = {entry["path"]: entry for entry in workspace_export["entries"]}
+    assert exported_files["uploads/nested"]["directory"]
+    assert base64.b64decode(exported_files["uploads/nested/data.csv"]["content_base64"])
+    assert json.loads(base64.b64decode(exported_files[path]["content_base64"]))["nbformat"] == 4
+    assert (
+        client.get(
+            "/api/v1/workspace-export", headers={"origin": "https://untrusted.invalid"}
+        ).status_code
+        == 403
+    )
     assert path in client.get("/api/v1/notebooks").text
     for bad in ["../secret", "/secret", "a%2f..%2fb", ".secret", "a\\b"]:
         response = client.get("/api/v1/notebooks", params={"directory": bad})

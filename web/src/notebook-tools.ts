@@ -9,6 +9,7 @@ export type ToolResult = {
   isError: boolean;
 };
 type Field = {
+  description?: string;
   type: "string" | "integer" | "boolean" | "object" | "array";
   properties?: Record<string, Field>;
   required?: string[];
@@ -18,6 +19,7 @@ type Field = {
   maxItems?: number;
   maxLength?: number;
   minLength?: number;
+  pattern?: string;
   minimum?: number;
   maximum?: number;
   enum?: string[];
@@ -172,6 +174,29 @@ const walkthrough: Field = {
           code: source,
           markdown: source,
           playground_code: { ...source, minLength: 1 },
+          graphics: {
+            type: "object",
+            additionalProperties: false,
+            required: ["language", "source", "description"],
+            properties: {
+              language: { type: "string", enum: ["assemblyscript-rgba-1"] },
+              source: {
+                ...source,
+                minLength: 1,
+                description:
+                  "AssemblyScript exports: init(width:i32,height:i32,stepIndex:i32):void; render(width:i32,height:i32,elapsed:f64,delta:f64):usize returns a pointer to width*height*4 unpremultiplied RGBA bytes; dispose():void. Physical pixels, seconds, max 1024x768; fixed 16 MiB stub runtime, reuse allocations. Only memory and abort imports are allowed; no browser/kernel APIs.",
+              },
+              description: { type: "string", minLength: 1, maxLength: 1024 },
+              artifact: {
+                type: "string",
+                minLength: 4,
+                maxLength: 80,
+                pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*\\.ts$",
+                description:
+                  "Save an owned graphics source attachment as <microscope-path>.<artifact>, e.g. orbit.ts. Updated/deleted with the microscope and included in workspace export.",
+              },
+            },
+          },
           annotations: { type: "array", maxItems: 32, items: annotation },
         },
       },

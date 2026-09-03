@@ -4,6 +4,30 @@ import {
   uploadRequest,
   type ArtifactTransport,
 } from "./artifacts";
+import { downloadWorkspace, writeWorkspaceZip } from "./workspace-export";
+
+type ExplorerEntry = { name: string; path: string; type: string };
+export function visibleWorkspaceEntries(entries: ExplorerEntry[]) {
+  const counts = new Map<string, number>();
+  const visible = entries.filter((entry) => {
+    const match =
+      entry.type === "file" &&
+      /^(.*\.ipynb)\.[0-9a-f]{7}\.[a-z0-9]{7}(\.[A-Za-z0-9][A-Za-z0-9_-]*\.ts)?$/.exec(
+        entry.path,
+      );
+    if (
+      !match ||
+      !entries.some((e) => e.type === "notebook" && e.path === match[1])
+    )
+      return true;
+    if (!match[2]) counts.set(match[1]!, (counts.get(match[1]!) ?? 0) + 1);
+    return false;
+  });
+  return visible.map((entry) => ({
+    ...entry,
+    microscopeCount: counts.get(entry.path) ?? 0,
+  }));
+}
 export function installExplorer(
   current: string,
   assertSaved: () => void,
@@ -14,6 +38,7 @@ export function installExplorer(
   }>,
   artifacts?: ArtifactTransport,
   canWrite: () => boolean = () => false,
+  exportWorkspace?: () => Promise<import("./workspace-zip").WorkspaceEntry[]>,
 ): void {
   const panel = document.querySelector<HTMLElement>("#file-explorer")!;
   const list = document.querySelector<HTMLUListElement>("#notebook-files")!;
@@ -55,10 +80,12 @@ export function installExplorer(
       crumb.textContent = directory ? `Workspace / ${directory}` : "Workspace";
       crumb.title = crumb.textContent;
       up.disabled = !directory;
-      for (const entry of data.entries) {
+      const visible = visibleWorkspaceEntries(data.entries);
+      for (const entry of visible) {
         const item = document.createElement("li");
         const button = document.createElement("button");
         button.type = "button";
+        button.setAttribute("aria-label", entry.name);
         const icon = document.createElementNS(
           "http://www.w3.org/2000/svg",
           "svg",
@@ -76,6 +103,22 @@ export function installExplorer(
         const label = document.createElement("span");
         label.textContent = entry.name;
         button.append(icon, label);
+        if (entry.type === "notebook") {
+          const count = document.createElement("span");
+          count.className = "microscope-count";
+          count.title = `${entry.microscopeCount} microscopes`;
+          count.setAttribute("aria-label", count.title);
+          button.setAttribute("aria-description", count.title);
+          const scopeIcon = icon.cloneNode(false) as SVGElement;
+          const path = document.createElementNS(icon.namespaceURI, "path");
+          path.setAttribute(
+            "d",
+            "M4 21h16 M12 21v-4 M3 15h12 M6 3l3-2 7 7-3 3Z M16 10c6 2 5 9-4 9",
+          );
+          scopeIcon.append(path);
+          count.append(scopeIcon, String(entry.microscopeCount));
+          button.append(count);
+        }
         button.title = entry.path;
         if (
           entry.path ===
@@ -108,8 +151,8 @@ export function installExplorer(
         item.append(button);
         list.append(item);
       }
-      status.textContent = data.entries.length
-        ? `${data.entries.length} workspace items`
+      status.textContent = visible.length
+        ? `${visible.length} workspace items`
         : "This folder is empty. Create a notebook or upload a file.";
     } catch (error) {
       if (request === generation)
@@ -120,6 +163,33 @@ export function installExplorer(
     }
   }
   up.onclick = () => void load(directory.split("/").slice(0, -1).join("/"));
+  window.addEventListener(
+    "workspace-files-changed",
+    () => void load(directory),
+  );
+  if (exportWorkspace) {
+    const button = document.createElement("button");
+    button.id = "workspace-export";
+    button.textContent = "Export workspace";
+    button.title =
+      "Download saved notebooks, folders, artifacts and microscopes as a ZIP. Temporary kernel files are excluded.";
+    status.before(button);
+    button.onclick = async () => {
+      button.disabled = true;
+      status.textContent = "Preparing workspace ZIP…";
+      try {
+        assertSaved();
+        downloadWorkspace(writeWorkspaceZip(await exportWorkspace()));
+        status.textContent =
+          "Workspace exported. Temporary kernel files and variables are not included.";
+      } catch (error) {
+        status.textContent =
+          error instanceof Error ? error.message : "Export failed. Retry.";
+      } finally {
+        button.disabled = false;
+      }
+    };
+  }
   document.querySelector<HTMLButtonElement>("#folder-refresh")!.onclick = () =>
     void load(directory);
   const form = document.querySelector<HTMLFormElement>("#artifact-create")!;

@@ -205,14 +205,15 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 
 - **Character:** The familiar Jupyter hierarchy: notebook title, menu row, then a compact icon toolbar grouped by separators and allowed to wrap.
 - **Actions:** Save, insert below, move up/down, run selected, interrupt, restart, and selected-cell type appear in Jupyter order. Less frequent supported actions live in File, Edit, View, Insert, Cell, Run, and Kernel menus. Reconnect appears only when disconnected.
-- **State:** Commands are disabled while a mutation or execution makes them unsafe; control availability communicates command validity without noisy animation.
+- **State:** Commands are disabled while a mutation or execution makes them unsafe; control availability communicates command validity without noisy animation. In browser mode, Create Checkpoint stays disabled with a tooltip explaining that checkpoints are unavailable and directing users to export the workspace for a backup.
 - **Commit behavior:** “Run all” flushes every visible dirty source before queuing code-cell execution, so the notebook runs what the user can see.
 
 ### Notebook Explorer
 
 - **Structure:** A flat white sidebar beside the notebook canvas, separated by a hairline divider, with a 12px inset and independent vertical scrolling. Its expanded width is 248px, reducing to 180px at viewport widths of 640px or less; collapsing it returns that space to the document.
-- **Controls:** An outlined sidebar icon is the first egui toolbar button, immediately before Save, using the same sizing and styling. Its tooltip reflects Show/Hide state. A focus-revealed DOM equivalent retains keyboard and screen-reader access. The sidebar shows a “Notebooks” heading, a wrapping workspace-relative folder path, and explicit Up and Refresh actions; Up is disabled at the workspace root.
-- **Rows:** Full-width, left-aligned buttons pair small outlined SVG folder or notebook icons with wrapping names. The current notebook uses the existing blue selection surface and an accessible current-page marker; icons are decorative, while names and path tooltips identify entries.
+- **Controls:** An outlined sidebar icon sits at the bottom-left of the egui status strip, using the existing compact icon-button sizing and styling. Its tooltip reflects Show/Hide state. A focus-revealed DOM equivalent retains keyboard and screen-reader access. The sidebar shows a “Notebooks” heading, a wrapping workspace-relative folder path, and explicit Up and Refresh actions; Up is disabled at the workspace root.
+- **Rows:** Full-width, left-aligned buttons pair small outlined SVG folder or notebook icons with wrapping names. Each notebook has a muted, right-aligned microscope icon and total, also exposed as an accessible description. Recognized microscope sidecars are hidden when their owning notebook is present; orphan sidecars remain visible. The current notebook uses the existing blue selection surface and an accessible current-page marker; icons are decorative, while names and path tooltips identify entries.
+- **Export:** An Export workspace button below the create/upload controls downloads a bounded ZIP of saved notebooks, folders, artifacts, and microscope content. Its tooltip and completion status explicitly exclude temporary kernel files and variables. Preparation disables the button and reports progress; failures remain visible with actionable guidance.
 - **Navigation:** Folders open in the sidebar without replacing the notebook. Opening another notebook is guarded: unsaved edits or active execution keep the current document open and show guidance to save and wait before switching.
 - **Feedback:** Quiet status text reports loading, entry counts, empty folders, or actionable recovery through Up or Refresh. Controls retain the existing square form, restrained hover treatment, and visible keyboard focus.
 
@@ -221,6 +222,7 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 - **Shape:** A nearly square bordered container with a small inner inset.
 - **Selection:** The active cell receives a 2px blue edge and a barely blue surface; inactive cells use a 1px neutral edge and white surface.
 - **Header:** A compact drag target and monospace execution prompt identify the cell. Notebook actions remain in the stable top toolbar and menus instead of repeating inside every cell.
+- **Microscopes:** Cells with microscopes expose their dropdown through a drawn microscope icon with the accessible name and tooltip “Microscopes (N)”, preserving the count without a long visible label.
 - **Editor:** Multiline monospace editing fills the available width, grows within bounded visible lines, and selects its cell on focus or click.
 - **Markdown:** Markdown cells open rendered. Double-clicking rendered content enters source editing; the explicit Render Markdown action returns to the document view.
 - **Commit behavior:** Changed source flushes on focus loss. Run, keyboard Run, insertion, duplication, conversion, movement, and deletion flush the visible source before their serialized mutation or execution commands, keeping actions aligned with the text on screen.
@@ -232,7 +234,7 @@ The shell and browser-level controls are square. Notebook cells have only a gent
 
 ### Status Strip
 
-- **Structure:** A compact bottom row with a colored state dot, synchronization label, kernel name/state, and notebook revision separated by rules.
+- **Structure:** A compact bottom row beginning with the explorer toggle at the left, followed by a colored state dot, synchronization label, kernel name/state, and notebook revision separated by rules.
 - **Failure:** The status label becomes “Action required” and a second line explains whether to retry/reconnect or edit the request.
 
 ### Browser Button

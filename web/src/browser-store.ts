@@ -1,4 +1,5 @@
 import type { NotebookSnapshot } from "./types";
+import { microscopeGraphicsArtifacts } from "../pkg/notebook_wasm";
 
 export function browserPath(path: string, directory = false): string {
   if (
@@ -36,6 +37,36 @@ export interface NotebookStore {
 }
 /** Origin-local notebooks, deliberately separate from the kernel's temporary FS. */
 export class IndexedNotebookStore implements NotebookStore {
+  /** Read both stores in one transaction so notebook references and sidecars agree. */
+  async exportEntries() {
+    const { notebookBytes } = await import("./workspace-export");
+    const db = await this.db;
+    return new Promise<import("./workspace-zip").WorkspaceEntry[]>(
+      (resolve, reject) => {
+        const tx = db.transaction(["notebooks", "artifacts"]);
+        const books = tx.objectStore("notebooks").getAll();
+        const files = tx.objectStore("artifacts").getAll();
+        tx.oncomplete = () => {
+          try {
+            resolve([
+              ...files.result,
+              ...books.result.map(
+                (book: import("./browser-transport").BrowserSnapshot) => ({
+                  path: book.notebook.path,
+                  directory: false,
+                  bytes: notebookBytes(book),
+                }),
+              ),
+            ]);
+          } catch (error) {
+            reject(error);
+          }
+        };
+        tx.onabort = tx.onerror = () =>
+          reject(new Error("Unable to read workspace for export. Retry."));
+      },
+    );
+  }
   async commitMicroscope(
     snapshot: NotebookSnapshot,
     path: string,
@@ -43,6 +74,12 @@ export class IndexedNotebookStore implements NotebookStore {
     previous?: string,
   ): Promise<void> {
     browserPath(path, true);
+    const priorGraphics: Record<string, string> = previous
+      ? JSON.parse(microscopeGraphicsArtifacts(previous))
+      : {};
+    const nextGraphics: Record<string, string> = content
+      ? JSON.parse(microscopeGraphicsArtifacts(content))
+      : {};
     const bytes = content === null ? null : new TextEncoder().encode(content);
     const notebook = (snapshot.notebook as { path: string }).path;
     const db = await this.db;
@@ -56,33 +93,55 @@ export class IndexedNotebookStore implements NotebookStore {
         const existing = saved.result.find(
           (f: { path: string }) => f.path === path,
         );
+        const changedPaths = new Set([
+          path,
+          ...Object.keys(priorGraphics),
+          ...Object.keys(nextGraphics),
+        ]);
+        const nextFiles = Object.entries(nextGraphics).map(
+          ([path, source]) => ({
+            path,
+            directory: false,
+            bytes: new TextEncoder().encode(source),
+          }),
+        );
+        if (bytes) nextFiles.push({ path, directory: false, bytes });
+        const retained = saved.result.filter(
+          (f: { path: string }) => !changedPaths.has(f.path),
+        );
+        for (const name of changedPaths) {
+          if (name === path) continue;
+          const old = saved.result.find(
+            (f: { path: string }) => f.path === name,
+          );
+          if (
+            old &&
+            (old.directory ||
+              priorGraphics[name] === undefined ||
+              new TextDecoder().decode(old.bytes) !== priorGraphics[name])
+          ) {
+            tx.abort();
+            return;
+          }
+        }
         if (
           (previous !== undefined
             ? !existing || new TextDecoder().decode(existing.bytes) !== previous
             : content !== null && existing) ||
           (content !== null &&
-            (count.result + saved.result.length - (existing ? 1 : 0) >= 1000 ||
-              saved.result.reduce(
+            (count.result + retained.length + nextFiles.length > 1000 ||
+              retained.reduce(
                 (n: number, f: { bytes: Uint8Array }) => n + f.bytes.length,
                 0,
               ) +
-                bytes!.length -
-                (existing?.bytes.length ?? 0) >
+                nextFiles.reduce((n, f) => n + f.bytes.length, 0) >
                 20_000_000))
         ) {
           tx.abort();
           return;
         }
-        if (content === null) files.delete(path);
-        else
-          files.put(
-            {
-              path,
-              directory: false,
-              bytes,
-            },
-            path,
-          );
+        for (const name of changedPaths) files.delete(name);
+        for (const file of nextFiles) files.put(file, file.path);
         books.put(snapshot, browserPath(notebook));
       };
       tx.oncomplete = () => resolve();

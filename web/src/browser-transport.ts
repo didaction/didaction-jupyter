@@ -235,6 +235,9 @@ export class BrowserNotebookTransport implements NotebookTransport {
           }
           sidecar = {
             path: identity.path,
+            previous: stored
+              ? new TextDecoder().decode(stored.bytes)
+              : undefined,
             content:
               command.type === "create_microscope"
                 ? JSON.stringify(identity.document)

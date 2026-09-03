@@ -89,6 +89,63 @@ impl CreateArtifact {
 }
 
 impl Jupyter {
+    /// Bounded recursive read through the confined Contents API, never host filesystem access.
+    pub async fn export_workspace(&self) -> Result<Value> {
+        let mut folders = vec![String::new()];
+        let mut entries = Vec::new();
+        let mut total = 0;
+        while let Some(folder) = folders.pop() {
+            let listing = self.list(&folder).await?;
+            for item in listing["entries"].as_array().ok_or_else(malformed)? {
+                if entries.len() >= 1000 {
+                    return Err(error(
+                        ErrorCode::BoundsExceeded,
+                        "Workspace export exceeds 1,000 items",
+                    ));
+                }
+                let path = item["path"].as_str().ok_or_else(malformed)?;
+                let directory = item["type"] == "directory";
+                let bytes = if directory {
+                    folders.push(path.into());
+                    Vec::new()
+                } else if item["type"] == "notebook" {
+                    serde_json::to_vec(&self.read(path).await?).map_err(|_| malformed())?
+                } else {
+                    let path = self.config.path(path, true)?;
+                    let (status, raw) = self
+                        .request(
+                            Method::GET,
+                            &format!("api/contents/{path}?format=base64"),
+                            None,
+                        )
+                        .await?;
+                    if status != 200 || raw["format"] != "base64" {
+                        return Err(malformed());
+                    }
+                    STANDARD
+                        .decode(
+                            raw["content"]
+                                .as_str()
+                                .ok_or_else(malformed)?
+                                .replace('\n', ""),
+                        )
+                        .map_err(|_| malformed())?
+                };
+                total += bytes.len();
+                if bytes.len() > MAX_ARTIFACT_BYTES || total > 20_000_000 {
+                    return Err(error(
+                        ErrorCode::BoundsExceeded,
+                        "Workspace export exceeds 1 MB per file or 20 MB total",
+                    ));
+                }
+                entries.push(json!({"path":path,"directory":directory,"content_base64":STANDARD.encode(bytes)}));
+            }
+        }
+        Ok(json!({"entries":entries}))
+    }
+}
+
+impl Jupyter {
     pub async fn read_microscope(
         &self,
         expected: &notebook_protocol::microscope::MicroscopeDocument,
@@ -136,28 +193,13 @@ impl Jupyter {
         &self,
         doc: &notebook_protocol::microscope::MicroscopeDocument,
     ) -> Result<()> {
-        let path = notebook_protocol::microscope::sidecar(
-            &doc.notebook_path,
-            &doc.cell_id,
-            &doc.microscope.id,
-        )?;
         if self.read_microscope(doc).await?.is_some() {
             return Err(error(
                 ErrorCode::InvalidInput,
                 "Microscope sidecar already exists",
             ));
         }
-        let body = json!({"type":"file","format":"text","content":serde_json::to_string(doc).map_err(|_| malformed())?});
-        let (status, _) = self
-            .request(Method::PUT, &format!("api/contents/{path}"), Some(body))
-            .await?;
-        if status != 201 {
-            return Err(error(
-                ErrorCode::TransportError,
-                "Microscope file creation was not confirmed",
-            ));
-        }
-        Ok(())
+        self.write_microscope_bundle(None, Some(doc)).await
     }
     pub async fn replace_microscope(
         &self,
@@ -170,47 +212,138 @@ impl Jupyter {
                 "Microscope changed; refresh before editing",
             ));
         }
-        let path = notebook_protocol::microscope::sidecar(
-            &doc.notebook_path,
-            &doc.cell_id,
-            &doc.microscope.id,
-        )?;
-        let body = json!({"type":"file","format":"text","content":serde_json::to_string(doc).map_err(|_| malformed())?});
-        let (status, _) = self
-            .request(Method::PUT, &format!("api/contents/{path}"), Some(body))
-            .await?;
-        if status != 200 {
-            return Err(error(
-                ErrorCode::TransportError,
-                "Microscope update was not confirmed",
-            ));
-        }
-        Ok(())
+        self.write_microscope_bundle(Some(previous), Some(doc))
+            .await
     }
     pub async fn delete_microscope(
         &self,
         doc: &notebook_protocol::microscope::MicroscopeDocument,
     ) -> Result<()> {
-        if self.read_microscope(doc).await?.is_none() {
+        let Some(stored) = self.read_microscope(doc).await? else {
             return Ok(());
+        };
+        self.write_microscope_bundle(Some(&stored), None).await
+    }
+    /// Contents has no transaction. Preflight ownership, then compensate failures.
+    /// The enclosing workspace namespace lock serializes application writers.
+    async fn write_microscope_bundle(
+        &self,
+        previous: Option<&notebook_protocol::microscope::MicroscopeDocument>,
+        next: Option<&notebook_protocol::microscope::MicroscopeDocument>,
+    ) -> Result<()> {
+        use std::collections::{BTreeMap, BTreeSet};
+        fn bundle(
+            doc: Option<&notebook_protocol::microscope::MicroscopeDocument>,
+        ) -> Result<BTreeMap<String, String>> {
+            let Some(doc) = doc else {
+                return Ok(BTreeMap::new());
+            };
+            let mut files = notebook_protocol::microscope::graphics_artifacts(doc)?;
+            files.insert(
+                notebook_protocol::microscope::sidecar(
+                    &doc.notebook_path,
+                    &doc.cell_id,
+                    &doc.microscope.id,
+                )?,
+                serde_json::to_string(doc).map_err(|_| malformed())?,
+            );
+            Ok(files)
         }
-        let path = notebook_protocol::microscope::sidecar(
-            &doc.notebook_path,
-            &doc.cell_id,
-            &doc.microscope.id,
-        )?;
-        if self
-            .request(Method::DELETE, &format!("api/contents/{path}"), None)
-            .await?
-            .0
-            != 204
-        {
-            return Err(error(
-                ErrorCode::TransportError,
-                "Microscope file deletion was not confirmed",
-            ));
+        let old = bundle(previous)?;
+        let new = bundle(next)?;
+        let paths: BTreeSet<_> = old.keys().chain(new.keys()).cloned().collect();
+        let mut backup = BTreeMap::new();
+        for path in &paths {
+            super::config::confined(path, false)?;
+            let (status, body) = self
+                .request(
+                    Method::GET,
+                    &format!("api/contents/{path}?format=text"),
+                    None,
+                )
+                .await?;
+            if status == 404 {
+                backup.insert(path.clone(), None);
+                continue;
+            }
+            if status != 200 || body["type"] != "file" {
+                return Err(error(
+                    ErrorCode::TransportError,
+                    "Unable to inspect microscope attachment",
+                ));
+            }
+            let content = body["content"].as_str().ok_or_else(malformed)?;
+            // JSON formatting is not ownership; compare the document structurally.
+            let matches = old.get(path).is_some_and(|expected| {
+                expected == content
+                    || (previous.is_some_and(|d| {
+                        notebook_protocol::microscope::sidecar(
+                            &d.notebook_path,
+                            &d.cell_id,
+                            &d.microscope.id,
+                        )
+                        .ok()
+                        .as_ref()
+                            == Some(path)
+                    }) && serde_json::from_str::<Value>(content).ok()
+                        == serde_json::from_str::<Value>(expected).ok())
+            });
+            if !matches {
+                return Err(error(
+                    ErrorCode::StaleRevision,
+                    "Microscope attachment changed or its name is occupied; preserve it and refresh",
+                ));
+            }
+            backup.insert(path.clone(), Some(content.to_owned()));
+        }
+        let mut attempted = Vec::new();
+        for path in &paths {
+            attempted.push(path);
+            if self
+                .write_microscope_file(path, new.get(path).map(String::as_str))
+                .await
+                .is_err()
+            {
+                let mut restored = true;
+                for path in attempted.into_iter().rev() {
+                    restored &= self
+                        .write_microscope_file(path, backup[path].as_deref())
+                        .await
+                        .is_ok();
+                }
+                return Err(error(
+                    ErrorCode::TransportError,
+                    if restored {
+                        "Microscope save failed; prior files restored"
+                    } else {
+                        "Microscope save and recovery failed; inspect workspace before retrying"
+                    },
+                ));
+            }
         }
         Ok(())
+    }
+    async fn write_microscope_file(&self, path: &str, content: Option<&str>) -> Result<()> {
+        let (method, body) = match content {
+            Some(content) => (
+                Method::PUT,
+                Some(json!({"type":"file","format":"text","content":content})),
+            ),
+            None => (Method::DELETE, None),
+        };
+        let (status, _) = self
+            .request(method, &format!("api/contents/{path}"), body)
+            .await?;
+        if (content.is_some() && matches!(status, 200 | 201))
+            || (content.is_none() && matches!(status, 204 | 404))
+        {
+            Ok(())
+        } else {
+            Err(error(
+                ErrorCode::TransportError,
+                "Microscope attachment write was not confirmed",
+            ))
+        }
     }
     pub async fn create_artifact(&self, input: CreateArtifact) -> Result<Value> {
         let path = self.config.path(&input.path, true)?;

@@ -169,6 +169,17 @@ export class NotebookCollaboration implements FollowTransport, FollowPublisher {
         "Driver handoff refused; wait until idle and select a connected collaborator",
       );
   }
+  async setDriverPermission(action: "claim" | "release"): Promise<void> {
+    const response = await fetch(`/api/v1/collaboration/${action}`, {
+      method: "POST",
+      headers: this.headers(),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok)
+      throw new Error(
+        "Control change refused. Wait until idle; the current driver must release control before someone can claim it.",
+      );
+  }
   async watch(
     onState: (state: CollaborationState) => void,
     onDisconnect: () => void,

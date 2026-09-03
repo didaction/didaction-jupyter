@@ -165,7 +165,7 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   expect(await scroll(observer)).toBeLessThan(0.01);
   await observer
     .locator("#notebook-canvas")
-    .click({ position: { x: 60, y: 94 } });
+    .click({ position: { x: 24, y: 94 } });
   await expect(observer).toHaveURL(new RegExp(names[0]!));
   await expect
     .poll(async () => Math.abs((await scroll(page)) - (await scroll(observer))))

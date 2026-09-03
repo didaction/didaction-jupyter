@@ -71,10 +71,16 @@ test("workspace explorer opens notebooks without redirecting another tab", async
       await page.request.get("/api/v1/notebooks?directory=..%2Foutside")
     ).status(),
   ).toBe(400);
-  // First native egui toolbar slot, before Save (desktop toolbar geometry).
-  await page.locator("#notebook-canvas").click({ position: { x: 24, y: 94 } });
+  // First status-bar slot, now independent of toolbar layout.
+  let canvas = (await page.locator("#notebook-canvas").boundingBox())!;
+  await page
+    .locator("#notebook-canvas")
+    .click({ position: { x: 24, y: canvas.height - 16 } });
   await expect(page.locator("#file-explorer")).toBeHidden();
-  await page.locator("#notebook-canvas").click({ position: { x: 24, y: 94 } });
+  canvas = (await page.locator("#notebook-canvas").boundingBox())!;
+  await page
+    .locator("#notebook-canvas")
+    .click({ position: { x: 24, y: canvas.height - 16 } });
   await expect(page.locator("#file-explorer")).toBeVisible();
   await page.screenshot({ path: ".impeccable/review/desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });

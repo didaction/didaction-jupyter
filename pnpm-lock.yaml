@@ -10,6 +10,9 @@ importers:
       "@jupyterlite/pyodide-kernel":
         specifier: 0.8.5
         version: 0.8.5(react@18.3.1)
+      assemblyscript:
+        specifier: 0.28.9
+        version: 0.28.9
       pyodide:
         specifier: 314.0.5
         version: 314.0.5
@@ -861,6 +864,14 @@ packages:
         integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==,
       }
 
+  assemblyscript@0.28.9:
+    resolution:
+      {
+        integrity: sha512-UQqIYSUuJzqQP6fKTs1CtanyxmnDk7K+Kmj/J67agimxDqxjdMnTF/y9rEHUBL+K/VIEV4QYu57RMrL5LwbAvw==,
+      }
+    engines: { node: ">=20", npm: ">=10" }
+    hasBin: true
+
   assertion-error@2.0.1:
     resolution:
       {
@@ -893,6 +904,13 @@ packages:
       }
     engines: { node: ">=10" }
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
+  binaryen@123.0.0-nightly.20250530:
+    resolution:
+      {
+        integrity: sha512-d1zPHBN5YlOd3Ff+OUxvVExuFeh8heSnqe+X3bjItFxGLvn4VGBKmrvv7pgy/cRhrIUGuPW138iaWfDhwjyDqg==,
+      }
+    hasBin: true
 
   brace-expansion@1.1.18:
     resolution:
@@ -1279,6 +1297,12 @@ packages:
     resolution:
       {
         integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==,
+      }
+
+  long@5.3.2:
+    resolution:
+      {
+        integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==,
       }
 
   loose-envify@1.4.0:
@@ -2468,6 +2492,11 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
+  assemblyscript@0.28.9:
+    dependencies:
+      binaryen: 123.0.0-nightly.20250530
+      long: 5.3.2
+
   assertion-error@2.0.1: {}
 
   async-mutex@0.3.2:
@@ -2489,6 +2518,8 @@ snapshots:
       tar: 6.2.1
     transitivePeerDependencies:
       - debug
+
+  binaryen@123.0.0-nightly.20250530: {}
 
   brace-expansion@1.1.18:
     dependencies:
@@ -2707,6 +2738,8 @@ snapshots:
   lodash.escape@4.0.1: {}
 
   lodash@4.18.1: {}
+
+  long@5.3.2: {}
 
   loose-envify@1.4.0:
     dependencies:

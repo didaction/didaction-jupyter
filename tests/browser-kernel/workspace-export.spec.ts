@@ -1,0 +1,123 @@
+import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { readWorkspaceZip } from "../../web/src/workspace-zip";
+import { waveGraphics } from "../fixtures/graphics";
+import {
+  installMicroscopeTools,
+  microscopeCall,
+} from "../fixtures/microscope-tools";
+
+test("browser workspace export bundles notebooks and microscopes; explorer stays compact", async ({
+  page,
+  browser,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await installMicroscopeTools(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open demo workspace" }).click();
+  await expect(page.locator("#connection-status")).toContainText(
+    "WebMCP ready",
+  );
+  const scope = {
+    notebook_path: "browser-demo.ipynb",
+    cell_id: "browser-example",
+  };
+  const result = await microscopeCall(page, "create_microscope", {
+    ...scope,
+    title: "Export demo",
+    walkthrough: {
+      title: "Export demo",
+      steps: [
+        {
+          id: "one",
+          title: "One",
+          code: "42",
+          markdown: "A saved explanation",
+          graphics: { ...waveGraphics, artifact: "waves.ts" },
+        },
+      ],
+    },
+  });
+  expect(result.isError).toBe(false);
+  await expect(page.locator(".microscope-count")).toHaveText("1");
+  await expect(page.locator("#notebook-files li")).toHaveCount(1);
+  const downloadPromise = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Export workspace", exact: true })
+    .click();
+  const download = await downloadPromise;
+  const bytes = await readFile((await download.path())!);
+  const entries = await readWorkspaceZip(Uint8Array.from(bytes).buffer);
+  const notebook = JSON.parse(
+    new TextDecoder().decode(
+      entries.find((e) => e.path === scope.notebook_path)!.bytes,
+    ),
+  );
+  expect(notebook.nbformat).toBe(4);
+  const graphics = entries.find((e) => e.path.endsWith(".waves.ts"));
+  expect(new TextDecoder().decode(graphics!.bytes)).toBe(waveGraphics.source);
+  expect(graphics!.path).toContain(
+    `${result.structuredContent.microscope_id}.waves.ts`,
+  );
+  await expect(page.locator("#notebook-name")).toHaveText("browser-demo.ipynb");
+  await expect(page.locator("#browser-home")).toBeVisible();
+  expect(
+    entries.some((e) =>
+      e.path.endsWith(String(result.structuredContent.microscope_id)),
+    ),
+  ).toBe(true);
+  for (const width of [1280, 846]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({ path: `.runtime/workspace-controls-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.mouse.click(270, 102);
+  await page.screenshot({ path: ".runtime/browser-checkpoint-disabled.png" });
+  // Restore into independent browser storage, not over the original workspace.
+  const restoredContext = await browser.newContext();
+  try {
+    const restored = await restoredContext.newPage();
+    await installMicroscopeTools(restored);
+    await restored.goto(new URL("/", page.url()).href);
+    await expect(
+      restored.getByRole("heading", { name: "Open a browser workspace" }),
+    ).toBeVisible();
+    await restored.locator("#browser-zip").setInputFiles({
+      name: "workspace.zip",
+      mimeType: "application/zip",
+      buffer: bytes,
+    });
+    await expect(restored.locator("#connection-status")).toContainText(
+      "WebMCP ready",
+    );
+    const read = await microscopeCall(restored, "read_microscope", {
+      ...scope,
+      microscope_id: result.structuredContent.microscope_id,
+    });
+    expect(read.isError).toBe(false);
+    expect(JSON.stringify(read)).toContain("A saved explanation");
+  } finally {
+    await restoredContext.close();
+  }
+  await page.keyboard.press("Escape");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "Choose another environment" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Open a browser workspace" }),
+  ).toBeVisible();
+  await expect(page.locator("#browser-home")).toBeHidden();
+  await page.getByRole("button", { name: "Continue saved workspace" }).click();
+  await expect(page.locator("#connection-status")).toContainText(
+    "WebMCP ready",
+  );
+  expect(
+    (
+      await microscopeCall(page, "read_microscope", {
+        ...scope,
+        microscope_id: result.structuredContent.microscope_id,
+      })
+    ).isError,
+  ).toBe(false);
+});

@@ -34,7 +34,7 @@ impl NotebookEguiApp {
             .as_ref()
             .and_then(|t| t.focus.clone())
             .unwrap_or_default();
-        serde_json::json!({"title":w.title,"step_index":focus.step_index,"step_count":w.steps.len(),"step_id":w.steps[focus.step_index].id,"annotation_id":focus.annotation_id})
+        serde_json::json!({"title":w.title,"step_index":focus.step_index,"step_count":w.steps.len(),"step_id":w.steps[focus.step_index].id,"annotation_id":focus.annotation_id, "graphics":self.graphics_status()})
     }
     pub(super) fn walkthrough_ui(&mut self, ui: &mut egui::Ui, w: &Walkthrough) {
         let mut focus = self
@@ -241,27 +241,31 @@ impl NotebookEguiApp {
                                     }
                                 });
                             let right = &mut columns[1];
-                            right.label(RichText::new("Graphics").strong());
-                            right.add_space(8.0);
-                            egui::Frame::new()
-                                .fill(Color32::from_rgb(247, 249, 250))
-                                .stroke(Stroke::new(1.0, Color32::from_rgb(215, 220, 223)))
-                                .corner_radius(3.0)
-                                .inner_margin(Margin::same(20))
-                                .show(right, |ui| {
-                                    ui.set_min_height(150.0);
-                                    ui.vertical_centered(|ui| {
-                                        ui.add_space(45.0);
-                                        ui.label(
-                                            RichText::new("Graphics placeholder")
-                                                .strong()
-                                                .color(Color32::from_rgb(83, 99, 107)),
-                                        );
-                                        ui.label(
+                            if let Some(graphics) = &step.graphics {
+                                self.graphics_ui(right, &graphics.description, height * 0.55);
+                            } else {
+                                right.label(RichText::new("Graphics").strong());
+                                right.add_space(8.0);
+                                egui::Frame::new()
+                                    .fill(Color32::from_rgb(247, 249, 250))
+                                    .stroke(Stroke::new(1.0, Color32::from_rgb(215, 220, 223)))
+                                    .corner_radius(3.0)
+                                    .inner_margin(Margin::same(20))
+                                    .show(right, |ui| {
+                                        ui.set_min_height(150.0);
+                                        ui.vertical_centered(|ui| {
+                                            ui.add_space(45.0);
+                                            ui.label(
+                                                RichText::new("Graphics placeholder")
+                                                    .strong()
+                                                    .color(Color32::from_rgb(83, 99, 107)),
+                                            );
+                                            ui.label(
                                             "Interactive visuals will appear here in a later step.",
                                         );
+                                        });
                                     });
-                                });
+                            }
                         })
                     });
                 if !step.annotations.is_empty() {

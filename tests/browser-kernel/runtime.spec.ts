@@ -78,9 +78,9 @@ test("real JupyterLite worker through egui/WebMCP: execute, plot, persist and re
   await page.keyboard.insertText("browser_value = 44; browser_value");
   await page.waitForTimeout(100);
   // Finish the editor transaction before an agent reads the notebook.
-  await page.mouse.click(308, 141);
+  await page.mouse.click(270, 141);
   await page.waitForTimeout(300);
-  await page.mouse.click(488, 141);
+  await page.mouse.click(447, 141);
   await page.waitForTimeout(300);
   await page.screenshot({ path: ".runtime/browser-human-probe.png" });
   await expect

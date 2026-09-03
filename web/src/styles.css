@@ -55,6 +55,28 @@ body {
   align-items: center;
   gap: 10px;
 }
+.shell-header > div:first-child {
+  min-width: 0;
+}
+#notebook-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#browser-home {
+  display: inline-flex;
+  padding: 5px;
+}
+#browser-home[hidden] {
+  display: none;
+}
+#browser-home svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
 .shell-header .collaboration-controls {
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -112,7 +134,7 @@ body {
 }
 #explorer-toggle:focus-visible {
   left: 12px;
-  top: 50px;
+  bottom: 4px;
   z-index: 10;
 }
 #explorer-toggle svg {
@@ -257,6 +279,19 @@ body {
   overflow-wrap: anywhere;
   min-width: 0;
 }
+#notebook-files .microscope-count {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  color: #647078;
+  font-variant-numeric: tabular-nums;
+}
+#workspace-export {
+  width: 100%;
+  margin-top: 12px;
+}
 #notebook-files svg {
   width: 18px;
   height: 18px;
@@ -322,8 +357,8 @@ button:hover {
   .shell-header {
     padding: 0 12px;
   }
-  .shell-header span {
-    display: none;
+  #notebook-name {
+    max-width: 32vw;
   }
 }
 

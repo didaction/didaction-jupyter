@@ -31,6 +31,18 @@ Existing running demos have not been restarted. The native host has passed real
 IPython, four existing multi-browser suites and an isolated Rust-container/IJulia
 test with static Plots output, completion and persisted kernel state.
 
+The current driver can use **Release driver** in the header when commands are
+idle. All connected observers then see **Claim driver**; the first accepted
+claim wins workspace-wide. A join/heartbeat cannot automatically re-elect someone
+after explicit release. The original first-connected policy resumes after every
+member has left/expired; unexpected driver disconnects retain automatic failover.
+`Collaboration::release_driver` / `claim_driver` are transport-independent policy
+methods; native POST `/api/v1/collaboration/release` and `/claim` authenticate the
+existing private capability and serialize claims under the authority lock.
+Neither action can steal an occupied role, and mutations remain blocked while no
+driver exists. Browser mode has no collaboration/permission buttons. These new
+routes are Rust-only, not implemented in the legacy Python rollback host.
+
 ## Launch and verification
 
 ```bash

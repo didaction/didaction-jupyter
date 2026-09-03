@@ -35,9 +35,23 @@
             <path d="M3 4h18v16H3Z M9 4v16" />
             <path class="explorer-chevron" d="m16 9-3 3 3 3" />
           </svg></button
-        ><strong>didaction</strong><span>local notebook</span>
+        ><strong>didaction</strong><span id="notebook-name"></span>
       </div>
       <div class="collaboration-controls">
+        <button
+          id="browser-home"
+          type="button"
+          hidden
+          title="Return to workspace chooser"
+          aria-label="Choose another environment"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9" />
+          </svg>
+        </button>
+        <button id="driver-permission" type="button" hidden>
+          Release driver
+        </button>
         <output
           id="driver-status"
           role="status"

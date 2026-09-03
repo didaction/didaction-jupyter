@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waveGraphics } from "../fixtures/graphics";
 import {
   installMicroscopeTools,
   microscopeCall,
@@ -22,7 +23,15 @@ test("microscope metadata, sidecar, agent navigation and human delete persist in
     title: "Closer look",
     walkthrough: {
       title: "Closer look",
-      steps: [{ id: "one", title: "One", code: "42", markdown: "Explanation" }],
+      steps: [
+        {
+          id: "one",
+          title: "One",
+          code: "42",
+          markdown: "Explanation",
+          graphics: { ...waveGraphics, artifact: "waves.ts" },
+        },
+      ],
     },
   });
   expect(first, JSON.stringify(first)).toMatchObject({ isError: false });
@@ -71,10 +80,10 @@ test("microscope metadata, sidecar, agent navigation and human delete persist in
     .toContain('"microscope":null');
   await page.screenshot({ path: ".runtime/microscope-dropdown-position.png" });
   // Actual egui dropdown and confirmation, not an agent deletion escape hatch.
-  await page.mouse.click(canvas!.x + canvas!.width - 105, canvas!.y + 150);
+  await page.mouse.click(canvas!.x + canvas!.width - 38, canvas!.y + 150);
   await page.waitForTimeout(120);
   await page.screenshot({ path: ".runtime/microscope-dropdown.png" });
-  await page.mouse.click(canvas!.x + canvas!.width - 104, canvas!.y + 187);
+  await page.mouse.click(canvas!.x + canvas!.width - 128, canvas!.y + 187);
   await page.waitForTimeout(120);
   await page.screenshot({
     path: ".runtime/microscope-delete-confirmation.png",
@@ -84,8 +93,8 @@ test("microscope metadata, sidecar, agent navigation and human delete persist in
   expect(
     JSON.stringify(await microscopeCall(page, "list_microscopes", scope)),
   ).toContain(id);
-  await page.mouse.click(canvas!.x + canvas!.width - 105, canvas!.y + 150);
-  await page.mouse.click(canvas!.x + canvas!.width - 104, canvas!.y + 187);
+  await page.mouse.click(canvas!.x + canvas!.width - 38, canvas!.y + 150);
+  await page.mouse.click(canvas!.x + canvas!.width - 128, canvas!.y + 187);
   await page.waitForTimeout(120);
   await page.mouse.click(694, 506);
   await expect
@@ -105,7 +114,10 @@ test("microscope metadata, sidecar, agent navigation and human delete persist in
     );
   });
   expect(
-    files.filter((f: { path: string }) => f.path.endsWith(id)),
+    files.filter(
+      (f: { path: string }) =>
+        f.path.endsWith(id) || f.path.endsWith(`${id}.waves.ts`),
+    ),
   ).toHaveLength(0);
   expect(
     files.filter((f: { path: string }) => f.path.endsWith(secondId)),

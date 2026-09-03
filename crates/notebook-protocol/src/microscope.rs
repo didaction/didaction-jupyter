@@ -21,8 +21,27 @@ pub struct WalkthroughStep {
     /// Complete, self-contained source for a fresh temporary kernel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playground_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graphics: Option<GraphicsDefinition>,
     #[serde(default)]
     pub annotations: Vec<Annotation>,
+}
+/// Executable source, not a scene description. Imports/capabilities are checked
+/// again by the browser before instantiation; validating source never executes it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GraphicsDefinition {
+    pub language: GraphicsLanguage,
+    pub source: String,
+    pub description: String,
+    /// Optional owned source attachment, relative to the microscope sidecar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GraphicsLanguage {
+    #[serde(rename = "assemblyscript-rgba-1")]
+    AssemblyScriptRgba1,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -68,7 +87,15 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
         return Err(invalid("Walkthrough needs a title and 1..64 steps"));
     }
     let mut steps = std::collections::BTreeSet::new();
+    let mut artifacts = std::collections::BTreeSet::new();
     for s in &w.steps {
+        if let Some(name) = s.graphics.as_ref().and_then(|g| g.artifact.as_ref())
+            && (!valid_graphics_artifact(name) || !artifacts.insert(name))
+        {
+            return Err(invalid(
+                "Graphics artifacts need unique safe names ending in .ts",
+            ));
+        }
         if !id(&s.id)
             || !steps.insert(&s.id)
             || !title(&s.title)
@@ -78,6 +105,12 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
                 .as_ref()
                 .is_some_and(|code| code.len() > 64_000 || code.trim().is_empty())
             || s.annotations.len() > 32
+            || s.graphics.as_ref().is_some_and(|g| {
+                g.source.trim().is_empty()
+                    || g.source.len() > 64_000
+                    || g.description.trim().is_empty()
+                    || g.description.len() > 1024
+            })
         {
             return Err(invalid("Invalid or oversized walkthrough step"));
         }
@@ -120,6 +153,37 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
         return Err(invalid("Walkthrough exceeds aggregate size limit"));
     }
     Ok(())
+}
+fn valid_graphics_artifact(name: &str) -> bool {
+    name.len() > 3
+        && name.len() <= 80
+        && name.ends_with(".ts")
+        && name.as_bytes()[0].is_ascii_alphanumeric()
+        && name[..name.len() - 3]
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+/// Derived owned files only; never accept an arbitrary workspace path.
+pub fn graphics_artifacts(
+    doc: &MicroscopeDocument,
+) -> Result<std::collections::BTreeMap<String, String>, ProtocolError> {
+    let mut files = std::collections::BTreeMap::new();
+    let base = sidecar(&doc.notebook_path, &doc.cell_id, &doc.microscope.id)?;
+    if let Some(w) = &doc.walkthrough {
+        validate_walkthrough(w)?;
+        for step in &w.steps {
+            if let Some(g) = &step.graphics
+                && let Some(name) = &g.artifact
+            {
+                let path = format!("{base}.{name}");
+                if path.len() > 512 {
+                    return Err(invalid("Graphics artifact path exceeds limit"));
+                }
+                files.insert(path, g.source.clone());
+            }
+        }
+    }
+    Ok(files)
 }
 pub fn validate_focus(w: &Walkthrough, focus: &WalkthroughFocus) -> Result<(), ProtocolError> {
     let step = w
@@ -423,6 +487,47 @@ pub fn preserve_references(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn graphics_source_is_bounded_versioned_and_round_trips() {
+        let value = serde_json::json!({"title":"Graphics", "steps":[{"id":"one","title":"One","code":"", "markdown":"", "graphics": {
+            "language":"assemblyscript-rgba-1", "description":"Animated example", "source":"export function render():usize { return 0; }"
+        }}]});
+        let w: super::Walkthrough = serde_json::from_value(value.clone()).unwrap();
+        super::validate_walkthrough(&w).unwrap();
+        let mut attached = w.clone();
+        attached.steps[0].graphics.as_mut().unwrap().artifact = Some("orbit.ts".into());
+        super::validate_walkthrough(&attached).unwrap();
+        for name in [
+            "../orbit.ts",
+            "dir/orbit.ts",
+            "/orbit.ts",
+            "orbit.js",
+            ".ts",
+            "a.b.ts",
+            "é.ts",
+        ] {
+            let mut bad = attached.clone();
+            bad.steps[0].graphics.as_mut().unwrap().artifact = Some(name.into());
+            assert!(super::validate_walkthrough(&bad).is_err(), "{name}");
+        }
+        let mut duplicate = attached.steps[0].clone();
+        duplicate.id = "two".into();
+        attached.steps.push(duplicate);
+        assert!(super::validate_walkthrough(&attached).is_err());
+        assert_eq!(
+            serde_json::from_str::<super::Walkthrough>(&serde_json::to_string(&w).unwrap())
+                .unwrap(),
+            w
+        );
+        for source in [" ".into(), "x".repeat(64001)] {
+            let mut bad = w.clone();
+            bad.steps[0].graphics.as_mut().unwrap().source = source;
+            assert!(super::validate_walkthrough(&bad).is_err());
+        }
+        let mut bad = value;
+        bad["steps"][0]["graphics"]["language"] = serde_json::json!("javascript");
+        assert!(serde_json::from_value::<super::Walkthrough>(bad).is_err());
+    }
     use super::*;
     #[test]
     fn walkthrough_bounds_focus_and_ownership_are_validated() {

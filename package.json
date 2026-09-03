@@ -31,6 +31,7 @@
   },
   "dependencies": {
     "@jupyterlite/pyodide-kernel": "0.8.5",
+    "assemblyscript": "0.28.9",
     "pyodide": "314.0.5"
   }
 }

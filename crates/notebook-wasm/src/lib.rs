@@ -61,6 +61,17 @@ pub fn validate_walkthrough_focus(document: &str, focus: &str) -> Result<(), JsE
     )
     .map_err(js_error)
 }
+#[wasm_bindgen(js_name = microscopeGraphicsArtifacts)]
+pub fn microscope_graphics_artifacts(document: &str) -> Result<String, JsError> {
+    if document.len() > notebook_protocol::microscope::MAX_DOCUMENT_BYTES {
+        return Err(JsError::new("Microscope exceeds limit"));
+    }
+    let doc = serde_json::from_str(document).map_err(js_error)?;
+    serde_json::to_string(
+        &notebook_protocol::microscope::graphics_artifacts(&doc).map_err(js_error)?,
+    )
+    .map_err(js_error)
+}
 #[wasm_bindgen(js_name = prepareRuntimeCommand)]
 pub fn prepare_runtime_command(snapshot: &str, command: &str) -> Result<String, JsError> {
     if snapshot.len() > notebook_protocol::MAX_RESPONSE_BYTES
@@ -435,6 +446,51 @@ pub struct MountedNotebook {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 impl MountedNotebook {
+    #[wasm_bindgen(js_name = resetGraphics)]
+    pub fn reset_graphics(&self) {
+        self.app.lock().expect("app mutex").reset_graphics();
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+    }
+    #[wasm_bindgen(js_name = graphicsRequest)]
+    pub fn graphics_request(&self) -> String {
+        self.app
+            .lock()
+            .expect("app mutex")
+            .graphics_request()
+            .to_string()
+    }
+    #[wasm_bindgen(js_name = graphicsFrame)]
+    pub fn graphics_frame(
+        &self,
+        key: &str,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+    ) -> Result<(), JsError> {
+        if key.len() > 2048 || rgba.len() > 1024 * 768 * 4 {
+            return Err(JsError::new("Graphics frame exceeds bounds"));
+        }
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            self.app
+                .lock()
+                .expect("app mutex")
+                .graphics_frame(ctx, key, width, height, rgba)
+                .map_err(|e| JsError::new(&e))?;
+        }
+        Ok(())
+    }
+    #[wasm_bindgen(js_name = graphicsError)]
+    pub fn graphics_error(&self, key: &str, error: &str) {
+        self.app
+            .lock()
+            .expect("app mutex")
+            .graphics_error(key, error);
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+    }
     #[wasm_bindgen(js_name = followMicroscope)]
     pub fn follow_microscope(&self, target: &str) -> Result<(), JsError> {
         if target.len() > 1024 {
@@ -531,6 +587,10 @@ impl MountedNotebook {
         if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
             ctx.request_repaint();
         }
+    }
+    #[wasm_bindgen(js_name = setCheckpointsSupported)]
+    pub fn set_checkpoints_supported(&self, supported: bool) {
+        self.app.lock().expect("app mutex").checkpoints_supported = supported;
     }
     #[wasm_bindgen(js_name = setHostStatus)]
     pub fn set_host_status(&self, following: bool, status: String) -> Result<(), JsError> {

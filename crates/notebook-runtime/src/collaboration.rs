@@ -36,6 +36,7 @@ pub struct Collaboration {
     pub view_sequence: u64,
     redirects: BTreeMap<(String, String), String>,
     policy: DriverPolicy,
+    released: bool,
 }
 impl Default for Collaboration {
     fn default() -> Self {
@@ -52,6 +53,7 @@ impl Collaboration {
             view_sequence: 0,
             redirects: BTreeMap::new(),
             policy,
+            released: false,
         }
     }
     pub fn refresh(&mut self, now: u64) {
@@ -67,7 +69,10 @@ impl Collaboration {
                 .retain(|t| self.members.iter().any(|m| &m.token == t));
         }
         let ids: Vec<_> = self.members.iter().map(|m| m.id.clone()).collect();
-        if !self.driver.as_ref().is_some_and(|id| ids.contains(id)) {
+        if self.members.is_empty() {
+            self.released = false;
+        }
+        if !self.released && !self.driver.as_ref().is_some_and(|id| ids.contains(id)) {
             self.set_driver((self.policy)(&ids));
         }
     }
@@ -118,7 +123,7 @@ impl Collaboration {
             ));
         }
         self.room(path)?.members.insert(token.into());
-        if self.driver.is_none() {
+        if self.driver.is_none() && !self.released {
             self.set_driver((self.policy)(
                 &self
                     .members
@@ -173,8 +178,31 @@ impl Collaboration {
                 "Target collaborator is not connected",
             ));
         }
+        self.released = false;
         self.set_driver(Some(id.into()));
         Ok(())
+    }
+    pub fn release_driver(&mut self, path: &str, token: &str, now: u64) -> Result<()> {
+        self.require_driver(path, token, now)?;
+        if self.rooms.values().any(|r| r.active > 0) {
+            return Err(fail(
+                ErrorCode::ExecutionRejected,
+                "Wait for active commands before releasing control",
+            ));
+        }
+        self.released = true;
+        self.set_driver(None);
+        Ok(())
+    }
+    pub fn claim_driver(&mut self, path: &str, token: &str, now: u64) -> Result<()> {
+        let id = self.member(path, token, now)?;
+        if self.driver.is_some() {
+            return Err(fail(
+                ErrorCode::NotDriver,
+                "The current driver must release control first",
+            ));
+        }
+        self.change_driver(&id)
     }
     pub fn state(&mut self, path: &str, token: &str, now: u64) -> Result<Value> {
         let id = self.member(path, token, now)?;
@@ -302,6 +330,27 @@ impl Collaboration {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn release_requires_driver_and_claim_is_exclusive_across_notebooks() {
+        let mut c = Collaboration::default();
+        c.join("one", "a-token", Some("a".into()), 0).unwrap();
+        c.join("two", "b-token", Some("b".into()), 0).unwrap();
+        assert!(c.release_driver("two", "b-token", 1).is_err());
+        assert!(c.claim_driver("two", "b-token", 1).is_err());
+        c.room("one").unwrap().active = 1;
+        assert!(c.release_driver("one", "a-token", 1).is_err());
+        c.room("one").unwrap().active = 0;
+        c.release_driver("one", "a-token", 2).unwrap();
+        c.refresh(3);
+        c.join("three", "c-token", Some("c".into()), 3).unwrap();
+        assert!(c.driver.is_none());
+        assert!(c.require_driver("one", "a-token", 3).is_err());
+        assert!(c.claim_driver("two", "b", 3).is_err());
+        c.claim_driver("two", "b-token", 4).unwrap();
+        assert!(c.claim_driver("three", "c-token", 4).is_err());
+        c.require_driver("two", "b-token", 4).unwrap();
+        assert!(c.require_driver("one", "a-token", 4).is_err());
+    }
     #[test]
     fn workspace_driver_and_private_capabilities() {
         let mut c = Collaboration::default();

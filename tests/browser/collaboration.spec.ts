@@ -162,6 +162,41 @@ test("one driver; observers receive intermediate output and handoff reverses per
   await expect(observer.locator("#driver-status")).toBeVisible();
   await expect(page.locator("#follow-driver")).toBeVisible();
   await expect(page.locator("#driver-status")).toBeHidden();
+  if (process.env.DIDACTION_GATEWAY_IMPLEMENTATION === "rust") {
+    await expect(page.locator("#browser-home")).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: "Claim driver", exact: true }),
+    ).toBeHidden();
+    await observer
+      .getByRole("button", { name: "Release driver", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Claim driver", exact: true }),
+    ).toBeVisible();
+    await expect(
+      observer.getByRole("button", { name: "Claim driver", exact: true }),
+    ).toBeVisible();
+    await page.screenshot({ path: ".runtime/header-claim-driver.png" });
+    expect(
+      (await call(observer, notebook, "delete_cell", { cell_id: cellId }))
+        .isError,
+    ).toBe(true);
+    await page
+      .getByRole("button", { name: "Claim driver", exact: true })
+      .click();
+    await expect.poll(async () => (await role(page)).is_driver).toBe(true);
+    await page.screenshot({ path: ".runtime/header-release-driver.png" });
+    await expect(
+      observer.getByRole("button", { name: "Claim driver", exact: true }),
+    ).toBeHidden();
+    await page
+      .getByRole("button", { name: "Release driver", exact: true })
+      .click();
+    await observer
+      .getByRole("button", { name: "Claim driver", exact: true })
+      .click();
+    await expect.poll(async () => (await role(observer)).is_driver).toBe(true);
+  }
   await observer.screenshot({ path: ".runtime/driver-indicator-mobile.png" });
   expect(
     (await call(page, notebook, "delete_cell", { cell_id: cellId })).isError,

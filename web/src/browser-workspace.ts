@@ -39,6 +39,9 @@ export class LocalNotebookConnection {
       "Browser mode is single-user; driver handoff requires server mode",
     );
   };
+  setDriverPermission = async (_action: "claim" | "release") => {
+    throw new Error("Browser mode is local-only");
+  };
 }
 export class BrowserWorkspace {
   readonly store = new IndexedNotebookStore();

@@ -302,7 +302,7 @@
       "name": "Selected Notebook Cell",
       "kind": "card",
       "refersTo": "cell-selected",
-      "description": "Active cell with a compact drag target and execution prompt; structural notebook actions live in the stable toolbar and menus.",
+      "description": "Active cell with a compact drag target and execution prompt; structural notebook actions live in the stable toolbar and menus. Cells with microscopes use a drawn microscope dropdown icon with the accessible name Microscopes (N).",
       "html": "<article class=\"ds-cell ds-cell-selected\"><div class=\"ds-cell-actions\"><button type=\"button\" aria-label=\"Drag to reorder cell\" title=\"Drag to reorder cell\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 18 18\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"M6 4v10M12 4v10M4 6h10M4 12h10\"/></svg></button><code>In [3]</code></div><pre>value = 40 + 2</pre></article>",
       "css": ".ds-cell { color-scheme: light; padding: 10px; color: #263238; background: #fff; border: 1px solid #d2d2d2; border-radius: 3px; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-cell-selected { background: #fafdff; border: 2px solid #2d6991; } .ds-cell-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .ds-cell-action-group { display: inline-flex; align-items: center; gap: 8px; } .ds-cell-actions > i { width: 1px; height: 22px; background: #d2d2d2; } .ds-cell code, .ds-cell pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; } .ds-cell button { min-height: clamp(25.5px, 3.75vw, 30px); border: 0; background: #e6e6e6; color: #4b555c; padding: 5px 8px; } .ds-cell button:hover { background: #dce6eb; } .ds-cell button:focus-visible { outline: 3px solid #2d698f; outline-offset: 2px; } .ds-cell button:active { background: #cfdde4; } .ds-cell pre { margin: 10px 0 0; padding: 8px 4px; background: #fff; }"
     },
@@ -317,7 +317,7 @@
     {
       "name": "Kernel Status Strip",
       "kind": "custom",
-      "description": "Persistent synchronization, kernel, and revision context at the canvas edge.",
+      "description": "Persistent synchronization, kernel, and revision context at the canvas edge, preceded by the explorer toggle at the bottom-left.",
       "html": "<div class=\"ds-status\" role=\"status\"><span><i></i>Saved</span><span>Kernel: python3 · Idle</span><span>Revision 5</span></div>",
       "css": ".ds-status { display: flex; align-items: center; min-height: 32px; color: #53636b; background: #f7f7f7; border-top: 1px solid #c4c4c4; font: 400 13px/1.4 ui-sans-serif, system-ui, sans-serif; } .ds-status span { padding: 6px 10px; border-right: 1px solid #d7dcdf; } .ds-status i { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #2e7d32; } .ds-status:focus-visible { outline: 3px solid #2d698f; outline-offset: -3px; }"
     },
@@ -346,7 +346,7 @@
     {
       "name": "Notebook Explorer",
       "kind": "nav",
-      "description": "Confined notebook workspace with folder navigation, current-notebook selection, and independent scrolling.",
+      "description": "Confined notebook workspace with folder navigation, current-notebook selection, and independent scrolling. Notebook rows show muted right-aligned microscope totals; recognized owned sidecars are hidden while orphans remain visible. Export workspace sits below create/upload controls and downloads a bounded ZIP of saved content, excluding temporary kernel state.",
       "html": "<nav class=\"ds-explorer\" aria-label=\"Notebook workspace\"><h2>Notebooks</h2><p>Workspace</p><div class=\"ds-folder-actions\"><button type=\"button\" disabled>Up</button><button type=\"button\">Refresh</button></div><button class=\"ds-file\" type=\"button\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6\"/></svg><span>demo.ipynb</span></button><p>1 folders and notebooks</p></nav>",
       "css": ".ds-explorer { width: 248px; max-width: 100%; padding: 12px; overflow-y: auto; color: #263238; background: #fff; border-right: 1px solid #d7dcdf; font-family: ui-sans-serif, system-ui, sans-serif; } .ds-explorer h2 { font-size: 1rem; margin: 0 0 12px; } .ds-explorer p { color: #53636b; font-size: .82rem; overflow-wrap: anywhere; } .ds-folder-actions { display: flex; gap: 8px; margin-bottom: 12px; } .ds-explorer button { border: 1px solid #84949c; border-radius: 0; padding: 7px 12px; background: #fff; color: inherit; cursor: pointer; } .ds-explorer button:hover { background: #eef4f7; } .ds-explorer button:active { background: #dfeaf0; } .ds-explorer button:focus-visible { outline: 3px solid #2d698f; outline-offset: 3px; } .ds-explorer button:disabled { cursor: default; color: #53636b; background: #f7f7f7; } .ds-explorer .ds-file { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 4px; border: 0; text-align: left; font-size: .82rem; } .ds-file span { overflow-wrap: anywhere; min-width: 0; } .ds-file svg { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.5; } .ds-explorer [aria-current] { background: #d2e8f6; color: #194e70; } @media (max-width: 640px) { .ds-explorer { width: 180px; } }"
     }

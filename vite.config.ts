@@ -15,6 +15,14 @@ export const runtimeConfig = (mode: string) => ({
     emptyOutDir: true,
   },
   worker: { format: "es" as const },
+  // Discover lazy worker dependencies before serving. Adding the compiler after
+  // boot otherwise invalidates optimized chunks and reloads/disposes notebooks.
+  optimizeDeps: {
+    include: [
+      "assemblyscript/asc",
+      ...(mode === "browser" ? ["@jupyterlite/pyodide-kernel/lib/worker"] : []),
+    ],
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,

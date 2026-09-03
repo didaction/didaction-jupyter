@@ -40,6 +40,13 @@ Unsupported browser kernel names fail closed. For frontend development,
 
 ## Browser workspace startup and files
 
+- The home icon at the top right, before Local, returns to the workspace chooser.
+  It requires saved/idle notebooks and confirmation: saved files remain, but this
+  tab's live kernels and temporary playgrounds are discarded. Import can then
+  add another ZIP or reopen the demo/saved workspace. Storage is still one
+  origin-local workspace; this is not a new isolated database per ZIP.
+  The header shows the active notebook filename instead of “local notebook”.
+
 - Launch without a notebook query parameter to show the chooser. Saved notebooks
   also appear under **Continue saved workspace**. Reloading a valid notebook URL
   reopens it directly; opening the demo never replaces an existing demo.
@@ -130,7 +137,15 @@ runtime compatibility is tested with the pinned assets.
 - Workers are not a security boundary against notebook code using browser
   capabilities. Do not supply environment secrets or sensitive data, or share
   this origin with privileged applications.
-- Browser storage can be cleared or run out of quota. Download `.ipynb` backups.
+- Browser storage can be cleared or run out of quota. Use **Export workspace** in
+  the explorer for a ZIP backup of saved notebooks, folders, artifacts and
+  microscope sidecars. The export reads both IndexedDB stores in one transaction.
+  It excludes temporary kernel files and variables; save edits and finish running
+  commands first. Limits are 1 MB per file, 1,000 items and 20 MB including ZIP
+  overhead; oversized exports fail rather than omit data. The ZIP can be selected
+  at browser workspace startup (existing-name conflicts remain create-only).
+  File → Create Checkpoint is disabled in browser mode; notebook download remains
+  available for individual notebook backups without sidecars.
 - Kernel side effects can occur even if saving/receiving a result fails. Do not
   blindly repeat failed executions. Large outputs fail bounds validation.
 - The pinned JupyterLite coroutine path did not reliably settle a tight-loop

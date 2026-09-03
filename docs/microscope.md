@@ -3,10 +3,10 @@
 A microscope belongs to a notebook cell. Its main content is a walkthrough: a
 title and ordered steps with display-only code, explanatory Markdown and named
 line or character annotations. Each step shows its title and Markdown above a
-notebook-style container with read-only code left and a graphics placeholder right.
+notebook-style container with read-only code left and an optional graphics canvas right.
 Code uses the notebook's syntax highlighting. Steps may also provide separate
-`playground_code` for an isolated executable playground. Programmable graphics
-remain a placeholder.
+`playground_code` for an isolated executable playground. Optional AssemblyScript
+graphics compile and execute in browser workers; see [walkthrough-graphics.md](walkthrough-graphics.md).
 It works in the Rust server and the
 static browser build; the legacy Python rollback gateway does not implement it.
 
@@ -108,7 +108,11 @@ microscope target and its content revision. They reload through the command queu
 when the driver's content revision changes. Focus is in-memory presentation state,
 not a notebook edit. A page reload restores the saved document, not its view state.
 
-Cells with microscopes have a top-right **Microscopes** dropdown. Select a title
+Cells with microscopes have a top-right **microscope icon** dropdown (with a
+Microscopes tooltip). The workspace explorer hides their sidecar rows and shows
+a muted microscope icon and total sidecar count beside the owning notebook.
+An orphan sidecar without a matching notebook stays visible for recovery.
+Select a title
 to enter its shell. **Back to notebook** returns to the notebook without deleting
 anything. The cross next to each title opens an explicit deletion confirmation;
 confirmation deletes both reference and content file. There is no agent deletion
@@ -160,7 +164,8 @@ both `start_column` and `end_column` to highlight an inclusive range within one
 line. Columns count Unicode characters (not UTF-8 bytes); partial ranges cannot
 span lines. Omitting both columns highlights the complete line range.
 The aggregate walkthrough bound leaves 4 KiB for its ownership envelope. Unknown
-fields are rejected, including scripts, graphics and arbitrary kernel configuration.
+fields are rejected, including arbitrary scripts and kernel configuration. The
+optional `graphics` definition accepts only the versioned AssemblyScript RGBA interface.
 
 Rust's `notebook-protocol::microscope` owns the schema and derivation; core/runtime
 own validated transitions. Both egui and WebMCP use the same command gateway for
@@ -186,11 +191,17 @@ Never automatically delete files with an unverified ownership binding.
 
 Ordinary cell mutations cannot forge/copy microscope references or delete a cell
 that still owns them. Notebook rename is also blocked while references exist;
-delete microscopes first. Automatic rename/copy/export bundling, orphan recovery,
+delete microscopes first. Automatic rename/copy bundling, orphan recovery,
 human content authoring, microscope navigation persistence across reload, and concurrent
 external Jupyter editors are not implemented in this step. Preserve sidecars when
 moving a workspace; do not copy an attached notebook alone and expect content to
-follow it.
+follow it. **Export workspace** bundles notebooks and sidecars together as a ZIP.
+The Rust server reads recursively through confined Jupyter Contents, with a
+60-second timeout, 1 MB per-file and 20 MB total bounds (plus ZIP overhead in the
+browser). Namespace changes are blocked during export; notebook edits from other
+clients or external Jupyter editors are not a workspace-wide transactional snapshot.
+Pause collaborative edits before making a consistent backup. The legacy Python
+rollback gateway does not implement workspace export.
 
 ## Verification
 

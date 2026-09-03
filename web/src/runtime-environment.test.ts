@@ -13,6 +13,13 @@ test("runtime environments are fixed at build time, with isolated outputs and as
   expect(server.build.outDir).toBe("../dist");
   expect(browser.build.outDir).toBe("../dist-browser");
   expect(server.publicDir).toBe(false);
+  expect(browser.optimizeDeps.include).toContain("assemblyscript/asc");
+  expect(browser.optimizeDeps.include).toContain(
+    "@jupyterlite/pyodide-kernel/lib/worker",
+  );
+  expect(server.optimizeDeps.include).not.toContain(
+    "@jupyterlite/pyodide-kernel/lib/worker",
+  );
   expect(browser.publicDir).toBe("public");
   expect(browser.server.proxy).toBeUndefined();
   expect(server.server.proxy).toHaveProperty("/api");

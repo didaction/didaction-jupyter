@@ -5,6 +5,7 @@ import init, {
   validateWalkthroughFocus,
 } from "../pkg/notebook_wasm";
 import { CallHistory, installDiagnostics } from "./diagnostics";
+import { GraphicsController } from "./graphics";
 import {
   CommandGateway,
   createQueuedNotebookDispatcher,
@@ -103,6 +104,7 @@ async function createContext(
   const wasm = new NotebookApplication(JSON.stringify(snapshot));
   const gateway = new CommandGateway(wasm, transport);
   let mounted: Awaited<ReturnType<typeof mountNotebook>> | undefined;
+  let graphics: GraphicsController | undefined;
   const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
   const syncMotion = () => mounted?.setReducedMotion(motionPreference.matches);
   const dispatchEguiCommand = createQueuedNotebookDispatcher(
@@ -113,6 +115,12 @@ async function createContext(
           .snapshot.revision,
       ),
     (command) => {
+      if (
+        ["create_microscope", "delete_microscope", "rename_notebook"].includes(
+          command.type,
+        )
+      )
+        window.dispatchEvent(new Event("workspace-files-changed"));
       if (command.type !== "rename_notebook") return;
       const path = JSON.parse(wasm.publicSnapshot()).snapshot.notebook
         .path as string;
@@ -194,6 +202,13 @@ async function createContext(
         mounted?.applyExternalResult(JSON.stringify(progress), true),
       );
       mounted?.applyExternalResult(result, false);
+      if (
+        !JSON.parse(result).error &&
+        ["create_microscope", "delete_microscope"].includes(
+          JSON.parse(serialized).type,
+        )
+      )
+        window.dispatchEvent(new Event("workspace-files-changed"));
       return result;
     } catch (error) {
       const command = JSON.parse(serialized) as NotebookCommand;
@@ -482,6 +497,8 @@ async function createContext(
           }),
   );
   const deactivate = () => {
+    graphics?.dispose();
+    graphics = undefined;
     if (!mounted) return;
     void playground.close().catch(() => playground.dispose());
     motionPreference.removeEventListener("change", syncMotion);
@@ -593,6 +610,14 @@ async function createContext(
         },
       );
       mounted.setReadOnly(readOnly);
+      mounted.setCheckpointsSupported(!browserWorkspace);
+      graphics = new GraphicsController(
+        mounted,
+        () =>
+          !document.hidden &&
+          document.querySelector<HTMLCanvasElement>("#notebook-canvas")?.style
+            .visibility !== "hidden",
+      );
       syncMotion();
       motionPreference.addEventListener("change", syncMotion);
       const url = new URL(location.href);
@@ -682,6 +707,51 @@ async function boot(): Promise<void> {
     document.querySelector<HTMLOutputElement>("#driver-status")!;
   const activeContext = () =>
     [...openContexts].find((context) => context.isActive());
+  const homeButton =
+    document.querySelector<HTMLButtonElement>("#browser-home")!;
+  homeButton.hidden = !browserWorkspace;
+  homeButton.onclick = () => {
+    try {
+      for (const context of openContexts) context.ready();
+      if (
+        !confirm(
+          "Return to the workspace chooser? Saved notebooks and files remain. All live kernel variables and temporary playgrounds in this tab will be discarded.",
+        )
+      )
+        return;
+      workspace.dispose();
+      browserWorkspace?.close();
+      location.assign(location.pathname);
+    } catch (error) {
+      followStatus.textContent =
+        error instanceof Error
+          ? error.message
+          : "Save edits and wait for execution before leaving.";
+    }
+  };
+  const permissionButton =
+    document.querySelector<HTMLButtonElement>("#driver-permission")!;
+  let changingPermission = false;
+  permissionButton.onclick = async () => {
+    const active = activeContext();
+    if (!active || changingPermission) return;
+    try {
+      for (const context of openContexts) context.ready();
+      changingPermission = true;
+      permissionButton.disabled = true;
+      await active.connection.setDriverPermission(
+        active.canWrite?.() ? "release" : "claim",
+      );
+      followStatus.textContent = "";
+    } catch (error) {
+      followStatus.textContent =
+        error instanceof Error
+          ? error.message
+          : "Control change failed; retry.";
+    } finally {
+      changingPermission = false;
+    }
+  };
   let anchor: NotebookContext | undefined;
   const follow = new FollowController(
     async (view, current) => {
@@ -715,6 +785,20 @@ async function boot(): Promise<void> {
   );
   const updateFollowButton = () => {
     const isDriver = !!activeContext()?.canWrite?.();
+    const active = activeContext();
+    const notebookName = document.querySelector<HTMLElement>("#notebook-name")!;
+    const path = active?.path?.() ?? "";
+    notebookName.textContent = path.split("/").pop() ?? "";
+    notebookName.title = path;
+    permissionButton.hidden =
+      !!browserWorkspace ||
+      !active ||
+      (!isDriver && active.collaboration?.().driver_id !== null);
+    permissionButton.textContent = isDriver ? "Release driver" : "Claim driver";
+    permissionButton.title = isDriver
+      ? "Let another collaborator claim workspace control"
+      : "Claim the vacant workspace driver role";
+    permissionButton.disabled = changingPermission;
     followButton.hidden = isDriver;
     driverStatus.hidden = !isDriver;
     followButton.disabled = !follow.enabled && (!activeContext() || isDriver);
@@ -770,7 +854,9 @@ async function boot(): Promise<void> {
   updateFollowButton();
   installExplorer(
     startup.path,
-    () => {},
+    () => {
+      activeContext()?.ready?.();
+    },
     async (path) => {
       const result = await workspace.callTool("open_notebook", {
         notebook_path: path,
@@ -784,6 +870,31 @@ async function boot(): Promise<void> {
           () => activeContext()?.connection.headers() ?? {},
         ),
     () => activeContext()?.canWrite?.() ?? false,
+    async () => {
+      for (const context of openContexts) context.ready?.();
+      if (browserWorkspace) return browserWorkspace.store.exportEntries();
+      const response = await fetch("/api/v1/workspace-export", {
+        signal: AbortSignal.timeout(65000),
+      });
+      if (!response.ok)
+        throw new Error(
+          "Workspace export unavailable. Check the gateway and export limits, then retry.",
+        );
+      const result = await response.json();
+      return result.entries.map(
+        (entry: {
+          path: string;
+          directory: boolean;
+          content_base64: string;
+        }) => ({
+          path: entry.path,
+          directory: entry.directory,
+          bytes: Uint8Array.from(atob(entry.content_base64), (c) =>
+            c.charCodeAt(0),
+          ),
+        }),
+      );
+    },
   );
   const webmcp = await installWebMcp(workspace, undefined, callHistory);
   const hasWebMcp = webmcp.available;

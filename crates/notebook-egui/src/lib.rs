@@ -13,6 +13,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
+mod graphics;
 mod walkthrough;
 
 const MAX_EMBEDDED_IMAGE_BYTES: usize = 8 * 1024 * 1024;
@@ -188,11 +189,13 @@ pub struct NotebookEguiApp {
     pub diagnostics_toggle_requested: bool,
     pub following_driver: bool,
     pub host_status: String,
+    pub checkpoints_supported: bool,
     pub microscope_target: Option<notebook_protocol::microscope::MicroscopeTarget>,
     microscope_document: Option<notebook_protocol::microscope::MicroscopeDocument>,
     pub playground_requested: Option<usize>,
     microscope_delete: Option<(String, notebook_protocol::microscope::MicroscopeRef)>,
     walkthrough_scroll_to_focus: bool,
+    graphics: graphics::GraphicsSurface,
     output_views: HashMap<String, OutputViewMode>,
     hidden_line_numbers: HashSet<String>,
     find_open: bool,
@@ -331,8 +334,10 @@ impl NotebookEguiApp {
             diagnostics_toggle_requested: false,
             following_driver: false,
             host_status: "Connecting…".into(),
+            checkpoints_supported: true,
             microscope_target: None,
             microscope_document: None,
+            graphics: graphics::GraphicsSurface::default(),
             playground_requested: None,
             microscope_delete: None,
             walkthrough_scroll_to_focus: false,
@@ -989,7 +994,12 @@ impl NotebookEguiApp {
                         ui.close();
                     }
                     if ui
-                        .add_enabled(idle, egui::Button::new("Create Checkpoint"))
+                        .add_enabled(idle && self.checkpoints_supported, egui::Button::new("Create Checkpoint"))
+                        .on_disabled_hover_text(if self.checkpoints_supported {
+                            "Wait for the current operation to finish before creating a checkpoint."
+                        } else {
+                            "Checkpoints are unavailable in browser mode. Export the workspace for a backup."
+                        })
                         .clicked()
                     {
                         self.save_visible_edits();
@@ -1243,18 +1253,6 @@ impl NotebookEguiApp {
                 });
             });
             ui.horizontal_wrapped(|ui| {
-                if toolbar_icon_button(
-                    ui,
-                    true,
-                    ToolbarIcon::Workspace,
-                    if self.workspace_visible {
-                        "Hide workspace explorer"
-                    } else {
-                        "Show workspace explorer"
-                    },
-                ) {
-                    self.workspace_toggle_requested = true;
-                }
                 if self.read_only {
                     if toolbar_icon_button(
                         ui,
@@ -1485,6 +1483,20 @@ impl NotebookEguiApp {
                 |ui| {
                     ui.set_min_width(width);
                     ui.horizontal_wrapped(|ui| {
+                        if !temporary
+                            && toolbar_icon_button(
+                                ui,
+                                true,
+                                ToolbarIcon::Workspace,
+                                if self.workspace_visible {
+                                    "Hide workspace explorer"
+                                } else {
+                                    "Show workspace explorer"
+                                },
+                            )
+                        {
+                            self.workspace_toggle_requested = true;
+                        }
                         ui.label(if self.read_only {
                             "Observer · Read-only"
                         } else {
@@ -1637,7 +1649,7 @@ impl NotebookEguiApp {
                 let microscopes = notebook_protocol::microscope::list(&cell).unwrap_or_default();
                 if !microscopes.is_empty() {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.menu_button(format!("Microscopes ({})", microscopes.len()), |ui| {
+                        let menu = ui.menu_button("        ", |ui| {
                             for item in microscopes {
                                 ui.horizontal(|ui| {
                                     let delete = ui
@@ -1681,6 +1693,27 @@ impl NotebookEguiApp {
                                 });
                             }
                         });
+                        paint_microscope(
+                            ui,
+                            egui::Rect::from_center_size(
+                                menu.response.rect.center(),
+                                egui::vec2(18.0, 18.0) * control_scale(ui),
+                            ),
+                        );
+                        let menu_label = format!(
+                            "Microscopes ({})",
+                            notebook_protocol::microscope::list(&cell)
+                                .unwrap_or_default()
+                                .len()
+                        );
+                        menu.response.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::WidgetType::Button,
+                                ui.is_enabled(),
+                                &menu_label,
+                            )
+                        });
+                        menu.response.on_hover_text(menu_label);
                     });
                 }
             });
@@ -2907,6 +2940,38 @@ fn desktop_control_scale(width: f32) -> f32 {
 
 fn control_scale(ui: &egui::Ui) -> f32 {
     desktop_control_scale(ui.ctx().screen_rect().width())
+}
+
+fn paint_microscope(ui: &egui::Ui, rect: egui::Rect) {
+    let p = |x: f32, y: f32| {
+        egui::pos2(
+            rect.left() + x * rect.width(),
+            rect.top() + y * rect.height(),
+        )
+    };
+    let stroke = Stroke::new(1.5, ui.visuals().text_color());
+    for (a, b) in [
+        ((0.15, 0.95), (0.9, 0.95)),
+        ((0.5, 0.95), (0.5, 0.75)),
+        ((0.15, 0.65), (0.65, 0.65)),
+        ((0.25, 0.1), (0.55, 0.4)),
+        ((0.4, 0.0), (0.7, 0.3)),
+        ((0.25, 0.1), (0.4, 0.0)),
+        ((0.55, 0.4), (0.7, 0.3)),
+    ] {
+        ui.painter()
+            .line_segment([p(a.0, a.1), p(b.0, b.1)], stroke);
+    }
+    ui.painter().add(egui::Shape::line(
+        vec![
+            p(0.7, 0.4),
+            p(0.85, 0.5),
+            p(0.85, 0.7),
+            p(0.7, 0.8),
+            p(0.5, 0.8),
+        ],
+        stroke,
+    ));
 }
 
 fn diagnostics_button(ui: &mut egui::Ui) -> egui::Response {

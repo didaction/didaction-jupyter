@@ -145,11 +145,14 @@ pub async fn serve() -> Result<()> {
             post(create_artifact).layer(DefaultBodyLimit::max(1_400_000)),
         )
         .route("/api/v1/download", get(download))
+        .route("/api/v1/workspace-export", get(export_workspace))
         .route("/api/v1/commands", post(command))
         .route("/api/v1/commands/stream", post(stream))
         .route("/api/v1/collaboration/join", post(join))
         .route("/api/v1/collaboration/leave", post(leave))
         .route("/api/v1/collaboration/driver/{target}", post(handoff))
+        .route("/api/v1/collaboration/release", post(release_driver))
+        .route("/api/v1/collaboration/claim", post(claim_driver))
         .route("/api/v1/collaboration/events", get(events))
         .route("/api/v1/collaboration/view", get(view).post(publish_view));
     if let Some(directory) = &config.static_dir {
@@ -303,6 +306,24 @@ async fn download(State(host): State<App>, headers: HeaderMap) -> Response {
         Err(e) => public_error(e),
     }
 }
+async fn export_workspace(State(host): State<App>) -> Response {
+    let Ok(_serial) = host.artifact_lock.try_lock() else {
+        return public_error(error(
+            ErrorCode::InvalidInput,
+            "Workspace is busy; wait for operations to finish before exporting",
+        ));
+    };
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        host.jupyter.export_workspace(),
+    )
+    .await
+    {
+        Ok(Ok(value)) => Json(value).into_response(),
+        Ok(Err(e)) => public_error(e),
+        Err(_) => public_error(error(ErrorCode::Timeout, "Workspace export timed out")),
+    }
+}
 async fn join(State(host): State<App>, headers: HeaderMap) -> Response {
     let result = async {
         let path = path(&host, &headers)?;
@@ -357,6 +378,28 @@ async fn handoff(
             host.now(),
         )?;
         authority.collaboration.change_driver(&target)
+    }
+    .await;
+    unit_response(result)
+}
+async fn release_driver(State(host): State<App>, headers: HeaderMap) -> Response {
+    let result = async {
+        host.authority.lock().await.collaboration.release_driver(
+            &path(&host, &headers)?,
+            headers_value(&headers, "x-notebook-client"),
+            host.now(),
+        )
+    }
+    .await;
+    unit_response(result)
+}
+async fn claim_driver(State(host): State<App>, headers: HeaderMap) -> Response {
+    let result = async {
+        host.authority.lock().await.collaboration.claim_driver(
+            &path(&host, &headers)?,
+            headers_value(&headers, "x-notebook-client"),
+            host.now(),
+        )
     }
     .await;
     unit_response(result)
