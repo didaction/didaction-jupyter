@@ -44,6 +44,7 @@ export class LocalNotebookConnection {
   };
 }
 export class BrowserWorkspace {
+  kernelName: "pyodide" | "xeus-python" = "pyodide";
   readonly store = new IndexedNotebookStore();
   readonly artifacts = new BrowserArtifactTransport(this.store);
   private release?: () => void;
@@ -77,11 +78,15 @@ export class BrowserWorkspace {
     return new BrowserNotebookTransport(
       path,
       this.store,
-      new WorkerKernel(async () => ({
-        files: await this.store.artifacts(),
-        directory: path.split("/").slice(0, -1).join("/"),
-      })),
+      new WorkerKernel(
+        async () => ({
+          files: await this.store.artifacts(),
+          directory: path.split("/").slice(0, -1).join("/"),
+        }),
+        this.kernelName,
+      ),
       (snapshot) => new NotebookApplication(snapshot),
+      this.kernelName,
     );
   }
   close(): void {

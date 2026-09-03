@@ -18,10 +18,59 @@ notebook includes arithmetic, Matplotlib, and intermediate output replacement
 examples. Choose **Open demo workspace** to load it, or **Import ZIP workspace**
 to load your own notebooks and files. Use the normal cell play button or Shift+Enter.
 
-Select the workspace kernel before opening it: **Python (Pyodide)** is currently
-the only option. The chosen kernel is carried in the notebook URL for reloads.
+Select the workspace kernel before opening it: **Python (Pyodide)** is the default;
+**Python (xeus-python · experimental)** appears after the optional build below.
+The chosen kernel is carried in the notebook URL for reloads.
 Unsupported browser kernel names fail closed. For frontend development,
 `pnpm build:wasm && pnpm dev:browser` serves the same environment with Vite HMR.
+
+## Experimental xeus-python
+
+Install `uv` and `micromamba` (tested with micromamba 2.9.0), then:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm prepare:xeus
+pnpm build:browser
+pnpm serve:browser
+```
+
+Choose **Python (xeus-python · experimental)** on the home page before opening a
+workspace. Existing notebook URLs may select it with `kernel=xeus-python`; sources
+and saved outputs are preserved, but kernels never share live Python variables.
+Playgrounds inherit the selected runtime in their own isolated worker.
+
+The optional bundle adds approximately 48 MB before HTTP compression. It uses
+`@jupyterlite/xeus` 5.0.0, xeus-python 0.19.0, Python 3.13.1, NumPy 2.5.2 and
+Matplotlib 3.11.1. `deploy/xeus/explicit.lock` pins all 42 conda package URLs,
+builds and MD5 checksums; `deploy/xeus/uv.lock` pins the isolated asset builder.
+`environment.yml` documents the original solve, but normal preparation uses the
+explicit lock, not a fresh solve. Build products stay ignored under `.runtime/`
+and `web/public/xeus/`. Server builds do not include them.
+Browser build/dev commands rebuild the adapter when the optional assets exist;
+after editing the classic worker during an active dev session, run
+`node scripts/build-xeus-worker.mjs` and restart the notebook kernel.
+
+The classic worker subclasses the official `EmpackedXeusRemoteKernel`, adapts
+Jupyter envelopes to the same bounded worker port, and waits for both execution
+reply and idle before committing. It does not introduce another notebook command
+path. The upstream package installer is replaced at bundle time with rejecting
+functions, preventing its eager external registry request. Package-install and
+shell magics are disabled. `pyodide-http` is excluded when packing: version 0.2.2
+calls `to_js(dict_converter=...)`, which xeus's pyjs bridge does not implement.
+Automatic urllib/requests browser HTTP patching is therefore not supported.
+This is not a security sandbox: Python's browser bridge still has browser powers.
+
+Stop terminates the xeus worker and loses live variables, even with isolation
+headers. No widgets/comms or stdin integration is claimed. Reload preserves
+notebooks, not kernel memory. Missing assets require `pnpm prepare:xeus` followed
+by rebuilding the browser distribution.
+
+To upgrade, solve `environment.yml` into a **new** emscripten-wasm32 prefix,
+export exact package URLs/checksums into `explicit.lock`, update the npm and uv
+locks, rebuild, and rerun both browser suites. Recheck the HTTP exclusion and
+disabled installer against upstream. Never silently re-solve at deployment time.
+See [source investigation](xeus-python-browser-investigation.md).
 
 ## Deployment separation
 
@@ -136,7 +185,7 @@ runtime compatibility is tested with the pinned assets.
   allowing conflicting writes. This is not server-mode collaboration.
 - Reload/closing a notebook stops its worker. Saved sources and outputs survive;
   Python variables, imported modules and temporary files do not.
-- No browser Julia, kernel selection, server folder mount, checkpoints, widgets,
+- No browser Julia, arbitrary kernel installation, server folder mount, checkpoints, widgets,
   or WebIO is claimed. Unsupported operations return actionable errors.
 - Display-ID replacement is tracked within one execution; cross-cell or later
   executions updating an earlier display are not implemented in this spike.

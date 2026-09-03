@@ -1,4 +1,26 @@
 import { expect, test } from "@playwright/test";
+
+test("optional xeus assets may be absent without breaking Pyodide startup", async ({
+  page,
+}) => {
+  await page.route("**/xeus/didaction-xeus/xpython/kernel.json", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: "<!doctype html><html></html>",
+    }),
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Open demo workspace" }),
+  ).toBeVisible();
+  await expect(
+    page.locator('#browser-kernel option[value="pyodide"]'),
+  ).toHaveCount(1);
+  await expect(
+    page.locator('#browser-kernel option[value="xeus-python"]'),
+  ).toHaveCount(0);
+});
 import { zipFixture } from "../fixtures/workspace-zip";
 
 test("upgrades existing v1 browser notebooks without losing saved work", async ({
@@ -57,7 +79,9 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
   await expect(page.getByLabel("Kernel", { exact: true })).toHaveValue(
     "pyodide",
   );
-  await expect(page.locator("#browser-kernel option")).toHaveCount(1);
+  await expect(
+    page.locator('#browser-kernel option[value="pyodide"]'),
+  ).toHaveCount(1);
   for (const width of [1280, 739]) {
     await page.setViewportSize({ width, height: 900 });
     await page.screenshot({ path: `.runtime/browser-launch-${width}.png` });

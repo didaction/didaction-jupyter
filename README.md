@@ -48,6 +48,8 @@ A separate [browser-only Python environment](docs/browser-runtime.md) is availab
 `http://127.0.0.1:5175/`. This serves static files from `dist-browser/`;
 JupyterLite/Pyodide runs in a Worker
 through the same egui/WebMCP command path, with browser-local notebook storage.
+An optional **xeus-python** WASM kernel can be prepared with `pnpm prepare:xeus`
+before building. See [setup and experimental limitations](docs/browser-runtime.md#experimental-xeus-python).
 At launch, select **Python (Pyodide)**, then choose **Open demo workspace**, **Import ZIP workspace**, or
 **Continue saved workspace**. ZIP imports preserve subfolders and include notebooks
 and data files; they never execute uploaded notebooks automatically. Files are

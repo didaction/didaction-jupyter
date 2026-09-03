@@ -33,14 +33,20 @@ export interface BrowserSnapshot extends NotebookSnapshot {
     outputs: Output[];
   }[];
 }
-export function initialBrowserSnapshot(path: string): BrowserSnapshot {
+export function initialBrowserSnapshot(
+  path: string,
+  kernelName: "pyodide" | "xeus-python" = "pyodide",
+): BrowserSnapshot {
   return {
     protocol_version: 1,
     schema_version: 1,
     notebook: { path: browserPath(path), workspace: "browser-local" },
     kernel: {
-      name: "pyodide",
-      display_name: "Python (browser · Pyodide)",
+      name: kernelName,
+      display_name:
+        kernelName === "pyodide"
+          ? "Python (browser · Pyodide)"
+          : "Python (browser · xeus-python)",
       session_id: null,
       state: "idle",
     },
@@ -102,8 +108,9 @@ export class BrowserNotebookTransport implements NotebookTransport {
     private readonly store: NotebookStore,
     private readonly kernel: BrowserKernel,
     private readonly model: (snapshot: string) => WasmApplication,
+    private readonly kernelName: "pyodide" | "xeus-python" = "pyodide",
   ) {
-    this.snapshot = initialBrowserSnapshot(path);
+    this.snapshot = initialBrowserSnapshot(path, kernelName);
   }
   private validate(snapshot: BrowserSnapshot) {
     const check = this.model(JSON.stringify(snapshot));
@@ -157,16 +164,19 @@ export class BrowserNotebookTransport implements NotebookTransport {
       if (command.type === "setup") {
         if (
           command.path !== this.snapshot.notebook.path ||
-          (command.kernel && command.kernel !== "pyodide")
+          (command.kernel && command.kernel !== this.kernelName)
         )
           throw new Error(
-            "Browser mode uses its own workspace and the Pyodide kernel",
+            "Browser mode uses its own workspace and the configured browser kernel",
           );
         const saved = await this.store.read(String(command.path));
         if (!saved && !command.create)
           throw new Error("Notebook not found in browser storage");
         next = saved ? (structuredClone(saved) as BrowserSnapshot) : next;
-        next.kernel = initialBrowserSnapshot(next.notebook.path).kernel;
+        next.kernel = initialBrowserSnapshot(
+          next.notebook.path,
+          this.kernelName,
+        ).kernel;
       } else if (
         [
           "create_microscope",

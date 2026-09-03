@@ -12,7 +12,7 @@ export async function chooseBrowserWorkspace(
 ): Promise<{ path: string; kernel: string; workspace: string }> {
   let workspaceId =
     new URL(location.href).searchParams.get("workspace") ?? "legacy";
-  const supportedKernels = new Set(["pyodide"]);
+  const supportedKernels = new Set(["pyodide", "xeus-python"]);
   const directKernel = requestedKernel ?? "pyodide";
   if (!supportedKernels.has(directKernel))
     throw new Error(
@@ -30,6 +30,20 @@ export async function chooseBrowserWorkspace(
   const file = document.querySelector<HTMLInputElement>("#browser-zip")!;
   const picker = document.querySelector<HTMLSelectElement>("#browser-saved")!;
   const kernel = document.querySelector<HTMLSelectElement>("#browser-kernel")!;
+  // Experimental runtime is offered only when its separately prepared bundle exists.
+  const xeusAvailable = await fetch("/xeus/didaction-xeus/xpython/kernel.json")
+    .then(
+      async (response) =>
+        response.ok && (await response.json()).language === "python",
+    )
+    .catch(() => false);
+  if (xeusAvailable) {
+    kernel.add(
+      new Option("Python (xeus-python · experimental)", "xeus-python"),
+    );
+  }
+  if (directKernel === "xeus-python" && xeusAvailable)
+    kernel.value = directKernel;
   const saved = (await savedWorkspaces()).filter((w) => w.notebooks.length);
   for (const entry of saved) {
     const option = document.createElement("option");

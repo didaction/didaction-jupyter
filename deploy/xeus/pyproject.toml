@@ -1,0 +1,5 @@
+[project]
+name = "didaction-xeus-build"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["jupyterlite-xeus==5.0.0", "jupyterlite-core==0.7.0", "empack==6.0.1"]

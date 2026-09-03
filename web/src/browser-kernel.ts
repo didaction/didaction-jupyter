@@ -17,6 +17,7 @@ export class WorkerKernel implements BrowserKernel {
       files: { path: string; directory: boolean; bytes: Uint8Array }[];
       directory: string;
     }>,
+    private readonly kernelName: "pyodide" | "xeus-python" = "pyodide",
   ) {}
   private worker?: Worker;
   private buffer?: Uint8Array;
@@ -33,13 +34,16 @@ export class WorkerKernel implements BrowserKernel {
   >();
   private initialize(): Promise<unknown> {
     if (this.ready) return this.ready;
-    this.worker = new Worker(
-      new URL("./browser-kernel.worker.ts", import.meta.url),
-      { type: "module" },
-    );
-    this.buffer = globalThis.crossOriginIsolated
-      ? new Uint8Array(new SharedArrayBuffer(1))
-      : undefined;
+    this.worker =
+      this.kernelName === "xeus-python"
+        ? new Worker("/xeus/worker.js")
+        : new Worker(new URL("./browser-kernel.worker.ts", import.meta.url), {
+            type: "module",
+          });
+    this.buffer =
+      this.kernelName === "pyodide" && globalThis.crossOriginIsolated
+        ? new Uint8Array(new SharedArrayBuffer(1))
+        : undefined;
     this.worker.onmessage = ({ data }) => {
       const pending = this.pending.get(data.id);
       if (!pending) return; // Ignore late messages after timeout/restart.

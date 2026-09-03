@@ -20,6 +20,7 @@ Lockfiles identify versions, but do not replace license texts or attribution.
 | MiTeX                      | 0.2.4   | Apache-2.0                                          |
 | typst-as-lib               | 0.15.4  | MIT                                                 |
 | JupyterLite Pyodide kernel | 0.8.5   | BSD-3-Clause                                        |
+| JupyterLite Xeus loader    | 5.0.0   | BSD-3-Clause                                        |
 | Pyodide                    | 314.0.5 | MPL-2.0                                             |
 | AssemblyScript             | 0.28.9  | Apache-2.0                                          |
 | option-ext                 | 0.2.0   | MPL-2.0                                             |
@@ -29,6 +30,13 @@ Lockfiles identify versions, but do not replace license texts or attribution.
 Fonts embedded through Typst must also be checked against their upstream notices.
 The upstream notice for the Julia deployment integration is retained separately
 in [deploy/julia/LICENSE.upstream](deploy/julia/LICENSE.upstream).
+
+The optional xeus environment adds CPython, xeus-python, NumPy, Matplotlib and
+their dependencies. Its exact package inventory is `deploy/xeus/explicit.lock`;
+these have their own licenses and are not relicensed Apache-2.0. The packaging
+excludes the incompatible optional pyodide-http module, and our worker build
+disables upstream package installation. Apply the distribution checklist below
+to the generated environment before publishing it.
 
 ## Distribution checklist
 

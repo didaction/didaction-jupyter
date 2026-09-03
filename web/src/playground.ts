@@ -147,8 +147,12 @@ export class PlaygroundController {
             import("./browser-transport"),
             import("./browser-kernel"),
           ]);
+        const kernelName =
+          new URL(location.href).searchParams.get("kernel") === "xeus-python"
+            ? "xeus-python"
+            : "pyodide";
         const snapshot = JSON.parse(
-          playgroundSnapshot(JSON.stringify(doc), stepIndex, "pyodide"),
+          playgroundSnapshot(JSON.stringify(doc), stepIndex, kernelName),
         ) as NotebookSnapshot;
         let saved = structuredClone(snapshot);
         transport = new BrowserNotebookTransport(
@@ -163,13 +167,14 @@ export class PlaygroundController {
             },
             list: async () => ({ directory: "", entries: [] }),
           },
-          new WorkerKernel(),
+          new WorkerKernel(undefined, kernelName),
           (input) => new NotebookApplication(input),
+          kernelName,
         );
         const setup = await transport.setup(
           command("setup", {
             path: "playground.ipynb",
-            kernel: "pyodide",
+            kernel: kernelName,
             create: false,
           }),
         );
