@@ -17,6 +17,7 @@ function harness() {
         id: "one",
         cell_type: "code",
         source: "value = 40",
+        metadata: {},
         execution_count: null,
         outputs: [],
       },
@@ -54,8 +55,21 @@ function harness() {
               change.cell as Record<string, unknown>,
             );
             break;
+          case "insert_relative": {
+            const anchor = cells.findIndex(
+              (cell) => cell.id === change.anchor_cell_id,
+            );
+            cells.splice(
+              anchor + (change.after ? 1 : 0),
+              0,
+              change.cell as Record<string, unknown>,
+            );
+            break;
+          }
           case "update":
-            cells[at]!.source = change.source;
+            if (change.source !== undefined) cells[at]!.source = change.source;
+            if (change.metadata !== undefined)
+              cells[at]!.metadata = change.metadata;
             break;
           case "delete":
             cells.splice(at, 1);
@@ -117,6 +131,53 @@ describe("transport-neutral notebook tools", () => {
     ).toBe(false);
     expect(h.calls.at(-1)?.changes).toMatchObject([
       { operation: "insert_relative", anchor_cell_id: "one", after: false },
+    ]);
+  });
+  it("marks only code immediately following Markdown and preserves metadata", async () => {
+    const h = harness();
+    const inserted = await h.tools.callTool("insert_cell", {
+      before_cell_id: "one",
+      cell_type: "markdown",
+      source: "# Explanation",
+    });
+    expect(inserted.isError).toBe(false);
+    const markdownCellId = inserted.structuredContent.cell_id as string;
+    expect(
+      (
+        await h.tools.callTool("set_markdown_code_group", {
+          cell_id: "one",
+          grouped: true,
+        })
+      ).isError,
+    ).toBe(false);
+    expect(h.calls.at(-1)?.changes).toEqual([
+      {
+        operation: "update",
+        cell_id: "one",
+        metadata: {
+          didaction_markdown_group: {
+            schema_version: 1,
+            markdown_cell_id: markdownCellId,
+          },
+        },
+      },
+    ]);
+    const read = await h.tools.callTool("read_cell", { cell_id: "one" });
+    expect(read.structuredContent.cell).toMatchObject({
+      id: "one",
+      markdown_grouped: true,
+      source: "value = 40",
+    });
+    expect(
+      (
+        await h.tools.callTool("set_markdown_code_group", {
+          cell_id: "one",
+          grouped: false,
+        })
+      ).isError,
+    ).toBe(false);
+    expect(h.calls.at(-1)?.changes).toEqual([
+      { operation: "update", cell_id: "one", metadata: {} },
     ]);
   });
   it("routes bounded agent highlights through the view validator, never kernel commands", async () => {
@@ -226,7 +287,7 @@ describe("transport-neutral notebook tools", () => {
       },
     });
     expect(installed.available).toBe(true);
-    expect(registered).toHaveLength(31);
+    expect(registered).toHaveLength(32);
     expect(
       (
         await registered
@@ -236,7 +297,7 @@ describe("transport-neutral notebook tools", () => {
     ).toBe(false);
     expect(h.calls).toHaveLength(1);
     installed.dispose();
-    expect(removed).toHaveLength(31);
+    expect(removed).toHaveLength(32);
     expect((await installWebMcp(h.tools, {} as ModelContext)).available).toBe(
       false,
     );
@@ -256,7 +317,7 @@ describe("transport-neutral notebook tools", () => {
     try {
       const installed = await installWebMcp(harness().tools);
       expect(installed.available).toBe(true);
-      expect(completed).toBe(31);
+      expect(completed).toBe(32);
       installed.dispose();
       expect(signals.every((signal) => signal.aborted)).toBe(true);
     } finally {

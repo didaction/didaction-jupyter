@@ -34,6 +34,11 @@ WebMCP-unavailable browsers remain fully usable by humans.
 - close_notebook(notebook_path): release its frontend state, preserving file and kernel
 - read_notebook, read_cell
 - insert_cell, overwrite_cell_source, edit_cell_source
+- set_markdown_code_group(cell_id, grouped): persistently join a code cell to
+  the immediately preceding Markdown cell in one shared visible boundary. The
+  code cell owns the versioned `didaction_markdown_group` metadata and remains
+  the combined unit's selected identity in `get_active_context`; the human Cell
+  menu can group or ungroup the same pair.
 - move_cell, delete_cell, clear_cell_output
 - execute_cell, insert_execute_code_cell
 - interrupt_kernel, restart_notebook

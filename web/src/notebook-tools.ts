@@ -52,9 +52,11 @@ type Cell = {
   id: string;
   cell_type: string;
   source: string;
+  metadata: Record<string, unknown>;
   execution_count: number | null;
   outputs: unknown[];
 };
+const markdownGroupMetadataKey = "didaction_markdown_group";
 const id: Field = { type: "string", minLength: 1, maxLength: 128 };
 const source: Field = { type: "string", maxLength: 64000 };
 const index: Field = { type: "integer", minimum: 0, maximum: 2047 };
@@ -325,6 +327,11 @@ define(
   ["cell_id", "old_string", "new_string"],
 );
 define(
+  "set_markdown_code_group",
+  "Visually combine a code cell with the immediately preceding Markdown cell inside one shared notebook cell boundary. Persists as code-cell metadata; set grouped false to separate them.",
+  { cell_id: id, grouped: { type: "boolean" } },
+);
+define(
   "move_cell",
   "Move before_cell_id or after_cell_id, or to an explicitly absolute zero-based final index. Supply exactly one position.",
   {
@@ -579,13 +586,27 @@ export class NotebookTools implements NotebookToolInvoker {
             "Shell and package-install magics are not exposed by notebook tools",
           );
         }
-        const publicCell = (cell: Cell) => ({
-          id: cell.id,
-          cell_type: cell.cell_type,
-          source: cell.source,
-          execution_count: cell.execution_count,
-          outputs: cell.outputs,
-        });
+        const publicCell = (cell: Cell) => {
+          const cellIndex = cells.findIndex(
+            (candidate) => candidate.id === cell.id,
+          );
+          const group = cell.metadata?.[markdownGroupMetadataKey] as
+            | { schema_version?: unknown; markdown_cell_id?: unknown }
+            | undefined;
+          return {
+            id: cell.id,
+            cell_type: cell.cell_type,
+            source: cell.source,
+            markdown_grouped:
+              cell.cell_type === "code" &&
+              group?.schema_version === 1 &&
+              cellIndex > 0 &&
+              cells[cellIndex - 1]?.cell_type === "markdown" &&
+              group.markdown_cell_id === cells[cellIndex - 1]?.id,
+            execution_count: cell.execution_count,
+            outputs: cell.outputs,
+          };
+        };
         if (name === "read_notebook")
           return answer({
             ok: true,
@@ -737,6 +758,38 @@ export class NotebookTools implements NotebookToolInvoker {
               operation: "update",
               cell_id: affectedId,
               source: pieces.join(args.new_string as string),
+            });
+            break;
+          }
+          case "set_markdown_code_group": {
+            if (cell!.cell_type !== "code")
+              throw new ToolError(
+                "invalid_input",
+                "Only code cells can be grouped with Markdown",
+              );
+            const cellIndex = cells.findIndex(
+              (candidate) => candidate.id === affectedId,
+            );
+            if (
+              args.grouped &&
+              (cellIndex === 0 ||
+                cells[cellIndex - 1]?.cell_type !== "markdown")
+            )
+              throw new ToolError(
+                "invalid_input",
+                "The code cell must immediately follow a Markdown cell",
+              );
+            const metadata = structuredClone(cell!.metadata ?? {});
+            if (args.grouped)
+              metadata[markdownGroupMetadataKey] = {
+                schema_version: 1,
+                markdown_cell_id: cells[cellIndex - 1]!.id,
+              };
+            else delete metadata[markdownGroupMetadataKey];
+            await modify({
+              operation: "update",
+              cell_id: affectedId,
+              metadata,
             });
             break;
           }

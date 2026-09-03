@@ -97,6 +97,12 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
   expect(inserted.isError).toBe(false);
   const cell_id = inserted.structuredContent.cell_id as string;
   expect(JSON.stringify(inserted)).toContain("42");
+  const markdown = await call("insert_cell", {
+    before_cell_id: cell_id,
+    cell_type: "markdown",
+    source: "## WebMCP explanation\nThis Markdown and code share one boundary.",
+  });
+  expect(markdown.isError).toBe(false);
   const anchored = await call("insert_execute_code_cell", {
     before_cell_id: cell_id,
     source: "webmcp_value + 1",
@@ -173,15 +179,25 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
       })
     ).isError,
   ).toBe(true);
+  expect(
+    (await call("set_markdown_code_group", { cell_id, grouped: true })).isError,
+  ).toBe(false);
+  expect(
+    (await call("read_cell", { cell_id })).structuredContent.cell,
+  ).toMatchObject({ markdown_grouped: true });
+  await page.screenshot({ path: ".runtime/markdown-code-group.png" });
   await page.screenshot({ path: ".runtime/frontend-tools.png" });
   await page.reload();
   await expect(page.locator("#connection-status")).toContainText(
     "WebMCP ready",
     { timeout: 60000 },
   );
-  expect(JSON.stringify(await call("read_cell", { cell_id }))).toContain(
-    "40 + 3",
-  );
+  expect(
+    (await call("read_cell", { cell_id })).structuredContent.cell,
+  ).toMatchObject({
+    source: "webmcp_value = 40 + 3\nwebmcp_value",
+    markdown_grouped: true,
+  });
   expect((await call("delete_cell", { cell_id })).isError).toBe(false);
   expect((await call("read_cell", { cell_id })).isError).toBe(true);
   const sleeping = await call("insert_cell", {

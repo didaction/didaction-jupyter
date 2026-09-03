@@ -132,6 +132,26 @@ fn cell_has_completed_execution(cell: &Cell) -> bool {
     cell.cell_type == CellType::Code && cell.execution_count.is_some()
 }
 
+const MARKDOWN_GROUP_METADATA_KEY: &str = "didaction_markdown_group";
+
+fn combines_with_markdown(cell: &Cell, markdown_cell_id: &str) -> bool {
+    cell.cell_type == CellType::Code
+        && cell
+            .metadata
+            .get(MARKDOWN_GROUP_METADATA_KEY)
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|value| {
+                value
+                    .get("schema_version")
+                    .and_then(serde_json::Value::as_u64)
+                    == Some(1)
+                    && value
+                        .get("markdown_cell_id")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(markdown_cell_id)
+            })
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum OutputViewMode {
     #[default]
@@ -642,7 +662,20 @@ impl NotebookEguiApp {
         }
     }
     pub fn active_context(&self) -> serde_json::Value {
-        let selected = self.selected_cell();
+        let selected = self.selected_cell().map(|(index, cell)| {
+            if cell.cell_type == CellType::Markdown
+                && self
+                    .state
+                    .snapshot
+                    .cells
+                    .get(index + 1)
+                    .is_some_and(|code| combines_with_markdown(code, &cell.id))
+            {
+                (index + 1, self.state.snapshot.cells[index + 1].clone())
+            } else {
+                (index, cell)
+            }
+        });
         let selection = selected.as_ref().map(|(index, cell)| {
             let execution = self
                 .pending_execution_cells
@@ -698,6 +731,58 @@ impl NotebookEguiApp {
             .iter()
             .position(|cell| &cell.id == selected)
             .map(|index| (index, self.state.snapshot.cells[index].clone()))
+    }
+
+    fn selected_markdown_group_code(&self) -> Option<(usize, Cell)> {
+        let (index, cell) = self.selected_cell()?;
+        if cell.cell_type == CellType::Code
+            && index > 0
+            && self.state.snapshot.cells[index - 1].cell_type == CellType::Markdown
+        {
+            Some((index, cell))
+        } else if cell.cell_type == CellType::Markdown
+            && self
+                .state
+                .snapshot
+                .cells
+                .get(index + 1)
+                .is_some_and(|code| combines_with_markdown(code, &cell.id))
+        {
+            Some((index + 1, self.state.snapshot.cells[index + 1].clone()))
+        } else {
+            None
+        }
+    }
+
+    fn set_selected_markdown_group(&mut self, grouped: bool) {
+        let Some((cell_index, cell)) = self.selected_markdown_group_code() else {
+            return;
+        };
+        let Some(metadata) = cell.metadata.as_object().cloned() else {
+            return;
+        };
+        let mut metadata = metadata;
+        if grouped {
+            let markdown_cell_id = self.state.snapshot.cells[cell_index - 1].id.clone();
+            metadata.insert(
+                MARKDOWN_GROUP_METADATA_KEY.into(),
+                serde_json::json!({
+                    "schema_version": 1,
+                    "markdown_cell_id": markdown_cell_id,
+                }),
+            );
+        } else {
+            metadata.remove(MARKDOWN_GROUP_METADATA_KEY);
+        }
+        self.state.snapshot.selected_cell_id = Some(cell.id.clone());
+        self.emit(NotebookCommandKind::ModifyCells {
+            changes: vec![CellMutation::Update {
+                cell_id: cell.id,
+                source: None,
+                metadata: Some(serde_json::Value::Object(metadata)),
+                cell_type: None,
+            }],
+        });
     }
     fn save_visible_edits(&mut self) {
         for cell in self.state.snapshot.cells.clone() {
@@ -1012,6 +1097,9 @@ impl NotebookEguiApp {
         );
         let selected = self.selected_cell();
         let selected_type = selected.as_ref().map(|(_, cell)| cell.cell_type.clone());
+        let markdown_group = self.selected_markdown_group_code().map(|(index, cell)| {
+            combines_with_markdown(&cell, &self.state.snapshot.cells[index - 1].id)
+        });
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 ui.heading(
@@ -1223,6 +1311,24 @@ impl NotebookEguiApp {
                             }
                         }
                     });
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            idle && markdown_group.is_some(),
+                            egui::Button::new(if markdown_group == Some(true) {
+                                "Ungroup Markdown and Code"
+                            } else {
+                                "Group with Previous Markdown"
+                            }),
+                        )
+                        .on_disabled_hover_text(
+                            "Select a code cell immediately following Markdown",
+                        )
+                        .clicked()
+                    {
+                        self.set_selected_markdown_group(markdown_group != Some(true));
+                        ui.close();
+                    }
                     ui.separator();
                     if ui
                         .add_enabled(
@@ -1600,26 +1706,38 @@ impl NotebookEguiApp {
             ui.ctx().request_discard("status panel height changed");
         }
     }
-    fn cell(&mut self, ui: &mut egui::Ui, index: usize, cell: Cell) {
+    fn cell(&mut self, ui: &mut egui::Ui, index: usize, cell: Cell, grouped: bool) {
         let selected = self.selected_cells.contains(&cell.id)
             || self.state.snapshot.selected_cell_id.as_deref() == Some(cell.id.as_str());
         let mut collapsed = self.collapsed_cells.contains(&cell.id);
         let output_view = self.output_view(&cell.id);
         let frame = egui::Frame::new()
-            .fill(if selected {
+            .fill(if grouped {
+                Color32::TRANSPARENT
+            } else if selected {
                 Color32::from_rgb(250, 253, 255)
             } else {
                 Color32::WHITE
             })
             .stroke(Stroke::new(
-                if selected { 2.0 } else { 1.0 },
+                if grouped {
+                    0.0
+                } else if selected {
+                    2.0
+                } else {
+                    1.0
+                },
                 if selected {
                     Color32::from_rgb(45, 105, 145)
                 } else {
                     Color32::from_gray(210)
                 },
             ))
-            .corner_radius(CornerRadius::same(3))
+            .corner_radius(if grouped {
+                CornerRadius::ZERO
+            } else {
+                CornerRadius::same(3)
+            })
             .inner_margin(Margin::same(10));
         let frame_response = frame.show(ui, |ui| {
             if self.external_command_active {
@@ -2463,8 +2581,43 @@ impl eframe::App for NotebookEguiApp {
                             ui.label("Add a code or Markdown cell to begin.");
                         });
                     }
-                    for (index, cell) in self.state.snapshot.cells.clone().into_iter().enumerate() {
-                        self.cell(ui, index, cell);
+                    let cells = self.state.snapshot.cells.clone();
+                    let mut index = 0;
+                    while index < cells.len() {
+                        let grouped = index + 1 < cells.len()
+                            && cells[index].cell_type == CellType::Markdown
+                            && combines_with_markdown(&cells[index + 1], &cells[index].id);
+                        if grouped {
+                            let selected = [&cells[index], &cells[index + 1]].iter().any(|cell| {
+                                self.selected_cells.contains(&cell.id)
+                                    || self.state.snapshot.selected_cell_id.as_deref()
+                                        == Some(cell.id.as_str())
+                            });
+                            egui::Frame::new()
+                                .fill(if selected {
+                                    Color32::from_rgb(250, 253, 255)
+                                } else {
+                                    Color32::WHITE
+                                })
+                                .stroke(Stroke::new(
+                                    if selected { 2.0 } else { 1.0 },
+                                    if selected {
+                                        Color32::from_rgb(45, 105, 145)
+                                    } else {
+                                        Color32::from_gray(210)
+                                    },
+                                ))
+                                .corner_radius(CornerRadius::same(3))
+                                .show(ui, |ui| {
+                                    self.cell(ui, index, cells[index].clone(), true);
+                                    ui.separator();
+                                    self.cell(ui, index + 1, cells[index + 1].clone(), true);
+                                });
+                            index += 2;
+                        } else {
+                            self.cell(ui, index, cells[index].clone(), false);
+                            index += 1;
+                        }
                         ui.add_space(10.0);
                     }
                     if ui.input(|input| input.pointer.any_released()) {
@@ -3686,7 +3839,7 @@ mod tests {
         };
         let cell = app.state.snapshot.cells[0].clone();
         let _ = ctx.run(input.clone(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
+            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone(), false));
         });
         input.events = vec![
             egui::Event::PointerMoved(egui::pos2(50.0, 30.0)),
@@ -3698,7 +3851,7 @@ mod tests {
             },
         ];
         let _ = ctx.run(input.clone(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
+            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone(), false));
         });
         input.events = vec![egui::Event::PointerButton {
             pos: egui::pos2(50.0, 30.0),
@@ -3707,7 +3860,7 @@ mod tests {
             modifiers: egui::Modifiers::NONE,
         }];
         let _ = ctx.run(input, |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
+            egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone(), false));
         });
         assert!(app.agent_highlights.is_empty());
     }
@@ -3788,7 +3941,7 @@ mod tests {
             app.capture_target = Some(("code".into(), 0));
             let _ = ctx.run(input.clone(), |ctx| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    app.cell(ui, 0, cell.clone());
+                    app.cell(ui, 0, cell.clone(), false);
                 });
             });
             let bottom = app.capture_region.as_ref().unwrap().0.bottom();
@@ -3804,7 +3957,8 @@ mod tests {
                     },
                 ];
                 let _ = ctx.run(input.clone(), |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
+                    egui::CentralPanel::default()
+                        .show(ctx, |ui| app.cell(ui, 0, cell.clone(), false));
                 });
             }
             assert_eq!(
@@ -4270,6 +4424,66 @@ mod tests {
         cell.execution_count = Some(1);
 
         assert!(cell_has_completed_execution(&cell));
+    }
+
+    #[test]
+    fn markdown_group_metadata_is_versioned_and_code_only() {
+        let mut code = app().state.snapshot.cells[0].clone();
+        code.metadata = serde_json::json!({
+            "keep": true,
+            MARKDOWN_GROUP_METADATA_KEY: {
+                "schema_version": 1,
+                "markdown_cell_id": "markdown"
+            }
+        });
+        assert!(combines_with_markdown(&code, "markdown"));
+        assert!(!combines_with_markdown(&code, "other"));
+        assert_eq!(code.metadata["keep"], true);
+
+        code.metadata[MARKDOWN_GROUP_METADATA_KEY] = serde_json::json!({"schema_version": 2});
+        assert!(!combines_with_markdown(&code, "markdown"));
+        code.cell_type = CellType::Markdown;
+        code.metadata[MARKDOWN_GROUP_METADATA_KEY] =
+            serde_json::json!({"schema_version": 1, "markdown_cell_id": "markdown"});
+        assert!(!combines_with_markdown(&code, "markdown"));
+    }
+
+    #[test]
+    fn grouped_markdown_selection_is_publicly_the_code_cell_and_can_ungroup() {
+        let mut app = app();
+        let mut markdown = app.state.snapshot.cells[0].clone();
+        markdown.id = "markdown".into();
+        markdown.cell_type = CellType::Markdown;
+        markdown.metadata = serde_json::json!({});
+        let mut code = app.state.snapshot.cells[0].clone();
+        code.metadata = serde_json::json!({
+            "keep": true,
+            MARKDOWN_GROUP_METADATA_KEY: {
+                "schema_version": 1,
+                "markdown_cell_id": "markdown"
+            }
+        });
+        app.state.snapshot.cells = vec![markdown, code];
+        app.state.snapshot.selected_cell_id = Some("markdown".into());
+
+        assert_eq!(app.active_context()["selection"]["cell_id"], "code");
+        app.set_selected_markdown_group(false);
+        let commands = app.drain_commands();
+        assert_eq!(app.state.snapshot.selected_cell_id.as_deref(), Some("code"));
+        let NotebookCommandKind::ModifyCells { changes } = &commands[0].kind else {
+            panic!("expected metadata update");
+        };
+        let CellMutation::Update { metadata, .. } = &changes[0] else {
+            panic!("expected cell update");
+        };
+        assert_eq!(metadata.as_ref().unwrap()["keep"], true);
+        assert!(
+            metadata
+                .as_ref()
+                .unwrap()
+                .get(MARKDOWN_GROUP_METADATA_KEY)
+                .is_none()
+        );
     }
 
     #[test]
