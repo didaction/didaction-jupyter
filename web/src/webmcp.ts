@@ -3,6 +3,7 @@ import type {
   ToolDefinition,
   ToolResult,
 } from "./notebook-tools";
+import type { CallHistory } from "./diagnostics";
 export type ModelContext = {
   registerTool(
     tool: ToolDefinition & { execute(input: unknown): Promise<ToolResult> },
@@ -19,6 +20,7 @@ export async function installWebMcp(
     (typeof navigator !== "undefined"
       ? (navigator as Navigator & { modelContext?: ModelContext }).modelContext
       : undefined),
+  history?: CallHistory,
 ): Promise<{ available: boolean; dispose(): void }> {
   const registered: string[] = [];
   const controller = new AbortController();
@@ -38,7 +40,12 @@ export async function installWebMcp(
       await context.registerTool(
         {
           ...tool,
-          execute: (input) => tools.callTool(tool.name, input),
+          execute: (input) =>
+            history
+              ? history.record(tool.name, () =>
+                  tools.callTool(tool.name, input),
+                )
+              : tools.callTool(tool.name, input),
         },
         { signal: controller.signal },
       );

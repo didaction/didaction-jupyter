@@ -74,6 +74,14 @@
           >
             Follow driver
           </button>
+          <button
+            id="diagnostics-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="diagnostics-panel"
+          >
+            Open diagnostics
+          </button>
         </div>
         <output
           id="connection-status"
@@ -98,10 +106,46 @@
           <button type="button" onclick="location.reload()">Retry</button>
         </section>
       </main>
+      <aside id="diagnostics-panel" aria-label="Diagnostics" hidden>
+        <!-- Existing IDE world: flat right inspector, build identity above memory-only calls. -->
+        <div class="diagnostics-heading">
+          <h2>Diagnostics</h2>
+          <button
+            id="diagnostics-close"
+            type="button"
+            aria-label="Close diagnostics"
+            title="Close diagnostics"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <h3>Frontend WASM</h3>
+        <p class="diagnostics-label">Git commit embedded at build time</p>
+        <code id="wasm-git-sha">Unavailable</code>
+        <p id="wasm-build-state"></p>
+        <h3>WebMCP calls</h3>
+        <p class="diagnostics-label">
+          This tab only. Cleared on reload. Arguments and results are not
+          recorded.
+        </p>
+        <div class="diagnostics-settings">
+          <label for="diagnostics-limit">Keep last</label
+          ><input
+            id="diagnostics-limit"
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            value="10"
+          /><span>calls</span
+          ><button id="diagnostics-clear" type="button">Clear</button>
+        </div>
+        <p id="diagnostics-empty">No WebMCP calls in this tab yet.</p>
+        <ol id="diagnostics-calls" aria-label="Recent WebMCP calls"></ol>
+      </aside>
     </div>
-    <p class="privacy-note">
-      Local execution is unsafe. Only run notebooks you trust.
-    </p>
     <script type="module" src="/src/bootstrap.ts"></script>
   </body>
 </html>

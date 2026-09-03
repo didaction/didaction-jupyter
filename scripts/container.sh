@@ -11,6 +11,14 @@ case "${1:-up}" in
       chmod 444 "$token_file"
     fi
     if [[ "${1:-up}" == prepare ]]; then exit 0; fi
+    export DIDACTION_BUILD_GIT_SHA="${DIDACTION_BUILD_GIT_SHA:-$(git rev-parse HEAD)}"
+    if [[ -z "${DIDACTION_BUILD_DIRTY:-}" ]]; then
+      if [[ -n "$(git status --porcelain)" ]]; then
+        export DIDACTION_BUILD_DIRTY=true
+      else
+        export DIDACTION_BUILD_DIRTY=false
+      fi
+    fi
     if [[ "${DIDACTION_PREBUILT_FRONTEND:-0}" == 1 ]]; then
       pnpm build
       docker build --target gateway-prebuilt -t didaction-gateway:local .

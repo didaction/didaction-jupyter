@@ -19,6 +19,9 @@ COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
 COPY web ./web
 COPY vite.config.ts tsconfig.json ./
+ARG DIDACTION_BUILD_GIT_SHA=unknown
+ARG DIDACTION_BUILD_DIRTY=unknown
+ENV DIDACTION_BUILD_GIT_SHA=$DIDACTION_BUILD_GIT_SHA DIDACTION_BUILD_DIRTY=$DIDACTION_BUILD_DIRTY
 RUN pnpm build
 
 FROM runtime AS gateway-prebuilt

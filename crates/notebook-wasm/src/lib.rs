@@ -11,6 +11,10 @@ use std::sync::{Arc, Mutex};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
+#[wasm_bindgen(js_name = wasmBuildInfo)]
+pub fn wasm_build_info() -> String {
+    serde_json::json!({"git_sha":env!("DIDACTION_WASM_GIT_SHA"),"dirty":env!("DIDACTION_WASM_DIRTY")}).to_string()
+}
 #[wasm_bindgen(js_name = prepareRuntimeCommand)]
 pub fn prepare_runtime_command(snapshot: &str, command: &str) -> Result<String, JsError> {
     if snapshot.len() > notebook_protocol::MAX_RESPONSE_BYTES
@@ -437,6 +441,16 @@ impl MountedNotebook {
     #[wasm_bindgen(js_name = takeFollowToggle)]
     pub fn take_follow_toggle(&self) -> bool {
         std::mem::take(&mut self.app.lock().expect("app mutex").follow_toggle_requested)
+    }
+    #[wasm_bindgen(js_name = takeDiagnosticsToggle)]
+    pub fn take_diagnostics_toggle(&self) -> bool {
+        std::mem::take(
+            &mut self
+                .app
+                .lock()
+                .expect("app mutex")
+                .diagnostics_toggle_requested,
+        )
     }
     #[wasm_bindgen(js_name = scrollFraction)]
     pub fn scroll_fraction(&self) -> f32 {

@@ -1,4 +1,9 @@
-import init, { mountNotebook, NotebookApplication } from "../pkg/notebook_wasm";
+import init, {
+  mountNotebook,
+  NotebookApplication,
+  wasmBuildInfo,
+} from "../pkg/notebook_wasm";
+import { CallHistory, installDiagnostics } from "./diagnostics";
 import {
   CommandGateway,
   createQueuedNotebookDispatcher,
@@ -26,6 +31,7 @@ interface NotebookContext extends OpenNotebook {
   isActive(): boolean;
   hostStatus(following: boolean, text: string): void;
   takeFollowToggle(): boolean;
+  takeDiagnosticsToggle(): boolean;
 }
 const openContexts = new Set<NotebookContext>();
 
@@ -319,6 +325,7 @@ async function createContext(
     isActive: () => mounted !== undefined,
     hostStatus: (following, text) => mounted?.setHostStatus(following, text),
     takeFollowToggle: () => mounted?.takeFollowToggle() ?? false,
+    takeDiagnosticsToggle: () => mounted?.takeDiagnosticsToggle() ?? false,
     scrollFraction: () => mounted?.scrollFraction() ?? 0,
     followSelection: (cellId) => mounted?.setFollowSelection(cellId),
     followScroll: (fraction) => mounted?.setFollowScroll(fraction),
@@ -384,6 +391,11 @@ async function createContext(
 
 async function boot(): Promise<void> {
   await init();
+  const callHistory = new CallHistory();
+  const diagnostics = installDiagnostics(
+    callHistory,
+    JSON.parse(wasmBuildInfo()),
+  );
   let startup: { path: string; kernel: string };
   if (new URL(location.href).searchParams.get("runtime") === "browser") {
     const { BrowserWorkspace } = await import("./browser-workspace");
@@ -481,6 +493,7 @@ async function boot(): Promise<void> {
     }
     updateFollowButton();
     const active = activeContext();
+    if (active?.takeDiagnosticsToggle()) diagnostics.toggle();
     if (active?.takeFollowToggle()) followButton.click();
     active?.hostStatus(follow.enabled, status.textContent ?? "Connecting…");
     if (!active?.canWrite?.()) return;
@@ -506,7 +519,7 @@ async function boot(): Promise<void> {
     },
     browserWorkspace ? (path) => browserWorkspace!.store.list(path) : undefined,
   );
-  const webmcp = await installWebMcp(workspace);
+  const webmcp = await installWebMcp(workspace, undefined, callHistory);
   const hasWebMcp = webmcp.available;
   status.textContent = hasWebMcp
     ? "Connected · WebMCP ready"
@@ -528,6 +541,7 @@ async function boot(): Promise<void> {
       follow.stop();
       resizeObserver.disconnect();
       webmcp.dispose();
+      diagnostics.dispose();
       workspace.dispose();
       browserWorkspace?.close();
     },

@@ -11,6 +11,22 @@ An opt-in [browser-only Python runtime](docs/browser-runtime.md) is available:
 through the same egui/WebMCP command path, with browser-local notebook storage.
 It is a single-user spike; the server runtime remains the default.
 
+## Frontend diagnostics
+
+The diagnostic waveform icon at the start of the bottom status bar opens a right
+inspector. It shows the Git commit embedded in the loaded WASM build (plus dirty
+checkout status), not the server's current checkout. Builds without Git metadata
+show `unknown`; container builds via `scripts/container.sh` pass this metadata.
+For manual Docker builds, pass `DIDACTION_BUILD_GIT_SHA` and
+`DIDACTION_BUILD_DIRTY` as build arguments.
+
+The inspector keeps the latest 10 WebMCP calls by default; **Keep last** accepts
+1–100. Only tool names, timestamps, durations and outcomes are retained, in this
+tab's memory. Arguments, outputs, notebook paths and error bodies are not recorded.
+Clear removes the history; reload resets both history and its limit. Human egui
+actions are not WebMCP calls and do not enter this list. On narrow screens the
+inspector temporarily hides the explorer, or occupies the working area on phones.
+
 ## Architecture
 
 ```text

@@ -182,6 +182,7 @@ pub struct NotebookEguiApp {
     pub workspace_visible: bool,
     pub workspace_toggle_requested: bool,
     pub follow_toggle_requested: bool,
+    pub diagnostics_toggle_requested: bool,
     pub following_driver: bool,
     pub host_status: String,
     output_views: HashMap<String, OutputViewMode>,
@@ -247,6 +248,7 @@ impl NotebookEguiApp {
             workspace_visible: true,
             workspace_toggle_requested: false,
             follow_toggle_requested: false,
+            diagnostics_toggle_requested: false,
             following_driver: false,
             host_status: "Connecting…".into(),
             output_views: HashMap::new(),
@@ -1298,7 +1300,7 @@ impl NotebookEguiApp {
         });
         id
     }
-    fn status(&self, ui: &mut egui::Ui) {
+    fn status(&mut self, ui: &mut egui::Ui) {
         let (label, color) = if !self.dirty_editors.is_empty() {
             ("Autosave pending", Color32::from_rgb(239, 108, 0))
         } else {
@@ -1311,6 +1313,30 @@ impl NotebookEguiApp {
             }
         };
         ui.horizontal_wrapped(|ui| {
+            let response = ui
+                .add_sized([24.0, 24.0], egui::Button::new(""))
+                .on_hover_text("Open diagnostics");
+            let rect = response.rect.shrink(5.0);
+            let stroke = egui::Stroke::new(1.5, ui.visuals().text_color());
+            ui.painter()
+                .rect_stroke(rect, 2.0, stroke, egui::StrokeKind::Inside);
+            let x = rect.left();
+            let y = rect.center().y;
+            ui.painter().add(egui::Shape::line(
+                vec![
+                    egui::pos2(x, y),
+                    egui::pos2(x + 3.0, y),
+                    egui::pos2(x + 5.0, y - 4.0),
+                    egui::pos2(x + 8.0, y + 4.0),
+                    egui::pos2(x + 10.0, y),
+                    egui::pos2(rect.right(), y),
+                ],
+                stroke,
+            ));
+            if response.clicked() {
+                self.diagnostics_toggle_requested = true;
+            }
+            ui.separator();
             ui.label(if self.read_only {
                 "Observer · Read-only"
             } else {

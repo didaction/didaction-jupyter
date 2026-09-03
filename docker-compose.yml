@@ -39,6 +39,9 @@ services:
     build:
       context: .
       target: gateway
+      args:
+        DIDACTION_BUILD_GIT_SHA: ${DIDACTION_BUILD_GIT_SHA:-unknown}
+        DIDACTION_BUILD_DIRTY: ${DIDACTION_BUILD_DIRTY:-unknown}
     environment:
       DIDACTION_JUPYTER_URL: http://jupyter:8888
       DIDACTION_JUPYTER_TOKEN_FILE: /run/secrets/jupyter_token
