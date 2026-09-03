@@ -102,6 +102,12 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
     (await call("set_microscope_walkthrough", { walkthrough: invalid }))
       .isError,
   ).toBe(true);
+  const badColumns = structuredClone(exampleWalkthrough);
+  Object.assign(badColumns.steps[0]!.annotations[0]!, { end_column: 999 });
+  expect(
+    (await call("set_microscope_walkthrough", { walkthrough: badColumns }))
+      .isError,
+  ).toBe(true);
   expect(
     (
       (await call("read_microscope")).structuredContent.microscope as {

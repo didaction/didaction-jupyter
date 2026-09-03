@@ -126,6 +126,8 @@ const annotation: Field = {
     id: shortId,
     start_line: { type: "integer", minimum: 1, maximum: 64001 },
     end_line: { type: "integer", minimum: 1, maximum: 64001 },
+    start_column: { type: "integer", minimum: 1, maximum: 64001 },
+    end_column: { type: "integer", minimum: 1, maximum: 64001 },
     text: { type: "string", minLength: 1, maxLength: 4096 },
     color: { type: "string", enum: ["blue", "blue-light", "blue-deep"] },
   },
@@ -157,7 +159,7 @@ const walkthrough: Field = {
 };
 define(
   "set_microscope_walkthrough",
-  "Replace a microscope's complete walkthrough. Display-only code, ordered steps, Markdown and inclusive one-based line annotations. Driver-only; saved in its sidecar.",
+  "Replace a microscope's complete walkthrough. Display-only code, ordered steps, Markdown and inclusive one-based line annotations, optionally narrowed to one-based character columns on one line. Driver-only; saved in its sidecar.",
   { ...microScope, walkthrough },
 );
 define(

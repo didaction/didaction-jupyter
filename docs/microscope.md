@@ -2,7 +2,9 @@
 
 A microscope belongs to a notebook cell. Its main content is a walkthrough: a
 title and ordered steps with display-only code, explanatory Markdown and named
-line annotations. Programmable graphics and nested execution are not implemented.
+line or character annotations. Each step shows its title and Markdown above a
+notebook-style container with read-only code left and a graphics placeholder right.
+Programmable graphics and nested execution are not implemented.
 It works in the Rust server and the
 static browser build; the legacy Python rollback gateway does not implement it.
 
@@ -31,6 +33,8 @@ requires the notebook path, cell ID, microscope ID and this `walkthrough` object
           "id": "sum",
           "start_line": 1,
           "end_line": 1,
+          "start_column": 9,
+          "end_column": 14,
           "text": "Evaluate the sum and bind the result.",
           "color": "blue"
         }
@@ -110,6 +114,10 @@ workspace bounds still apply. Unknown schema versions/fields are rejected. The
 document is bounded to 512,000 serialized UTF-8 bytes. Walkthroughs have 1–64
 steps, 1–128-byte titles, at most 64,000 bytes each of code and Markdown per step,
 and at most 32 annotations per step, each with 1–4,096 bytes of explanation.
+Annotations always have inclusive, one-based line ranges. They may also include
+both `start_column` and `end_column` to highlight an inclusive range within one
+line. Columns count Unicode characters (not UTF-8 bytes); partial ranges cannot
+span lines. Omitting both columns highlights the complete line range.
 The aggregate walkthrough bound leaves 4 KiB for its ownership envelope. Unknown
 fields are rejected, including scripts, graphics and playground configuration.
 

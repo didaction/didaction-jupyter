@@ -58,6 +58,8 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
                     {
                         "id": "value",
                         "start_line": 1,
+                        "start_column": 1,
+                        "end_column": 1,
                         "end_line": 1,
                         "text": "Assignment",
                         "color": "blue",

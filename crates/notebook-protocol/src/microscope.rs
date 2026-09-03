@@ -27,6 +27,11 @@ pub struct Annotation {
     pub id: String,
     pub start_line: usize,
     pub end_line: usize,
+    /// Optional one-based inclusive Unicode-scalar columns within a single line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_column: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_column: Option<usize>,
     pub text: String,
     #[serde(default)]
     pub color: AnnotationColor,
@@ -72,6 +77,20 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
         }
         let mut annotations = std::collections::BTreeSet::new();
         for a in &s.annotations {
+            let columns_valid = match (a.start_column, a.end_column) {
+                (None, None) => true,
+                (Some(start), Some(end)) => {
+                    let line_len = s
+                        .code
+                        .split('\n')
+                        .nth(a.start_line.saturating_sub(1))
+                        .map(str::chars)
+                        .map(Iterator::count)
+                        .unwrap_or(0);
+                    a.start_line == a.end_line && start > 0 && end >= start && end <= line_len
+                }
+                _ => false,
+            };
             if !id(&a.id)
                 || !annotations.insert(&a.id)
                 || a.start_line == 0
@@ -79,9 +98,10 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
                 || a.end_line > s.code.split('\n').count()
                 || a.text.trim().is_empty()
                 || a.text.len() > 4096
+                || !columns_valid
             {
                 return Err(invalid(
-                    "Invalid annotation ID, text or inclusive one-based line range",
+                    "Invalid annotation ID, text, line range, or optional inclusive one-based character range",
                 ));
             }
         }
@@ -451,6 +471,45 @@ mod tests {
                 json!({"title":"x","steps":[],"script":"alert(1)"})
             )
             .is_err()
+        );
+    }
+    #[test]
+    fn character_annotations_are_paired_single_line_unicode_ranges() {
+        let mut w: Walkthrough = serde_json::from_value(json!({
+            "title":"Characters", "steps":[{"id":"one","title":"One",
+            "code":"α🙂x\nnext", "markdown":"Text", "annotations":[{
+                "id":"span","start_line":1,"end_line":1,
+                "start_column":2,"end_column":3,"text":"Two characters"
+            }]}]
+        }))
+        .unwrap();
+        validate_walkthrough(&w).unwrap();
+        assert_eq!(
+            serde_json::from_value::<Walkthrough>(serde_json::to_value(&w).unwrap()).unwrap(),
+            w
+        );
+        for (start, end, end_line) in [
+            (Some(0), Some(1), 1),
+            (Some(2), Some(1), 1),
+            (Some(1), Some(4), 1),
+            (Some(1), None, 1),
+            (None, Some(1), 1),
+            (Some(1), Some(2), 2),
+        ] {
+            let a = &mut w.steps[0].annotations[0];
+            a.start_column = start;
+            a.end_column = end;
+            a.end_line = end_line;
+            assert!(validate_walkthrough(&w).is_err());
+        }
+        let a = &mut w.steps[0].annotations[0];
+        a.start_column = None;
+        a.end_column = None;
+        validate_walkthrough(&w).unwrap();
+        assert!(
+            serde_json::to_value(&w).unwrap()["steps"][0]["annotations"][0]
+                .get("start_column")
+                .is_none()
         );
     }
     fn snapshot() -> NotebookSnapshot {

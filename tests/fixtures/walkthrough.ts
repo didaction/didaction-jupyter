@@ -12,6 +12,8 @@ export const exampleWalkthrough = {
           id: "values",
           start_line: 2,
           end_line: 2,
+          start_column: 9,
+          end_column: 14,
           text: "These numbers determine the bar heights.",
           color: "blue",
         },
