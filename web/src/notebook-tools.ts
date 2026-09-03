@@ -84,11 +84,6 @@ function define(
   });
 }
 define(
-  "create_microscope",
-  "Create an empty cell-associated microscope shell and durable content file.",
-  { cell_id: id, title: { type: "string", minLength: 1, maxLength: 128 } },
-);
-define(
   "list_microscopes",
   "List microscope IDs and titles for a cell.",
   { cell_id: id },
@@ -116,6 +111,31 @@ const microScope = {
   cell_id: id,
   microscope_id: { type: "string", minLength: 7, maxLength: 7 } as Field,
 };
+define(
+  "open_playground",
+  "Open a step's separate playground code in a temporary one-cell notebook with a fresh kernel. Driver only. Does not execute automatically.",
+  { ...microScope, step_index: { type: "integer", minimum: 0, maximum: 63 } },
+);
+define(
+  "close_playground",
+  "Exit the temporary notebook and destroy its kernel; discard edits and outputs.",
+  {},
+);
+define(
+  "read_playground",
+  "Read the currently displayed temporary notebook and its outputs.",
+  {},
+  [],
+  true,
+);
+define(
+  "execute_playground",
+  "Execute the temporary cell, optionally replacing its source first. Driver-only unsafe local execution.",
+  { source },
+  [],
+  false,
+  true,
+);
 const shortId: Field = { type: "string", minLength: 1, maxLength: 64 };
 const title: Field = { type: "string", minLength: 1, maxLength: 128 };
 const annotation: Field = {
@@ -151,12 +171,23 @@ const walkthrough: Field = {
           title,
           code: source,
           markdown: source,
+          playground_code: { ...source, minLength: 1 },
           annotations: { type: "array", maxItems: 32, items: annotation },
         },
       },
     },
   },
 };
+define(
+  "create_microscope",
+  "Create a complete microscope and its walkthrough in one operation. A nonempty walkthrough is required; playground_code optionally supplies separate self-contained executable code per step.",
+  { cell_id: id, title, walkthrough },
+);
+define(
+  "update_microscope",
+  "Replace the entire microscope content and title, preserving its ID and owning cell.",
+  { ...microScope, walkthrough },
+);
 define(
   "set_microscope_walkthrough",
   "Replace a microscope's complete walkthrough. Display-only code, ordered steps, Markdown and inclusive one-based line annotations, optionally narrowed to one-based character columns on one line. Driver-only; saved in its sidecar.",
@@ -443,6 +474,10 @@ export class NotebookTools implements NotebookToolInvoker {
       if (
         [
           "set_cell_visibility",
+          "open_playground",
+          "close_playground",
+          "read_playground",
+          "execute_playground",
           "set_output_visibility",
           "capture_cell",
           "highlight_cell",
@@ -555,15 +590,19 @@ export class NotebookTools implements NotebookToolInvoker {
         }
         if (
           name === "set_microscope_walkthrough" ||
+          name === "update_microscope" ||
           name === "read_microscope"
         ) {
-          const result = await send(name, {
-            cell_id: cell!.id,
-            microscope_id: args.microscope_id,
-            ...(name === "set_microscope_walkthrough"
-              ? { walkthrough: args.walkthrough }
-              : {}),
-          });
+          const result = await send(
+            name === "update_microscope" ? "set_microscope_walkthrough" : name,
+            {
+              cell_id: cell!.id,
+              microscope_id: args.microscope_id,
+              ...(name !== "read_microscope"
+                ? { walkthrough: args.walkthrough }
+                : {}),
+            },
+          );
           return answer({
             ok: true,
             revision: this.snapshot().revision,
@@ -579,6 +618,7 @@ export class NotebookTools implements NotebookToolInvoker {
             cell_id: cell!.id,
             microscope_id,
             title: args.title,
+            walkthrough: args.walkthrough,
           });
           return answer({
             ok: true,

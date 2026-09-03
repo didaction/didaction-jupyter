@@ -115,7 +115,19 @@ impl NotebookEguiApp {
                     .show(ui, |ui| {
                         ui.columns(2, |columns| {
                             let left = &mut columns[0];
-                            left.label(RichText::new("Code · read-only").strong());
+                            left.horizontal(|ui| {
+                                if step.playground_code.is_some()
+                                    && toolbar_icon_button(
+                                        ui,
+                                        !self.read_only,
+                                        ToolbarIcon::Run,
+                                        "Open playground in a fresh kernel",
+                                    )
+                                {
+                                    self.playground_requested = Some(index);
+                                }
+                                ui.label(RichText::new("Code · read-only").strong());
+                            });
                             egui::ScrollArea::both()
                                 .id_salt((&scope, "code"))
                                 .max_height((height * 0.55).clamp(220.0, 420.0))
@@ -155,6 +167,7 @@ impl NotebookEguiApp {
                                                         fonts.layout_job(annotated_line(
                                                             line,
                                                             &line_annotations,
+                                                            &self.state.snapshot.kernel.name,
                                                         ))
                                                     });
                                                     let (rect, _) = ui.allocate_exact_size(
@@ -281,23 +294,36 @@ impl NotebookEguiApp {
 fn annotated_line(
     line: &str,
     annotations: &[&notebook_protocol::microscope::Annotation],
+    kernel: &str,
 ) -> egui::text::LayoutJob {
+    let editor = CodeEditor::default()
+        .with_fontsize(14.0)
+        .with_theme(ColorTheme::GITHUB_LIGHT)
+        .with_syntax(kernel_syntax(kernel));
+    let syntax = egui_code_editor::Token::default().highlight(&editor, line);
     let chars: Vec<char> = if line.is_empty() {
         vec![' ']
     } else {
         line.chars().collect()
     };
     let mut job = egui::text::LayoutJob::default();
+    let mut byte = 0;
     for (index, ch) in chars.iter().enumerate() {
         let highlight = annotations.iter().find(|a| {
             a.start_column.is_some_and(|start| index + 1 >= start)
                 && a.end_column.is_some_and(|end| index < end)
         });
-        let mut format = egui::TextFormat {
-            font_id: FontId::monospace(14.0),
-            color: Color32::from_rgb(35, 43, 47),
-            ..Default::default()
-        };
+        let mut format = syntax
+            .sections
+            .iter()
+            .find(|s| s.byte_range.contains(&byte))
+            .map(|s| s.format.clone())
+            .unwrap_or(egui::TextFormat {
+                font_id: FontId::monospace(14.0),
+                color: Color32::from_rgb(35, 43, 47),
+                ..Default::default()
+            });
+        byte += ch.len_utf8();
         if let Some(a) = highlight {
             format.background = color(a.color).gamma_multiply(0.20);
         }
@@ -329,7 +355,7 @@ mod tests {
             "start_column":2, "end_column":3, "text":"Inside"
         }))
         .unwrap();
-        let job = annotated_line("α🙂xy", &[&annotation]);
+        let job = annotated_line("α🙂xy", &[&annotation], "python3");
         let highlighted: String = job
             .sections
             .iter()
@@ -338,6 +364,6 @@ mod tests {
             .collect();
         assert_eq!(highlighted, "🙂x");
         assert_eq!(job.text, "α🙂xy");
-        assert_eq!(annotated_line("", &[]).text, " ");
+        assert_eq!(annotated_line("", &[], "python3").text, " ");
     }
 }

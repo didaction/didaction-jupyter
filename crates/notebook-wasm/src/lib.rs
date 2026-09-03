@@ -166,6 +166,14 @@ pub fn validate_notebook_command(input: &str) -> Result<String, JsError> {
     serde_json::to_string(&command).map_err(js_error)
 }
 
+#[wasm_bindgen(js_name = playgroundSnapshot)]
+pub fn playground_snapshot(document: &str, index: usize, kernel: &str) -> Result<String, JsError> {
+    let doc = serde_json::from_str(document).map_err(js_error)?;
+    let snapshot = notebook_protocol::microscope::playground_snapshot(&doc, index, kernel)
+        .map_err(js_error)?;
+    serde_json::to_string(&snapshot).map_err(js_error)
+}
+
 #[cfg(target_arch = "wasm32")]
 struct MountedApp {
     app: Arc<Mutex<NotebookEguiApp>>,
@@ -538,6 +546,18 @@ impl MountedNotebook {
             }
         }
         Ok(())
+    }
+    #[wasm_bindgen(js_name = takePlaygroundRequest)]
+    pub fn take_playground_request(&self) -> Option<usize> {
+        self.app
+            .lock()
+            .expect("app mutex")
+            .playground_requested
+            .take()
+    }
+    #[wasm_bindgen(js_name = notebookSnapshot)]
+    pub fn notebook_snapshot(&self) -> Result<String, JsError> {
+        serde_json::to_string(&self.app.lock().expect("app mutex").state.snapshot).map_err(js_error)
     }
     #[wasm_bindgen(js_name = takeFollowToggle)]
     pub fn take_follow_toggle(&self) -> bool {

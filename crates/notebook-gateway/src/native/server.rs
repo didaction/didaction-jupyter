@@ -27,6 +27,7 @@ use std::{
 use tokio::sync::{Mutex, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
+mod playground;
 
 struct Cached {
     fingerprint: u64,
@@ -47,6 +48,7 @@ struct Host {
     authority: Mutex<Authority>,
     started: Instant,
     artifact_lock: Mutex<()>,
+    playground: Mutex<Option<playground::Playground>>,
 }
 impl Host {
     fn now(&self) -> u64 {
@@ -118,8 +120,22 @@ pub async fn serve() -> Result<()> {
         authority: Mutex::new(Authority::default()),
         started: Instant::now(),
         artifact_lock: Mutex::new(()),
+        playground: Mutex::new(None),
     });
     let mut router = Router::new()
+        .route(
+            "/api/v1/playground",
+            get(playground::read).post(playground::open),
+        )
+        .route("/api/v1/playground/close", post(playground::close))
+        .route(
+            "/api/v1/playground/{id}/commands",
+            post(playground::command),
+        )
+        .route(
+            "/api/v1/playground/{id}/commands/stream",
+            post(playground::stream),
+        )
         .route("/healthz", get(|| async { Json(json!({"status":"ok"})) }))
         .route("/readyz", get(ready))
         .route("/api/v1/config", get(configuration))
@@ -146,6 +162,7 @@ pub async fn serve() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(&config.listen)
         .await
         .map_err(|_| error(ErrorCode::Internal, "Could not bind gateway listener"))?;
+    let cleanup = tokio::spawn(playground::reap(host.clone()));
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown())
         .await
@@ -162,6 +179,8 @@ pub async fn serve() -> Result<()> {
     {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+    cleanup.abort();
+    playground::dispose(&host).await?;
     Ok(())
 }
 async fn shutdown() {
@@ -739,11 +758,14 @@ async fn run(
                 },
             )?;
             let create = matches!(command.kind, CreateMicroscope { .. });
-            let doc = notebook_protocol::microscope::document(
+            let mut doc = notebook_protocol::microscope::document(
                 if create { &proposed } else { &current },
                 cell_id,
                 microscope_id,
             )?;
+            if let CreateMicroscope { walkthrough, .. } = &command.kind {
+                doc.walkthrough = Some(walkthrough.clone());
+            }
             let stored = host.jupyter.read_microscope(&doc).await?;
             let replacement = if let SetMicroscopeWalkthrough { walkthrough, .. } = &command.kind {
                 let mut updated =
@@ -754,6 +776,20 @@ async fn run(
                 None
             };
             let original = raw.clone();
+            if matches!(
+                command.kind,
+                SetMicroscopeWalkthrough { .. } | DeleteMicroscope { .. }
+            ) {
+                let affected = host
+                    .playground
+                    .lock()
+                    .await
+                    .as_ref()
+                    .is_some_and(|p| p.belongs_to(path, cell_id, microscope_id));
+                if affected {
+                    playground::dispose(host).await?;
+                }
+            }
             if matches!(command.kind, ReadMicroscope { .. }) {
                 result.microscope = Some(stored.ok_or_else(|| {
                     error(

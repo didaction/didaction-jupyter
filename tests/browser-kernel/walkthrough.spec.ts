@@ -21,6 +21,7 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   const created = await microscopeCall(page, "create_microscope", {
     ...cell,
     title: "Plot walkthrough",
+    walkthrough: exampleWalkthrough,
   });
   expect(created.isError).toBe(false);
   const scope = {

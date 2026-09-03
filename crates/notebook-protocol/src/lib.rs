@@ -153,6 +153,7 @@ pub enum NotebookCommandKind {
         cell_id: String,
         microscope_id: String,
         title: String,
+        walkthrough: microscope::Walkthrough,
     },
     DeleteMicroscope {
         cell_id: String,
@@ -294,7 +295,9 @@ pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> 
             cell_id,
             microscope_id,
             title,
+            walkthrough,
         } => {
+            microscope::validate_walkthrough(walkthrough)?;
             if cell_id.is_empty() || cell_id.len() > 128 {
                 return Err(bounds("invalid cell id"));
             }

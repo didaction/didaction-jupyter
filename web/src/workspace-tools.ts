@@ -308,6 +308,8 @@ export class WorkspaceTools implements NotebookToolInvoker {
       );
     if (
       name === "interrupt_kernel" ||
+      name === "read_playground" ||
+      name === "close_playground" ||
       name === "get_active_context" ||
       name === "get_collaboration"
     )

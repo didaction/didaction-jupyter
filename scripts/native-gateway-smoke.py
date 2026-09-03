@@ -41,7 +41,15 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
     # Microscope metadata and its derived sidecar survive through real Contents.
     microscope_cell = state["snapshot"]["cells"][0]["id"]
     micro = {"cell_id": microscope_cell, "microscope_id": "micro01"}
-    create_micro = command("create_microscope", **micro, title="Closer look")
+    create_micro = command(
+        "create_microscope",
+        **micro,
+        title="Closer look",
+        walkthrough={
+            "title": "Closer look",
+            "steps": [{"id": "one", "title": "One", "code": "42", "markdown": "Explanation"}],
+        },
+    )
     created_micro = client.post("/api/v1/commands", headers=a, json=create_micro).json()
     assert not created_micro.get("error"), created_micro
     assert client.post("/api/v1/commands", headers=a, json=create_micro).json() == created_micro
@@ -53,6 +61,7 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
                 "id": "first",
                 "title": "Value",
                 "code": "x = 42",
+                "playground_code": "temporary_value = 40 + 2\nprint(temporary_value)",
                 "markdown": "The value is **42**.",
                 "annotations": [
                     {
@@ -74,6 +83,94 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
     assert updated["microscope"]["walkthrough"] == walkthrough
     assert client.post("/api/v1/commands", headers=a, json=update_micro).json() == updated
     assert call("read_microscope", **micro)["microscope"]["walkthrough"] == walkthrough
+    # Temporary sessions use separate kernels and never create notebook files.
+    pg_input = {**micro, "step_index": 0}
+    denied_pg = client.post("/api/v1/playground", headers=b, json=pg_input)
+    assert denied_pg.status_code == 403, denied_pg.text
+    pg = client.post("/api/v1/playground", headers=a, json=pg_input).json()
+    assert pg["snapshot"]["cells"][0]["source"] == walkthrough["steps"][0]["playground_code"]
+    endpoint = f"/api/v1/playground/{pg['id']}/commands"
+    executed_pg = client.post(
+        endpoint, headers=a, json=command("execute_cell", cell_id="playground")
+    ).json()
+    assert not executed_pg.get("error"), executed_pg
+    assert "42" in json.dumps(executed_pg["snapshot"]["cells"][0]["outputs"])
+    completion_pg = client.post(
+        endpoint, headers=a, json=command("complete", code="temporary_v", cursor_pos=11)
+    ).json()
+    assert "temporary_value" in completion_pg["completion"]["matches"], completion_pg
+    streaming_source = (
+        "from IPython.display import clear_output\nimport time\n"
+        "print('early', flush=True)\ntime.sleep(0.6)\n"
+        "clear_output(wait=True)\nprint('latest', flush=True)"
+    )
+    edit_stream = client.post(
+        endpoint,
+        headers=a,
+        json=command(
+            "modify_cells",
+            changes=[
+                {
+                    "operation": "update",
+                    "cell_id": "playground",
+                    "source": streaming_source,
+                    "metadata": None,
+                }
+            ],
+        ),
+    ).json()
+    assert not edit_stream.get("error"), edit_stream
+    frames = []
+    with client.stream(
+        "POST", endpoint + "/stream", headers=a, json=command("execute_cell", cell_id="playground")
+    ) as response:
+        for line in response.iter_lines():
+            frames.append(json.loads(line))
+    assert any(
+        "early" in json.dumps(frame.get("snapshot", {}).get("cells", [{}])[0].get("outputs"))
+        and frame["snapshot"]["kernel"]["state"] == "busy"
+        for frame in frames
+    ), frames
+    final_outputs = json.dumps(frames[-1]["snapshot"]["cells"][0]["outputs"])
+    assert "latest" in final_outputs and "early" not in final_outputs, frames[-1]
+    denied_write = client.post(
+        endpoint, headers=b, json=command("execute_cell", cell_id="playground")
+    ).json()
+    assert denied_write["error"]["code"] == "not_driver", denied_write
+    assert (
+        client.post("/api/v1/playground/close", headers=a, json={"id": pg["id"]}).status_code == 200
+    )
+    assert client.get("/api/v1/playground", headers=a).json() is None
+    fresh_pg = client.post("/api/v1/playground", headers=a, json=pg_input).json()
+    assert (
+        client.post("/api/v1/playground/close", headers=a, json={"id": pg["id"]}).status_code == 400
+    )
+    assert client.get("/api/v1/playground", headers=a).json()["id"] == fresh_pg["id"]
+    endpoint = f"/api/v1/playground/{fresh_pg['id']}/commands"
+    edit_pg = client.post(
+        endpoint,
+        headers=a,
+        json=command(
+            "modify_cells",
+            changes=[
+                {
+                    "operation": "update",
+                    "cell_id": "playground",
+                    "source": "print('temporary_value' in globals())",
+                    "metadata": None,
+                }
+            ],
+        ),
+    ).json()
+    assert not edit_pg.get("error"), edit_pg
+    fresh_output = client.post(
+        endpoint, headers=a, json=command("execute_cell", cell_id="playground")
+    ).json()
+    assert "False" in json.dumps(fresh_output["snapshot"]["cells"][0]["outputs"]), fresh_output
+    assert (
+        client.post("/api/v1/playground/close", headers=a, json={"id": fresh_pg["id"]}).status_code
+        == 200
+    )
     denied_update = client.post(
         "/api/v1/commands",
         headers=b,
@@ -87,7 +184,9 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
         == "micro01"
     )
     denied = client.post(
-        "/api/v1/commands", headers=b, json=command("create_microscope", **micro, title="Denied")
+        "/api/v1/commands",
+        headers=b,
+        json=command("create_microscope", **micro, title="Denied", walkthrough=walkthrough),
     ).json()
     assert denied["error"]["code"] == "not_driver", denied
     entries_micro = client.get("/api/v1/notebooks", params={"directory": ""}).json()["entries"]

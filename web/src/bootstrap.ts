@@ -18,6 +18,7 @@ import { HttpArtifactTransport } from "./artifacts";
 import { WorkspaceTools, type OpenNotebook } from "./workspace-tools";
 import { NotebookCollaboration } from "./collaboration";
 import { FollowController } from "./follow";
+import { PlaygroundController } from "./playground";
 import type {
   BrowserWorkspace,
   LocalNotebookConnection,
@@ -26,6 +27,7 @@ import type {
 let browserWorkspace: BrowserWorkspace | undefined;
 
 interface NotebookContext extends OpenNotebook {
+  tickPlayground(following: boolean): void;
   followMicroscope(target: unknown, current: () => boolean): Promise<void>;
   connection: NotebookCollaboration | LocalNotebookConnection;
   scrollFraction(): number;
@@ -241,6 +243,70 @@ async function createContext(
       validation.dispose();
     }
   };
+  const playground = new PlaygroundController({
+    stopFollowing: () =>
+      document.querySelector<HTMLButtonElement>("#follow-driver")?.click(),
+    valid: (cellId, id, revision) => {
+      const active = mounted && JSON.parse(mounted.activeContext()).microscope;
+      const saved = JSON.parse(wasm.publicSnapshot())
+        .snapshot.cells.find((cell: { id: string }) => cell.id === cellId)
+        ?.metadata.didaction_microscopes?.items.find(
+          (item: { id: string }) => item.id === id,
+        );
+      return (
+        active?.cell_id === cellId &&
+        active?.microscope_id === id &&
+        saved &&
+        (saved.revision ?? 0) === revision
+      );
+    },
+    path: () => startup.path,
+    headers: () => collaboration.headers(),
+    canWrite: () => !readOnly,
+    document: (cellId, microscopeId) =>
+      transaction(async (execute) => {
+        const result = JSON.parse(
+          await execute(
+            JSON.stringify(
+              command("read_microscope", {
+                cell_id: cellId,
+                microscope_id: microscopeId,
+              }),
+            ),
+          ),
+        );
+        if (result.error || !result.microscope)
+          throw new Error(result.error?.message ?? "Microscope unavailable");
+        return result.microscope;
+      }),
+    enter: (doc, index) => {
+      mounted?.showMicroscope(JSON.stringify(doc));
+      mounted?.focusWalkthrough(
+        JSON.stringify({ step_index: index, annotation_id: null }),
+      );
+    },
+  });
+  const playgroundTool = async (
+    name: string,
+    args: Record<string, unknown>,
+  ) => {
+    if (!mounted) throw new Error("Open this notebook first");
+    if (name === "open_playground")
+      await playground.open(
+        String(args.cell_id),
+        String(args.microscope_id),
+        Number(args.step_index),
+      );
+    if (name === "close_playground") await playground.close();
+    if (name === "execute_playground")
+      await playground.execute(args.source as string | undefined);
+    const value = { ok: true, snapshot: playground.snapshot() };
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(value) }],
+      structuredContent: value,
+      isError: false,
+    };
+  };
   const tools = new NotebookTools(
     transaction,
     () =>
@@ -249,156 +315,175 @@ async function createContext(
     () => {},
     interruptExecute,
     (name, args) =>
-      dispatchEguiCommand.transaction(async () => {
-        if (!mounted)
-          throw new Error(
-            "Select this notebook with open_notebook before using view tools",
-          );
-        const id = args.cell_id as string;
-        if (
-          [
-            "open_microscope",
-            "close_microscope",
-            "focus_microscope_step",
-            "focus_microscope_annotation",
-            "clear_microscope_focus",
-          ].includes(name)
-        ) {
-          if (name === "close_microscope") mounted.showMicroscope("null");
-          else if (name === "clear_microscope_focus") {
-            const active = JSON.parse(mounted.activeContext());
+      [
+        "open_playground",
+        "close_playground",
+        "read_playground",
+        "execute_playground",
+      ].includes(name)
+        ? playgroundTool(name, args)
+        : dispatchEguiCommand.transaction(async () => {
+            if (!mounted)
+              throw new Error(
+                "Select this notebook with open_notebook before using view tools",
+              );
+            const id = args.cell_id as string;
             if (
-              active.microscope?.cell_id !== id ||
-              active.microscope?.microscope_id !== args.microscope_id ||
-              !active.walkthrough
-            )
-              throw new Error(
-                "Open this microscope's walkthrough before clearing focus",
-              );
-            mounted.focusWalkthrough(
-              JSON.stringify({
-                step_index: active.walkthrough.step_index,
-                annotation_id: null,
-              }),
-            );
-          } else {
-            mounted.assertExternalReady();
-            const response = JSON.parse(
-              await externalExecute(
-                JSON.stringify(
-                  command("read_microscope", {
-                    cell_id: id,
-                    microscope_id: args.microscope_id,
-                    expected_revision: JSON.parse(wasm.publicSnapshot())
-                      .snapshot.revision,
+              [
+                "open_microscope",
+                "close_microscope",
+                "focus_microscope_step",
+                "focus_microscope_annotation",
+                "clear_microscope_focus",
+              ].includes(name)
+            ) {
+              if (name === "close_microscope") mounted.showMicroscope("null");
+              else if (name === "clear_microscope_focus") {
+                const active = JSON.parse(mounted.activeContext());
+                if (
+                  active.microscope?.cell_id !== id ||
+                  active.microscope?.microscope_id !== args.microscope_id ||
+                  !active.walkthrough
+                )
+                  throw new Error(
+                    "Open this microscope's walkthrough before clearing focus",
+                  );
+                mounted.focusWalkthrough(
+                  JSON.stringify({
+                    step_index: active.walkthrough.step_index,
+                    annotation_id: null,
                   }),
-                ),
-              ),
-            );
-            if (response.error || !response.microscope)
-              throw new Error(
-                response.error?.message ?? "Microscope could not be loaded",
-              );
-            const focus = name.startsWith("focus_microscope_")
-              ? JSON.stringify({
-                  step_index: args.step_index,
-                  annotation_id: args.annotation_id ?? null,
-                })
-              : undefined;
-            if (focus)
-              validateWalkthroughFocus(
-                JSON.stringify(response.microscope),
-                focus,
-              );
-            mounted.showMicroscope(JSON.stringify(response.microscope));
-            if (focus) mounted.focusWalkthrough(focus);
-          }
-          const result = {
-            ok: true,
-            view: JSON.parse(mounted.activeContext()),
-          };
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(result) }],
-            structuredContent: result,
-            isError: false,
-          };
-        }
-        if (name !== "capture_cell") {
-          syncMotion();
-          mounted.cellView(
-            id,
-            name === "highlight_cell"
-              ? "highlight"
-              : name === "clear_cell_highlight"
-                ? "clear_highlight"
-                : name === "set_cell_visibility"
-                  ? "cell"
-                  : "output",
-            name === "highlight_cell"
-              ? String(args.color ?? "blue")
-              : name === "clear_cell_highlight"
-                ? ""
-                : String(
-                    name === "set_cell_visibility" ? args.collapsed : args.mode,
+                );
+              } else {
+                mounted.assertExternalReady();
+                const response = JSON.parse(
+                  await externalExecute(
+                    JSON.stringify(
+                      command("read_microscope", {
+                        cell_id: id,
+                        microscope_id: args.microscope_id,
+                        expected_revision: JSON.parse(wasm.publicSnapshot())
+                          .snapshot.revision,
+                      }),
+                    ),
                   ),
-          );
-          const result = { ok: true, cell_id: id, ...args };
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(result) }],
-            structuredContent: result,
-            isError: false,
-          };
-        }
-        mounted.cellView(id, "capture", "");
-        const deadline = performance.now() + 10000;
-        while (performance.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          const raw = mounted.takeCellCapture();
-          if (!raw) continue;
-          const capture = JSON.parse(raw) as {
-            width: number;
-            height: number;
-            rgba: string;
-            clipped: boolean;
-          };
-          const canvas = document.createElement("canvas");
-          canvas.width = capture.width;
-          canvas.height = capture.height;
-          const pixels = Uint8ClampedArray.from(atob(capture.rgba), (byte) =>
-            byte.charCodeAt(0),
-          );
-          canvas
-            .getContext("2d")!
-            .putImageData(
-              new ImageData(pixels, capture.width, capture.height),
-              0,
-              0,
+                );
+                if (response.error || !response.microscope)
+                  throw new Error(
+                    response.error?.message ?? "Microscope could not be loaded",
+                  );
+                const focus = name.startsWith("focus_microscope_")
+                  ? JSON.stringify({
+                      step_index: args.step_index,
+                      annotation_id: args.annotation_id ?? null,
+                    })
+                  : undefined;
+                if (focus)
+                  validateWalkthroughFocus(
+                    JSON.stringify(response.microscope),
+                    focus,
+                  );
+                mounted.showMicroscope(JSON.stringify(response.microscope));
+                if (focus) mounted.focusWalkthrough(focus);
+              }
+              const result = {
+                ok: true,
+                view: JSON.parse(mounted.activeContext()),
+              };
+              return {
+                content: [
+                  { type: "text" as const, text: JSON.stringify(result) },
+                ],
+                structuredContent: result,
+                isError: false,
+              };
+            }
+            if (name !== "capture_cell") {
+              syncMotion();
+              mounted.cellView(
+                id,
+                name === "highlight_cell"
+                  ? "highlight"
+                  : name === "clear_cell_highlight"
+                    ? "clear_highlight"
+                    : name === "set_cell_visibility"
+                      ? "cell"
+                      : "output",
+                name === "highlight_cell"
+                  ? String(args.color ?? "blue")
+                  : name === "clear_cell_highlight"
+                    ? ""
+                    : String(
+                        name === "set_cell_visibility"
+                          ? args.collapsed
+                          : args.mode,
+                      ),
+              );
+              const result = { ok: true, cell_id: id, ...args };
+              return {
+                content: [
+                  { type: "text" as const, text: JSON.stringify(result) },
+                ],
+                structuredContent: result,
+                isError: false,
+              };
+            }
+            mounted.cellView(id, "capture", "");
+            const deadline = performance.now() + 10000;
+            while (performance.now() < deadline) {
+              await new Promise((resolve) => setTimeout(resolve, 50));
+              const raw = mounted.takeCellCapture();
+              if (!raw) continue;
+              const capture = JSON.parse(raw) as {
+                width: number;
+                height: number;
+                rgba: string;
+                clipped: boolean;
+              };
+              const canvas = document.createElement("canvas");
+              canvas.width = capture.width;
+              canvas.height = capture.height;
+              const pixels = Uint8ClampedArray.from(
+                atob(capture.rgba),
+                (byte) => byte.charCodeAt(0),
+              );
+              canvas
+                .getContext("2d")!
+                .putImageData(
+                  new ImageData(pixels, capture.width, capture.height),
+                  0,
+                  0,
+                );
+              const data = canvas.toDataURL("image/png").split(",")[1];
+              if (!data || data.length > 2_000_000)
+                throw new Error("Cell capture exceeds image limit");
+              const result = {
+                ok: true,
+                cell_id: id,
+                width: capture.width,
+                height: capture.height,
+                clipped: capture.clipped,
+              };
+              return {
+                content: [
+                  {
+                    type: "image" as const,
+                    mimeType: "image/png" as const,
+                    data,
+                  },
+                ],
+                structuredContent: result,
+                isError: false,
+              };
+            }
+            throw new Error(
+              "Cell capture timed out; keep the notebook tab visible",
             );
-          const data = canvas.toDataURL("image/png").split(",")[1];
-          if (!data || data.length > 2_000_000)
-            throw new Error("Cell capture exceeds image limit");
-          const result = {
-            ok: true,
-            cell_id: id,
-            width: capture.width,
-            height: capture.height,
-            clipped: capture.clipped,
-          };
-          return {
-            content: [
-              { type: "image" as const, mimeType: "image/png" as const, data },
-            ],
-            structuredContent: result,
-            isError: false,
-          };
-        }
-        throw new Error(
-          "Cell capture timed out; keep the notebook tab visible",
-        );
-      }),
+          }),
   );
   const deactivate = () => {
     if (!mounted) return;
+    void playground.close().catch(() => playground.dispose());
     motionPreference.removeEventListener("change", syncMotion);
     mounted.dispose();
     mounted = undefined;
@@ -408,6 +493,19 @@ async function createContext(
     document.querySelector<HTMLElement>("#notebook-shell")!.hidden = true;
   };
   const context: NotebookContext = {
+    tickPlayground: (following) => {
+      playground.setFollowing(following && !!mounted);
+      const index = mounted?.takePlaygroundRequest();
+      if (index !== undefined && index !== null) {
+        const target = JSON.parse(mounted!.activeContext()).microscope;
+        if (target)
+          void playground
+            .open(target.cell_id, target.microscope_id, index)
+            .catch((error) => {
+              status.textContent = String(error);
+            });
+      }
+    },
     followMicroscope: async (target, current) => {
       const requested = target as {
         cell_id: string;
@@ -513,6 +611,7 @@ async function createContext(
     },
     deactivate,
     dispose: () => {
+      playground.dispose();
       openContexts.delete(context);
       window.removeEventListener(
         "workspace-visibility",
@@ -648,6 +747,8 @@ async function boot(): Promise<void> {
     }
     updateFollowButton();
     const active = activeContext();
+    for (const context of openContexts)
+      context.tickPlayground(context === active && follow.enabled);
     if (active?.takeDiagnosticsToggle()) diagnostics.toggle();
     if (active?.takeFollowToggle()) followButton.click();
     active?.hostStatus(follow.enabled, status.textContent ?? "Connecting…");

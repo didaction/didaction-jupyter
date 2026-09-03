@@ -4,19 +4,24 @@ A microscope belongs to a notebook cell. Its main content is a walkthrough: a
 title and ordered steps with display-only code, explanatory Markdown and named
 line or character annotations. Each step shows its title and Markdown above a
 notebook-style container with read-only code left and a graphics placeholder right.
-Programmable graphics and nested execution are not implemented.
+Code uses the notebook's syntax highlighting. Steps may also provide separate
+`playground_code` for an isolated executable playground. Programmable graphics
+remain a placeholder.
 It works in the Rust server and the
 static browser build; the legacy Python rollback gateway does not implement it.
 
 ## Use
 
-Agents call `create_microscope` with `notebook_path`, `cell_id` and `title`.
+Agents call `create_microscope` with `notebook_path`, `cell_id`, `title` and a
+required, nonempty `walkthrough`. Creation saves the entire document in one call.
 The result includes a seven-character `microscope_id`. `list_microscopes` reads
 the references for that notebook/cell. `open_microscope` takes the same scope and
 ID; `close_microscope` takes the notebook path. `get_active_context` reports the
 active microscope and whether its content has loaded.
 
-Use `set_microscope_walkthrough` to replace the complete saved walkthrough. It
+Use `update_microscope` to replace the complete saved walkthrough and its title.
+The ID and owning cell stay unchanged; omitted steps/annotations are removed.
+`set_microscope_walkthrough` remains a compatibility alias. Updating
 requires the notebook path, cell ID, microscope ID and this `walkthrough` object:
 
 ```json
@@ -27,6 +32,7 @@ requires the notebook path, cell ID, microscope ID and this `walkthrough` object
       "id": "assignment",
       "title": "Assign a value",
       "code": "value = 40 + 2\nvalue",
+      "playground_code": "value = 40 + 2\nprint(value)",
       "markdown": "The expression evaluates to **42**. The variable keeps it for later cells.",
       "annotations": [
         {
@@ -48,8 +54,41 @@ Step and annotation IDs are stable, unique within their parent, 1–64 ASCII
 letters/digits/underscores/hyphens. Annotation ranges are **one-based and
 inclusive**. Available colors are `blue`, `blue-light`, and `blue-deep`.
 Annotations and code are saved content; code is never executed or copied into
-the owning notebook cell. Plain code is shown in a numbered, read-only left pane;
-Markdown is rendered alongside it using the existing bounded renderer.
+the owning notebook cell. Highlighted code is shown in a numbered, read-only left
+pane; Markdown is rendered above it using the existing bounded renderer.
+
+## Temporary playgrounds
+
+A step with `playground_code` has a play button. Its code may differ from the
+displayed excerpt: include imports and setup because the kernel starts fresh,
+without the parent notebook's variables. `playground_code` is optional, nonblank
+when present, and bounded to 64,000 UTF-8 bytes within the document aggregate limit.
+
+The playground fills the notebook area with the existing single-cell editor,
+completion, run/interrupt and output controls. **Back to microscope** stops the
+temporary kernel and discards edits, outputs and variables, returning to the same
+walkthrough. Saved step source and the original notebook remain unchanged.
+Only one playground is active at a time. Replacement/deletion of its microscope
+or leaving the notebook closes it.
+
+WebMCP offers `open_playground` (notebook/cell/microscope scope and zero-based
+step index), `read_playground`, `execute_playground` (optional replacement source),
+and `close_playground`, all scoped to a notebook. Execution uses the same validated
+command gateway as the human editor. Agent shell/package-install magics are rejected.
+
+Server mode creates a dedicated Jupyter session/kernel without saving a temporary
+notebook file. Only the workspace driver can open, edit, execute or close it.
+Opted-in followers see its code and outputs read-only through bounded snapshots
+polled every 500 ms; execution progress to the driver uses the existing NDJSON
+stream. Driver loss or a 60-second missing owner heartbeat triggers cleanup on
+the five-second reaper. Failed cleanup stays marked closing and is retried.
+This is kernel-state isolation, **not a security sandbox**: the kernel still has
+the configured runtime's filesystem/network permissions.
+
+Browser mode is local-only and uses a separate Pyodide worker and in-memory
+notebook store, never the parent's kernel or persisted notebook. Workspace files
+are not mounted into this temporary worker. Closing terminates the worker.
+Browser-to-browser following is intentionally unsupported.
 
 - `read_microscope` returns the saved document, including its walkthrough.
 - `focus_microscope_step` opens a **zero-based** `step_index`, clearing temporary
@@ -106,7 +145,9 @@ reject rather than overwrite. Each file is JSON with `schema_version`, the full
 full binding against notebook metadata, not just the short filename. References
 also carry a monotonically increasing `revision` after the first walkthrough save;
 legacy references without one mean revision zero. Documents add an optional
-`walkthrough` field. Existing empty shell files remain readable.
+`walkthrough` field for legacy decoding. New creation requires it; existing empty
+shell files are preserved for explicit repair with `update_microscope` or human
+deletion, rather than silently removed.
 
 The protocol permits at most 16 references per cell and titles of 1–128 UTF-8
 bytes without control characters. Existing notebook, metadata, response and
@@ -119,7 +160,7 @@ both `start_column` and `end_column` to highlight an inclusive range within one
 line. Columns count Unicode characters (not UTF-8 bytes); partial ranges cannot
 span lines. Omitting both columns highlights the complete line range.
 The aggregate walkthrough bound leaves 4 KiB for its ownership envelope. Unknown
-fields are rejected, including scripts, graphics and playground configuration.
+fields are rejected, including scripts, graphics and arbitrary kernel configuration.
 
 Rust's `notebook-protocol::microscope` owns the schema and derivation; core/runtime
 own validated transitions. Both egui and WebMCP use the same command gateway for

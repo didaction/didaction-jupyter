@@ -190,6 +190,7 @@ pub struct NotebookEguiApp {
     pub host_status: String,
     pub microscope_target: Option<notebook_protocol::microscope::MicroscopeTarget>,
     microscope_document: Option<notebook_protocol::microscope::MicroscopeDocument>,
+    pub playground_requested: Option<usize>,
     microscope_delete: Option<(String, notebook_protocol::microscope::MicroscopeRef)>,
     walkthrough_scroll_to_focus: bool,
     output_views: HashMap<String, OutputViewMode>,
@@ -332,6 +333,7 @@ impl NotebookEguiApp {
             host_status: "Connecting…".into(),
             microscope_target: None,
             microscope_document: None,
+            playground_requested: None,
             microscope_delete: None,
             walkthrough_scroll_to_focus: false,
             output_views: HashMap::new(),
@@ -485,6 +487,19 @@ impl NotebookEguiApp {
         self.dirty_editors.clear();
     }
     fn emit(&mut self, mut kind: NotebookCommandKind) {
+        if self.state.snapshot.notebook.workspace == "temporary"
+            && !matches!(
+                &kind,
+                NotebookCommandKind::ExecuteCell { .. }
+                    | NotebookCommandKind::Complete { .. }
+                    | NotebookCommandKind::Inspect { .. }
+                    | NotebookCommandKind::InterruptKernel
+                    | NotebookCommandKind::Query { .. }
+            )
+            && !matches!(&kind, NotebookCommandKind::ModifyCells { changes } if changes.iter().all(|c| matches!(c,CellMutation::Update { .. } | CellMutation::ClearOutputs { .. })))
+        {
+            return;
+        }
         if self.read_only && !matches!(kind, NotebookCommandKind::ReadMicroscope { .. }) {
             return;
         }
@@ -919,6 +934,24 @@ impl NotebookEguiApp {
         }
     }
     fn toolbar(&mut self, ui: &mut egui::Ui) {
+        if self.state.snapshot.notebook.workspace == "temporary" {
+            ui.horizontal(|ui| {
+                ui.heading("Playground");
+                if toolbar_icon_button(ui, !self.read_only, ToolbarIcon::Run, "Run playground") {
+                    self.execute_selected();
+                }
+                if toolbar_icon_button(
+                    ui,
+                    !self.read_only,
+                    ToolbarIcon::Stop,
+                    "Interrupt playground",
+                ) {
+                    self.emit(NotebookCommandKind::InterruptKernel);
+                }
+                ui.label("Temporary · edits and outputs are discarded on exit");
+            });
+            return;
+        }
         let idle = !matches!(
             self.state.sync_state,
             SyncState::Dirty | SyncState::Executing
@@ -1422,18 +1455,29 @@ impl NotebookEguiApp {
         id
     }
     fn status(&mut self, ui: &mut egui::Ui) {
+        let temporary = self.state.snapshot.notebook.workspace == "temporary";
         let (label, color) = if !self.dirty_editors.is_empty() {
-            ("Autosave pending", Color32::from_rgb(239, 108, 0))
+            (
+                if temporary {
+                    "Edit pending"
+                } else {
+                    "Autosave pending"
+                },
+                Color32::from_rgb(239, 108, 0),
+            )
         } else {
             match self.state.sync_state {
-                SyncState::Synchronized => ("Saved", Color32::from_rgb(46, 125, 50)),
+                SyncState::Synchronized => (
+                    if temporary { "Ready" } else { "Saved" },
+                    Color32::from_rgb(46, 125, 50),
+                ),
                 SyncState::Dirty => ("Pending", Color32::from_rgb(239, 108, 0)),
                 SyncState::Executing => ("Running", Color32::from_rgb(2, 119, 189)),
                 SyncState::Disconnected => ("Disconnected", Color32::from_rgb(198, 40, 40)),
                 SyncState::Error => ("Action required", Color32::from_rgb(198, 40, 40)),
             }
         };
-        ui.horizontal_top(|ui| {
+        let status_row = ui.horizontal_top(|ui| {
             let width = (ui.available_width() - 32.0).max(0.0);
             let status = ui.allocate_ui_with_layout(
                 egui::vec2(width, 0.0),
@@ -1490,6 +1534,10 @@ impl NotebookEguiApp {
                 },
             );
         });
+        if status_row.response.rect.bottom() > ui.clip_rect().bottom() + 0.5 {
+            // Bottom panels position with their previous height, then measure wrapping.
+            ui.ctx().request_discard("status panel height changed");
+        }
     }
     fn cell(&mut self, ui: &mut egui::Ui, index: usize, cell: Cell) {
         let selected = self.selected_cells.contains(&cell.id)
@@ -3363,6 +3411,7 @@ mod tests {
                     cell_id: "code".into(),
                     microscope_id: id.into(),
                     title: id.into(),
+                    walkthrough: serde_json::from_value(serde_json::json!({"title":id,"steps":[{"id":"one","title":"One","code":"42","markdown":"Example"}]})).unwrap(),
                 },
             )
             .unwrap();

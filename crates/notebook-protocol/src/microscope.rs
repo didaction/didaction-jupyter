@@ -18,6 +18,9 @@ pub struct WalkthroughStep {
     pub title: String,
     pub code: String,
     pub markdown: String,
+    /// Complete, self-contained source for a fresh temporary kernel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playground_code: Option<String>,
     #[serde(default)]
     pub annotations: Vec<Annotation>,
 }
@@ -71,6 +74,9 @@ pub fn validate_walkthrough(w: &Walkthrough) -> Result<(), ProtocolError> {
             || !title(&s.title)
             || s.code.len() > 64_000
             || s.markdown.len() > 64_000
+            || s.playground_code
+                .as_ref()
+                .is_some_and(|code| code.len() > 64_000 || code.trim().is_empty())
             || s.annotations.len() > 32
         {
             return Err(invalid("Invalid or oversized walkthrough step"));
@@ -128,6 +134,32 @@ pub fn validate_focus(w: &Walkthrough, focus: &WalkthroughFocus) -> Result<(), P
         return Err(invalid("Annotation not found in this step"));
     }
     Ok(())
+}
+
+pub fn playground_snapshot(
+    doc: &MicroscopeDocument,
+    index: usize,
+    kernel: &str,
+) -> Result<NotebookSnapshot, ProtocolError> {
+    let w = doc
+        .walkthrough
+        .as_ref()
+        .ok_or_else(|| invalid("Microscope requires a walkthrough"))?;
+    validate_walkthrough(w)?;
+    let code = w
+        .steps
+        .get(index)
+        .and_then(|s| s.playground_code.as_ref())
+        .ok_or_else(|| invalid("This step has no playground code"))?;
+    let snapshot: NotebookSnapshot = serde_json::from_value(json!({
+        "protocol_version":1,"schema_version":1,"revision":0,
+        "notebook":{"path":"playground.ipynb","workspace":"temporary"},
+        "kernel":{"name":kernel,"display_name":kernel,"session_id":null,"state":"idle"},
+        "selected_cell_id":"playground",
+        "cells":[{"id":"playground","cell_type":"code","source":code,"metadata":{},"execution_count":null,"outputs":[]}]
+    })).map_err(|_| invalid("Invalid playground snapshot"))?;
+    crate::validate_snapshot(&snapshot)?;
+    Ok(snapshot)
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -298,6 +330,7 @@ pub fn prepare(
             .revision
             .checked_add(1)
             .ok_or_else(|| invalid("Microscope revision limit"))?;
+        item.title = walkthrough.title.clone();
         cell.metadata
             .as_object_mut()
             .ok_or_else(|| invalid("Invalid metadata"))?
@@ -309,7 +342,11 @@ pub fn prepare(
             cell_id,
             microscope_id,
             title,
-        } => (cell_id, microscope_id, Some(title)),
+            walkthrough,
+        } => {
+            validate_walkthrough(walkthrough)?;
+            (cell_id, microscope_id, Some(title))
+        }
         NotebookCommandKind::DeleteMicroscope {
             cell_id,
             microscope_id,
@@ -423,7 +460,7 @@ mod tests {
             )
             .is_err()
         );
-        for mutate in 0..6 {
+        for mutate in 0..8 {
             let mut bad = w.clone();
             match mutate {
                 0 => bad.steps[0].annotations[0].start_line = 0,
@@ -434,6 +471,8 @@ mod tests {
                     bad.steps[0].annotations.push(duplicate);
                 }
                 4 => bad.steps[0].code = "a".repeat(64001),
+                5 => bad.steps[0].playground_code = Some(" ".into()),
+                6 => bad.steps[0].playground_code = Some("a".repeat(64001)),
                 _ => bad.steps.clear(),
             }
             assert!(validate_walkthrough(&bad).is_err());
@@ -445,10 +484,21 @@ mod tests {
                 cell_id: "cell-a".into(),
                 microscope_id: "abc1234".into(),
                 title: "Example".into(),
+                walkthrough: w.clone(),
             },
         )
         .unwrap();
         let old = document(&state, "cell-a", "abc1234").unwrap();
+        let mut playable = old.clone();
+        let mut content = w.clone();
+        content.steps[0].playground_code = Some("setup = 42\nprint(setup)".into());
+        playable.walkthrough = Some(content);
+        let temporary = playground_snapshot(&playable, 0, "python3").unwrap();
+        assert_eq!(temporary.cells.len(), 1);
+        assert_eq!(temporary.cells[0].source, "setup = 42\nprint(setup)");
+        assert!(temporary.cells[0].outputs.is_empty());
+        assert!(playground_snapshot(&playable, 1, "python3").is_err());
+        assert!(playground_snapshot(&old, 0, "python3").is_err());
         prepare(
             &mut state,
             &NotebookCommandKind::SetMicroscopeWalkthrough {
@@ -526,6 +576,7 @@ mod tests {
             cell_id: "cell-a".into(),
             microscope_id: "abc1234".into(),
             title: "A closer look".into(),
+            walkthrough: serde_json::from_value(json!({"title":"A closer look","steps":[{"id":"one","title":"One","code":"42","markdown":"Example"}]})).unwrap(),
         };
         prepare(&mut state, &create).unwrap();
         let doc = document(&state, "cell-a", "abc1234").unwrap();

@@ -365,6 +365,9 @@ impl Jupyter {
     pub async fn socket(&self, path: &str) -> Result<Socket> {
         let session = self.ensure_kernel(path).await?;
         let id = session["kernel"]["id"].as_str().ok_or_else(malformed)?;
+        self.socket_kernel(id).await
+    }
+    pub async fn socket_kernel(&self, id: &str) -> Result<Socket> {
         let mut url = self
             .config
             .url

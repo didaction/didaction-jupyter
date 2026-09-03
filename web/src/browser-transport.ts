@@ -229,6 +229,10 @@ export class BrowserNotebookTransport implements NotebookTransport {
         } else {
           if (command.type === "create_microscope" && stored)
             throw new Error("Microscope sidecar already exists");
+          if (command.type === "create_microscope") {
+            identity.document.walkthrough = command.walkthrough;
+            microscope = identity.document;
+          }
           sidecar = {
             path: identity.path,
             content:

@@ -200,6 +200,7 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   const created = await call(page, "create_microscope", {
     ...scope,
     title: "Following a closer look",
+    walkthrough: exampleWalkthrough,
   });
   expect(created.isError, JSON.stringify(created)).toBe(false);
   const microscope = {
@@ -217,13 +218,16 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
         microscope: unknown;
       }
     ).microscope;
-  expect(await activeMicroscope(page)).toEqual({
+  expect(await activeMicroscope(page)).toMatchObject({
     cell_id: "tail-note",
     microscope_id: microscope.microscope_id,
   });
   await expect
     .poll(() => activeMicroscope(observer))
-    .toEqual({ cell_id: "tail-note", microscope_id: microscope.microscope_id });
+    .toMatchObject({
+      cell_id: "tail-note",
+      microscope_id: microscope.microscope_id,
+    });
   expect(
     (
       await call(observer, "set_microscope_walkthrough", {
@@ -264,6 +268,32 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
       revision: 1,
       focus: { step_index: 1, annotation_id: null },
     });
+  expect(
+    (await call(page, "open_playground", { ...microscope, step_index: 0 }))
+      .isError,
+  ).toBe(false);
+  await expect(observer.locator("#playground-canvas")).toBeVisible();
+  expect(
+    (await call(observer, "execute_playground", { notebook_path: names[1] }))
+      .isError,
+  ).toBe(true);
+  const pgRun = await call(page, "execute_playground", {
+    notebook_path: names[1],
+  });
+  expect(pgRun, JSON.stringify(pgRun)).toMatchObject({ isError: false });
+  await expect
+    .poll(async () =>
+      JSON.stringify(
+        (await call(observer, "read_playground", { notebook_path: names[1] }))
+          .structuredContent.snapshot,
+      ),
+    )
+    .toContain("6");
+  await observer.screenshot({ path: ".runtime/playground-follower.png" });
+  expect(
+    (await call(page, "close_playground", { notebook_path: names[1] })).isError,
+  ).toBe(false);
+  await expect(observer.locator("#playground-canvas")).toHaveCount(0);
   expect(
     (await call(page, "close_microscope", { notebook_path: names[1] })).isError,
   ).toBe(false);

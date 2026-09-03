@@ -20,6 +20,10 @@ test("microscope metadata, sidecar, agent navigation and human delete persist in
   const first = await microscopeCall(page, "create_microscope", {
     ...scope,
     title: "Closer look",
+    walkthrough: {
+      title: "Closer look",
+      steps: [{ id: "one", title: "One", code: "42", markdown: "Explanation" }],
+    },
   });
   expect(first, JSON.stringify(first)).toMatchObject({ isError: false });
   const id = String(first.structuredContent.microscope_id);
@@ -27,6 +31,10 @@ test("microscope metadata, sidecar, agent navigation and human delete persist in
   const second = await microscopeCall(page, "create_microscope", {
     ...scope,
     title: "Second view",
+    walkthrough: {
+      title: "Second view",
+      steps: [{ id: "one", title: "One", code: "42", markdown: "Explanation" }],
+    },
   });
   expect(second.isError).toBe(false);
   const secondId = String(second.structuredContent.microscope_id);

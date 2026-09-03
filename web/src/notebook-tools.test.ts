@@ -226,7 +226,7 @@ describe("transport-neutral notebook tools", () => {
       },
     });
     expect(installed.available).toBe(true);
-    expect(registered).toHaveLength(26);
+    expect(registered).toHaveLength(31);
     expect(
       (
         await registered
@@ -236,7 +236,7 @@ describe("transport-neutral notebook tools", () => {
     ).toBe(false);
     expect(h.calls).toHaveLength(1);
     installed.dispose();
-    expect(removed).toHaveLength(26);
+    expect(removed).toHaveLength(31);
     expect((await installWebMcp(h.tools, {} as ModelContext)).available).toBe(
       false,
     );
@@ -256,7 +256,7 @@ describe("transport-neutral notebook tools", () => {
     try {
       const installed = await installWebMcp(harness().tools);
       expect(installed.available).toBe(true);
-      expect(completed).toBe(26);
+      expect(completed).toBe(31);
       installed.dispose();
       expect(signals.every((signal) => signal.aborted)).toBe(true);
     } finally {

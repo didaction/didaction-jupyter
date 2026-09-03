@@ -3,6 +3,7 @@ export const exampleWalkthrough = {
   steps: [
     {
       id: "data",
+      playground_code: "values = [2, 4]\nprint(sum(values))",
       title: "Choose categories and values",
       code: "labels = ['a', 'b']\nvalues = [2, 4]",
       markdown:

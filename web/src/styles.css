@@ -446,3 +446,31 @@ button:hover {
     animation-duration: 0.01ms !important;
   }
 }
+/* A temporary notebook fills only the notebook window; the workspace stays intact. */
+.playground-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: #f7f7f7;
+}
+.playground-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-bottom: 1px solid #d7dcdf;
+  color: #53636b;
+}
+.playground-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+#playground-canvas {
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
