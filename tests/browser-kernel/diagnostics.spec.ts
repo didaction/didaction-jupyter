@@ -29,9 +29,18 @@ test("status-bar diagnostics show WASM provenance and memory-only bounded WebMCP
   await expect(page.locator(".privacy-note")).toHaveCount(0);
   const panel = page.locator("#diagnostics-panel");
   await expect(panel).toBeHidden();
+  for (const width of [1280, 900, 739]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `.runtime/notebook-controls-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.waitForTimeout(200);
   const canvas = await page.locator("#notebook-canvas").boundingBox();
-  await page.mouse.click(canvas!.x + 16, canvas!.y + canvas!.height - 16);
+  await page.mouse.click(
+    canvas!.x + canvas!.width - 20,
+    canvas!.y + canvas!.height - 16,
+  );
   await expect(panel).toBeVisible();
   await expect(page.locator("#wasm-git-sha")).toHaveText(/^[a-f0-9]{40}$/);
   await expect(page.locator("#diagnostics-empty")).toBeVisible();

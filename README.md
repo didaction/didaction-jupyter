@@ -32,7 +32,7 @@ kept only in memory, and are not broadcast to collaborators or saved. Reduced
 motion preferences turn the pulse into a static border. These tools do not
 change selection, execute code, or bypass driver permissions for notebook edits.
 
-The diagnostic waveform icon at the start of the bottom status bar opens a right
+The diagnostic waveform icon at the right end of the bottom status bar opens a right
 inspector. It shows the Git commit embedded in the loaded WASM build (plus dirty
 checkout status), not the server's current checkout. Builds without Git metadata
 show `unknown`; container builds via `scripts/container.sh` pass this metadata.

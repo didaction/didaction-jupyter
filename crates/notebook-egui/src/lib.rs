@@ -1340,66 +1340,63 @@ impl NotebookEguiApp {
                 SyncState::Error => ("Action required", Color32::from_rgb(198, 40, 40)),
             }
         };
-        ui.horizontal_wrapped(|ui| {
-            let response = ui
-                .add_sized([24.0, 24.0], egui::Button::new(""))
-                .on_hover_text("Open diagnostics");
-            let rect = response.rect.shrink(5.0);
-            let stroke = egui::Stroke::new(1.5, ui.visuals().text_color());
-            ui.painter()
-                .rect_stroke(rect, 2.0, stroke, egui::StrokeKind::Inside);
-            let x = rect.left();
-            let y = rect.center().y;
-            ui.painter().add(egui::Shape::line(
-                vec![
-                    egui::pos2(x, y),
-                    egui::pos2(x + 3.0, y),
-                    egui::pos2(x + 5.0, y - 4.0),
-                    egui::pos2(x + 8.0, y + 4.0),
-                    egui::pos2(x + 10.0, y),
-                    egui::pos2(rect.right(), y),
-                ],
-                stroke,
-            ));
-            if response.clicked() {
-                self.diagnostics_toggle_requested = true;
-            }
-            ui.separator();
-            ui.label(if self.read_only {
-                "Observer · Read-only"
-            } else {
-                "Driver"
-            });
-            ui.separator();
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-            ui.painter().circle_filled(rect.center(), 4.0, color);
-            ui.label(label);
-            ui.separator();
-            ui.label(format!(
-                "Kernel: {} · {:?}",
-                self.state.snapshot.kernel.display_name, self.state.snapshot.kernel.state
-            ));
-            ui.separator();
-            ui.label(format!("Revision {}", self.state.snapshot.revision));
-            for item in self.host_status.split(" · ") {
-                ui.separator();
-                ui.label(item);
-            }
-        });
-        if let Some(error) = &self.state.last_error {
-            ui.colored_label(
-                Color32::from_rgb(183, 28, 28),
-                format!(
-                    "{} — {}",
-                    error.message,
-                    if error.retryable {
-                        "Retry or reconnect."
-                    } else {
-                        "Edit the request and try again."
+        ui.horizontal_top(|ui| {
+            let width = (ui.available_width() - 32.0).max(0.0);
+            let status = ui.allocate_ui_with_layout(
+                egui::vec2(width, 0.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_min_width(width);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(if self.read_only {
+                            "Observer · Read-only"
+                        } else {
+                            "Driver"
+                        });
+                        ui.separator();
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+                        ui.painter().circle_filled(rect.center(), 4.0, color);
+                        ui.label(label);
+                        ui.separator();
+                        ui.label(format!(
+                            "Kernel: {} · {:?}",
+                            self.state.snapshot.kernel.display_name,
+                            self.state.snapshot.kernel.state
+                        ));
+                        ui.separator();
+                        ui.label(format!("Revision {}", self.state.snapshot.revision));
+                        for item in self.host_status.split(" · ") {
+                            ui.separator();
+                            ui.label(item);
+                        }
+                    });
+                    if let Some(error) = &self.state.last_error {
+                        ui.colored_label(
+                            Color32::from_rgb(183, 28, 28),
+                            format!(
+                                "{} — {}",
+                                error.message,
+                                if error.retryable {
+                                    "Retry or reconnect."
+                                } else {
+                                    "Edit the request and try again."
+                                }
+                            ),
+                        );
                     }
-                ),
+                },
             );
-        }
+            ui.allocate_ui_with_layout(
+                egui::vec2(24.0, status.response.rect.height().max(24.0)),
+                egui::Layout::bottom_up(egui::Align::Max),
+                |ui| {
+                    if diagnostics_button(ui).clicked() {
+                        self.diagnostics_toggle_requested = true;
+                    }
+                },
+            );
+        });
     }
     fn cell(&mut self, ui: &mut egui::Ui, index: usize, cell: Cell) {
         let selected = self.selected_cells.contains(&cell.id)
@@ -1451,7 +1448,10 @@ impl NotebookEguiApp {
                     self.set_output_view(&cell.id, mode);
                 }
                 let drag = ui
-                    .add_enabled(idle, drag_handle())
+                    .add_enabled(
+                        idle,
+                        drag_handle().min_size(egui::vec2(28.0, 28.0) * control_scale(ui)),
+                    )
                     .on_hover_text("Drag to reorder cell");
                 paint_drag_hand(ui, &drag);
                 if drag.hovered() {
@@ -1893,10 +1893,11 @@ impl eframe::App for NotebookEguiApp {
             }
         }
         let compact_controls = ctx.screen_rect().width() < 600.0;
+        let scale = desktop_control_scale(ctx.screen_rect().width());
         ctx.style_mut(|style| {
             style.visuals = egui::Visuals::light();
             style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-            style.spacing.interact_size.y = if compact_controls { 44.0 } else { 30.0 };
+            style.spacing.interact_size.y = 30.0 * scale;
             style.visuals.selection.bg_fill = Color32::from_rgb(210, 232, 246);
         });
         install_data_image_loader(ctx);
@@ -2633,22 +2634,55 @@ enum ToolbarIcon {
     Restart,
 }
 
+fn desktop_control_scale(width: f32) -> f32 {
+    (width / 800.0).clamp(0.85, 1.0)
+}
+
+fn control_scale(ui: &egui::Ui) -> f32 {
+    desktop_control_scale(ui.ctx().screen_rect().width())
+}
+
+fn diagnostics_button(ui: &mut egui::Ui) -> egui::Response {
+    let response = ui
+        .add_sized([24.0, 24.0], egui::Button::new(""))
+        .on_hover_text("Open diagnostics");
+    let rect = response.rect.shrink(5.0);
+    let stroke = Stroke::new(1.5, ui.visuals().text_color());
+    ui.painter()
+        .rect_stroke(rect, 2.0, stroke, egui::StrokeKind::Inside);
+    let x = rect.left();
+    let y = rect.center().y;
+    ui.painter().add(egui::Shape::line(
+        vec![
+            egui::pos2(x, y),
+            egui::pos2(x + 3.0, y),
+            egui::pos2(x + 5.0, y - 4.0),
+            egui::pos2(x + 8.0, y + 4.0),
+            egui::pos2(x + 10.0, y),
+            egui::pos2(rect.right(), y),
+        ],
+        stroke,
+    ));
+    response
+}
+
 fn toolbar_icon_button(ui: &mut egui::Ui, enabled: bool, icon: ToolbarIcon, tooltip: &str) -> bool {
+    let scale = control_scale(ui);
     let response = ui
         .add_enabled(
             enabled,
             egui::Button::new("")
                 .selected(matches!(icon, ToolbarIcon::Follow(true)))
-                .min_size(egui::vec2(30.0, 28.0)),
+                .min_size(egui::vec2(30.0, 28.0) * scale),
         )
         .on_hover_text(tooltip);
-    let rect = response.rect.shrink(7.0);
+    let rect = response.rect.shrink(7.0 * scale);
     let color = if enabled {
         ui.visuals().widgets.inactive.fg_stroke.color
     } else {
         ui.visuals().weak_text_color()
     };
-    let stroke = Stroke::new(1.6, color);
+    let stroke = Stroke::new(1.6 * scale, color);
     let painter = ui.painter();
     match icon {
         ToolbarIcon::Follow(_) => {
@@ -2823,6 +2857,7 @@ fn cell_visibility_control(
 }
 
 fn cell_collapse_button(ui: &mut egui::Ui, collapsed: bool) -> egui::Response {
+    let scale = control_scale(ui);
     let label = if collapsed {
         "Expand entire cell"
     } else {
@@ -2834,7 +2869,7 @@ fn cell_collapse_button(ui: &mut egui::Ui, collapsed: bool) -> egui::Response {
                 .selected(collapsed)
                 .stroke(Stroke::NONE)
                 .corner_radius(CornerRadius::ZERO)
-                .min_size(egui::vec2(28.0, 28.0)),
+                .min_size(egui::vec2(28.0, 28.0) * scale),
         )
         .on_hover_text(label);
     response.widget_info(|| {
@@ -2845,7 +2880,7 @@ fn cell_collapse_button(ui: &mut egui::Ui, collapsed: bool) -> egui::Response {
             label,
         )
     });
-    let rect = egui::Rect::from_center_size(response.rect.center(), egui::vec2(18.0, 18.0));
+    let rect = egui::Rect::from_center_size(response.rect.center(), egui::vec2(18.0, 18.0) * scale);
     let stroke = Stroke::new(1.4, ui.style().interact(&response).fg_stroke.color);
     ui.painter()
         .rect_stroke(rect, 1.0, stroke, egui::StrokeKind::Inside);
@@ -2866,6 +2901,7 @@ fn cell_collapse_button(ui: &mut egui::Ui, collapsed: bool) -> egui::Response {
 }
 
 fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -> egui::Response {
+    let scale = control_scale(ui);
     let tooltip = match mode {
         OutputViewMode::Expanded => "Show full output",
         OutputViewMode::Windowed => "Show scrollable output pinned to latest",
@@ -2877,7 +2913,7 @@ fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -
                 .selected(selected)
                 .stroke(Stroke::NONE)
                 .corner_radius(CornerRadius::ZERO)
-                .min_size(egui::vec2(28.0, 28.0)),
+                .min_size(egui::vec2(28.0, 28.0) * scale),
         )
         .on_hover_text(tooltip);
     response.widget_info(|| {
@@ -2888,7 +2924,7 @@ fn output_view_button(ui: &mut egui::Ui, mode: OutputViewMode, selected: bool) -
             tooltip,
         )
     });
-    let rect = egui::Rect::from_center_size(response.rect.center(), egui::vec2(18.0, 18.0));
+    let rect = egui::Rect::from_center_size(response.rect.center(), egui::vec2(18.0, 18.0) * scale);
     let color = ui.style().interact(&response).fg_stroke.color;
     let stroke = Stroke::new(1.4, color);
     match mode {
@@ -2950,6 +2986,7 @@ fn drag_handle() -> egui::Button<'static> {
 }
 
 fn paint_drag_hand(ui: &egui::Ui, response: &egui::Response) {
+    let scale = control_scale(ui);
     response.widget_info(|| {
         egui::WidgetInfo::labeled(
             egui::WidgetType::Button,
@@ -2957,7 +2994,7 @@ fn paint_drag_hand(ui: &egui::Ui, response: &egui::Response) {
             "Drag to reorder cell",
         )
     });
-    let origin = response.rect.center() - egui::vec2(10.0, 10.0);
+    let origin = response.rect.center() - egui::vec2(10.0, 10.0) * scale;
     // Open-hand outline in a 20-point square; independent of font glyph coverage.
     let outline = [
         (5.0, 11.0),
@@ -2994,15 +3031,16 @@ fn paint_drag_hand(ui: &egui::Ui, response: &egui::Response) {
     ui.painter().add(egui::Shape::line(
         outline
             .into_iter()
-            .map(|(x, y)| origin + egui::vec2(x, y))
+            .map(|(x, y)| origin + egui::vec2(x, y) * scale)
             .collect(),
         Stroke::new(1.3, color),
     ));
 }
 
 fn cell_run_button(ui: &mut egui::Ui, enabled: bool, running: bool) -> egui::Response {
+    let scale = control_scale(ui);
     let (rect, response) = ui.allocate_exact_size(
-        egui::vec2(28.0, 28.0),
+        egui::vec2(28.0, 28.0) * scale,
         if enabled {
             egui::Sense::click()
         } else {
@@ -3042,9 +3080,9 @@ fn cell_run_button(ui: &mut egui::Ui, enabled: bool, running: bool) -> egui::Res
         };
         ui.painter().add(egui::Shape::convex_polygon(
             vec![
-                center + egui::vec2(-4.0, -6.0),
-                center + egui::vec2(6.0, 0.0),
-                center + egui::vec2(-4.0, 6.0),
+                center + egui::vec2(-4.0, -6.0) * scale,
+                center + egui::vec2(6.0, 0.0) * scale,
+                center + egui::vec2(-4.0, 6.0) * scale,
             ],
             color,
             Stroke::NONE,
@@ -3208,6 +3246,51 @@ mod tests {
             egui::CentralPanel::default().show(ctx, |ui| app.cell(ui, 0, cell.clone()));
         });
         assert!(app.agent_highlights.is_empty());
+    }
+
+    #[test]
+    fn desktop_controls_shrink_smoothly_without_a_mobile_jump() {
+        let widths = [1200.0, 800.0, 799.0, 601.0, 600.0, 599.0, 400.0];
+        for pair in widths.windows(2) {
+            assert!(desktop_control_scale(pair[1]) <= desktop_control_scale(pair[0]));
+        }
+        assert_eq!(desktop_control_scale(1200.0), 1.0);
+        assert_eq!(desktop_control_scale(400.0), 0.85);
+        assert!((desktop_control_scale(601.0) - desktop_control_scale(599.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn diagnostics_remains_clickable_at_bottom_right_when_status_wraps() {
+        for width in [1024.0, 599.0, 400.0] {
+            let mut app = app();
+            app.host_status = "Connected · WebMCP ready".into();
+            let ctx = egui::Context::default();
+            let mut input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(width, 600.0),
+                )),
+                ..Default::default()
+            };
+            let draw = |ctx: &egui::Context, app: &mut NotebookEguiApp| {
+                egui::TopBottomPanel::bottom("status").show(ctx, |ui| app.status(ui));
+            };
+            let _ = ctx.run(input.clone(), |ctx| draw(ctx, &mut app));
+            let pos = egui::pos2(width - 20.0, 584.0);
+            for pressed in [true, false] {
+                input.events = vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        pressed,
+                        button: egui::PointerButton::Primary,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ];
+                let _ = ctx.run(input.clone(), |ctx| draw(ctx, &mut app));
+            }
+            assert!(app.diagnostics_toggle_requested, "width={width}");
+        }
     }
 
     #[test]
