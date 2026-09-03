@@ -89,6 +89,101 @@ impl CreateArtifact {
 }
 
 impl Jupyter {
+    pub async fn read_microscope(
+        &self,
+        expected: &notebook_protocol::microscope::MicroscopeDocument,
+    ) -> Result<Option<notebook_protocol::microscope::MicroscopeDocument>> {
+        let path = notebook_protocol::microscope::sidecar(
+            &expected.notebook_path,
+            &expected.cell_id,
+            &expected.microscope.id,
+        )?;
+        super::config::confined(&path, false)?;
+        let (status, body) = self
+            .request(
+                Method::GET,
+                &format!("api/contents/{path}?format=text"),
+                None,
+            )
+            .await?;
+        if status == 404 {
+            return Ok(None);
+        }
+        if status != 200 || body["type"] != "file" {
+            return Err(error(
+                ErrorCode::TransportError,
+                "Microscope content could not be read",
+            ));
+        }
+        let text = body["content"].as_str().ok_or_else(malformed)?;
+        if text.len() > 4096 {
+            return Err(error(
+                ErrorCode::BoundsExceeded,
+                "Microscope shell file exceeds limit",
+            ));
+        }
+        let doc: notebook_protocol::microscope::MicroscopeDocument = serde_json::from_str(text)
+            .map_err(|_| error(ErrorCode::MalformedResponse, "Invalid microscope content"))?;
+        if &doc != expected {
+            return Err(error(
+                ErrorCode::MalformedResponse,
+                "Microscope content identity mismatch",
+            ));
+        }
+        Ok(Some(doc))
+    }
+    pub async fn create_microscope(
+        &self,
+        doc: &notebook_protocol::microscope::MicroscopeDocument,
+    ) -> Result<()> {
+        let path = notebook_protocol::microscope::sidecar(
+            &doc.notebook_path,
+            &doc.cell_id,
+            &doc.microscope.id,
+        )?;
+        if self.read_microscope(doc).await?.is_some() {
+            return Err(error(
+                ErrorCode::InvalidInput,
+                "Microscope sidecar already exists",
+            ));
+        }
+        let body = json!({"type":"file","format":"text","content":serde_json::to_string(doc).map_err(|_| malformed())?});
+        let (status, _) = self
+            .request(Method::PUT, &format!("api/contents/{path}"), Some(body))
+            .await?;
+        if status != 201 {
+            return Err(error(
+                ErrorCode::TransportError,
+                "Microscope file creation was not confirmed",
+            ));
+        }
+        Ok(())
+    }
+    pub async fn delete_microscope(
+        &self,
+        doc: &notebook_protocol::microscope::MicroscopeDocument,
+    ) -> Result<()> {
+        if self.read_microscope(doc).await?.is_none() {
+            return Ok(());
+        }
+        let path = notebook_protocol::microscope::sidecar(
+            &doc.notebook_path,
+            &doc.cell_id,
+            &doc.microscope.id,
+        )?;
+        if self
+            .request(Method::DELETE, &format!("api/contents/{path}"), None)
+            .await?
+            .0
+            != 204
+        {
+            return Err(error(
+                ErrorCode::TransportError,
+                "Microscope file deletion was not confirmed",
+            ));
+        }
+        Ok(())
+    }
     pub async fn create_artifact(&self, input: CreateArtifact) -> Result<Value> {
         let path = self.config.path(&input.path, true)?;
         let body = input.body()?;

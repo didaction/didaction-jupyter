@@ -86,11 +86,13 @@ fn writes(kind: &NotebookCommandKind) -> bool {
             | NotebookCommandKind::Reconnect
             | NotebookCommandKind::Complete { .. }
             | NotebookCommandKind::Inspect { .. }
+            | NotebookCommandKind::ReadMicroscope { .. }
             | NotebookCommandKind::Setup { create: false, .. }
     )
 }
 fn empty_result(command: &NotebookCommand) -> CommandResult {
     CommandResult {
+        microscope: None,
         protocol_version: 1,
         command_id: command.command_id,
         idempotency_key: command.idempotency_key.clone(),
@@ -465,6 +467,8 @@ async fn dispatch(
         command.kind,
         NotebookCommandKind::Setup { create: true, .. }
             | NotebookCommandKind::RenameNotebook { .. }
+            | NotebookCommandKind::CreateMicroscope { .. }
+            | NotebookCommandKind::DeleteMicroscope { .. }
     ) {
         match host.artifact_lock.try_lock() {
             Ok(guard) => Some(guard),
@@ -704,6 +708,76 @@ async fn run(
     use NotebookCommandKind::*;
     let mut output_path = path.to_owned();
     let raw = match &command.kind {
+        CreateMicroscope {
+            cell_id,
+            microscope_id,
+            ..
+        }
+        | DeleteMicroscope {
+            cell_id,
+            microscope_id,
+        }
+        | ReadMicroscope {
+            cell_id,
+            microscope_id,
+        } => {
+            let mut raw = host.jupyter.read(path).await?;
+            let current = committed(host, path, token, &raw, KernelState::Idle).await?;
+            let proposed = notebook_runtime::prepare(current.clone(), command.clone()).map_err(
+                |e| match e {
+                    notebook_core::DomainError::Protocol(e) => e,
+                    _ => error(
+                        ErrorCode::StaleRevision,
+                        "Notebook changed; refresh before changing microscopes",
+                    ),
+                },
+            )?;
+            let create = matches!(command.kind, CreateMicroscope { .. });
+            let doc = notebook_protocol::microscope::document(
+                if create { &proposed } else { &current },
+                cell_id,
+                microscope_id,
+            )?;
+            let stored = host.jupyter.read_microscope(&doc).await?;
+            let original = raw.clone();
+            if matches!(command.kind, ReadMicroscope { .. }) {
+                result.microscope = Some(stored.ok_or_else(|| {
+                    error(
+                        ErrorCode::InvalidInput,
+                        "Microscope content file is missing",
+                    )
+                })?);
+            } else {
+                if create {
+                    if stored.is_some() {
+                        return Err(error(
+                            ErrorCode::InvalidInput,
+                            "Microscope sidecar already exists",
+                        ));
+                    }
+                    host.jupyter.create_microscope(&doc).await?;
+                } else if stored.is_some() {
+                    host.jupyter.delete_microscope(&doc).await?;
+                }
+                jupyter::merge_cells(&mut raw, &proposed)?;
+                if let Err(failure) = host.jupyter.save(path, &raw).await {
+                    // Contents has no multi-file transaction. Restore the sidecar on
+                    // a confirmed failed notebook write, but never claim atomicity.
+                    let observed = host.jupyter.read(path).await;
+                    if observed.as_ref().is_ok_and(|value| value == &raw) {
+                        // The write succeeded but its acknowledgement was lost.
+                    } else {
+                        if create && observed.as_ref().is_ok_and(|value| value == &original) {
+                            let _ = host.jupyter.delete_microscope(&doc).await;
+                        } else if stored.is_some() {
+                            let _ = host.jupyter.create_microscope(&doc).await;
+                        }
+                        return Err(failure);
+                    }
+                }
+            }
+            raw
+        }
         Setup { create, .. } => host.jupyter.setup(path, *create).await?,
         Query { .. } | Reconnect => {
             host.jupyter.ensure_kernel(path).await?;
@@ -804,6 +878,16 @@ async fn run(
             host.jupyter.read(path).await?
         }
         RenameNotebook { path: new } => {
+            let raw = host.jupyter.read(path).await?;
+            let snapshot =
+                host.jupyter
+                    .snapshot(path, &raw, base.unwrap_or(0), KernelState::Idle)?;
+            notebook_runtime::prepare(snapshot, command.clone()).map_err(|_| {
+                error(
+                    ErrorCode::InvalidInput,
+                    "Delete microscopes before renaming this notebook",
+                )
+            })?;
             output_path = host.config.path(new, false)?;
             host.jupyter.rename(path, &output_path).await?;
             let mut authority = host.authority.lock().await;

@@ -78,6 +78,35 @@ function define(
   });
 }
 define(
+  "create_microscope",
+  "Create an empty cell-associated microscope shell and durable content file.",
+  { cell_id: id, title: { type: "string", minLength: 1, maxLength: 128 } },
+);
+define(
+  "list_microscopes",
+  "List microscope IDs and titles for a cell.",
+  { cell_id: id },
+  undefined,
+  true,
+);
+define(
+  "open_microscope",
+  "Load one microscope in this notebook window, replacing its current view. Does not modify notebook contents.",
+  {
+    cell_id: id,
+    microscope_id: { type: "string", minLength: 7, maxLength: 7 },
+  },
+  undefined,
+  true,
+);
+define(
+  "close_microscope",
+  "Return this window to notebook mode.",
+  {},
+  [],
+  true,
+);
+define(
   "set_cell_visibility",
   "Collapse or expand a cell without modifying notebook contents.",
   { cell_id: id, collapsed: { type: "boolean" } },
@@ -297,6 +326,8 @@ export class NotebookTools implements NotebookToolInvoker {
           "capture_cell",
           "highlight_cell",
           "clear_cell_highlight",
+          "open_microscope",
+          "close_microscope",
         ].includes(name)
       ) {
         if (!this.view)
@@ -383,6 +414,39 @@ export class NotebookTools implements NotebookToolInvoker {
             revision: this.snapshot().revision,
             cell: publicCell(cell!),
           });
+        if (name === "list_microscopes") {
+          const metadata = (
+            cell as Cell & { metadata?: Record<string, unknown> }
+          ).metadata;
+          return answer({
+            ok: true,
+            cell_id: cell!.id,
+            microscopes:
+              (
+                metadata?.didaction_microscopes as
+                  | { items?: unknown[] }
+                  | undefined
+              )?.items ?? [],
+          });
+        }
+        if (name === "create_microscope") {
+          const microscope_id = crypto
+            .randomUUID()
+            .replaceAll("-", "")
+            .slice(0, 7);
+          await send("create_microscope", {
+            cell_id: cell!.id,
+            microscope_id,
+            title: args.title,
+          });
+          return answer({
+            ok: true,
+            cell_id: cell!.id,
+            microscope_id,
+            title: args.title,
+            revision: this.snapshot().revision,
+          });
+        }
         let affectedId = cell?.id;
         const modify = (change: Record<string, unknown>) =>
           send("modify_cells", { changes: [change] });

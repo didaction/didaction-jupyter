@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+pub mod microscope;
 use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
@@ -143,6 +144,19 @@ pub enum CellMutation {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum NotebookCommandKind {
+    CreateMicroscope {
+        cell_id: String,
+        microscope_id: String,
+        title: String,
+    },
+    DeleteMicroscope {
+        cell_id: String,
+        microscope_id: String,
+    },
+    ReadMicroscope {
+        cell_id: String,
+        microscope_id: String,
+    },
     Setup {
         path: String,
         kernel: Option<String>,
@@ -221,6 +235,8 @@ pub struct ProtocolError {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommandResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub microscope: Option<microscope::MicroscopeDocument>,
     pub protocol_version: u16,
     pub command_id: Uuid,
     pub idempotency_key: String,
@@ -258,6 +274,32 @@ pub fn validate_command(command: &NotebookCommand) -> Result<(), ProtocolError> 
         return Err(bounds("timeout is outside the allowed range"));
     }
     match &command.kind {
+        NotebookCommandKind::CreateMicroscope {
+            cell_id,
+            microscope_id,
+            title,
+        } => {
+            if cell_id.is_empty() || cell_id.len() > 128 {
+                return Err(bounds("invalid cell id"));
+            }
+            microscope::validate_ref(&microscope::MicroscopeRef {
+                id: microscope_id.clone(),
+                title: title.clone(),
+            })?;
+        }
+        NotebookCommandKind::DeleteMicroscope {
+            cell_id,
+            microscope_id,
+        }
+        | NotebookCommandKind::ReadMicroscope {
+            cell_id,
+            microscope_id,
+        } => {
+            if cell_id.is_empty() || cell_id.len() > 128 {
+                return Err(bounds("invalid cell id"));
+            }
+            microscope::validate_id(microscope_id)?;
+        }
         NotebookCommandKind::Setup { path, kernel, .. } => {
             validate_relative_path(path)?;
             if kernel.as_ref().is_some_and(|v| v.len() > 128) {
@@ -400,6 +442,7 @@ fn validate_mutation(change: &CellMutation) -> Result<(), ProtocolError> {
 }
 
 fn validate_cell(cell: &Cell) -> Result<(), ProtocolError> {
+    microscope::list(cell)?;
     if cell.id.is_empty() || cell.id.len() > 128 {
         return Err(bounds("invalid cell id"));
     }

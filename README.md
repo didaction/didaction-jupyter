@@ -1,5 +1,16 @@
 # didaction Jupyter
 
+### Microscopes
+
+Agents can create titled, cell-owned microscopes through WebMCP. Use the cell's
+top-right **Microscopes** dropdown to open its full notebook-area shell, or the
+cross beside its title to delete it and its content file after confirmation.
+**Back to notebook** returns to normal editing. Opted-in followers mirror the
+driver's microscope navigation; observers can also browse independently.
+Both Rust server and browser-only builds support this foundation. Walkthroughs,
+graphics and nested playgrounds are later steps. See [storage, tools and current
+boundaries](docs/microscope.md).
+
 ### Workspace creation and uploads
 
 In the native Rust server runtime, the explorer's **Create or upload** controls

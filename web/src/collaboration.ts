@@ -65,6 +65,7 @@ export class NotebookCollaboration implements FollowTransport, FollowPublisher {
       notebook_path: target.path,
       scroll_fraction: Math.round(position.scroll_fraction * 1000) / 1000,
       selected_cell_id: position.selected_cell_id ?? null,
+      microscope: position.microscope ?? null,
     };
     const key = JSON.stringify(view);
     if (key === this.published && performance.now() - this.publishedAt < 2000)

@@ -25,6 +25,7 @@ import type {
 let browserWorkspace: BrowserWorkspace | undefined;
 
 interface NotebookContext extends OpenNotebook {
+  followMicroscope(target: unknown, current: () => boolean): Promise<void>;
   connection: NotebookCollaboration | LocalNotebookConnection;
   scrollFraction(): number;
   followSelection(cellId: string | null): void;
@@ -253,6 +254,38 @@ async function createContext(
             "Select this notebook with open_notebook before using view tools",
           );
         const id = args.cell_id as string;
+        if (name === "open_microscope" || name === "close_microscope") {
+          if (name === "close_microscope") mounted.showMicroscope("null");
+          else {
+            mounted.assertExternalReady();
+            const response = JSON.parse(
+              await externalExecute(
+                JSON.stringify(
+                  command("read_microscope", {
+                    cell_id: id,
+                    microscope_id: args.microscope_id,
+                    expected_revision: JSON.parse(wasm.publicSnapshot())
+                      .snapshot.revision,
+                  }),
+                ),
+              ),
+            );
+            if (response.error || !response.microscope)
+              throw new Error(
+                response.error?.message ?? "Microscope could not be loaded",
+              );
+            mounted.showMicroscope(JSON.stringify(response.microscope));
+          }
+          const result = {
+            ok: true,
+            view: JSON.parse(mounted.activeContext()),
+          };
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(result) }],
+            structuredContent: result,
+            isError: false,
+          };
+        }
         if (name !== "capture_cell") {
           syncMotion();
           mounted.cellView(
@@ -338,6 +371,33 @@ async function createContext(
     document.querySelector<HTMLElement>("#notebook-shell")!.hidden = true;
   };
   const context: NotebookContext = {
+    followMicroscope: async (target, current) => {
+      const requested = target as {
+        cell_id: string;
+        microscope_id: string;
+      } | null;
+      if (!mounted || !current()) return;
+      const active = JSON.parse(mounted.activeContext()).microscope;
+      if (JSON.stringify(active) === JSON.stringify(requested)) return;
+      if (!requested) {
+        mounted.showMicroscope("null");
+        return;
+      }
+      // View events can arrive before the notebook snapshot announcing creation.
+      // Refresh through the command queue before resolving the referenced document.
+      await transaction(async (execute) => {
+        if (!current() || !mounted) return;
+        await execute(JSON.stringify(command("query", { query: "full" })));
+        if (!current() || !mounted) return;
+        const response = JSON.parse(
+          await execute(JSON.stringify(command("read_microscope", requested))),
+        );
+        if (response.error || !response.microscope)
+          throw new Error("Microscope unavailable");
+        if (current() && mounted)
+          mounted.showMicroscope(JSON.stringify(response.microscope));
+      });
+    },
     tools,
     connection: collaboration,
     isActive: () => mounted !== undefined,
@@ -476,6 +536,11 @@ async function boot(): Promise<void> {
       if (!(await workspace.openForFollow(view.notebook_path, allowed)))
         throw new Error("Follow target cannot be selected");
       if (allowed()) {
+        await activeContext()?.followMicroscope(
+          view.microscope ?? null,
+          allowed,
+        );
+        if (!allowed()) return;
         activeContext()?.followScroll(view.scroll_fraction);
         if (view.selected_cell_id !== undefined)
           activeContext()?.followSelection(view.selected_cell_id);
@@ -536,6 +601,10 @@ async function boot(): Promise<void> {
           scroll_fraction: active.scrollFraction(),
           selected_cell_id:
             (active.activeContext?.()?.cell_id as string | null) ?? null,
+          microscope:
+            (active.activeContext?.()?.microscope as
+              | import("./follow").MicroscopeTarget
+              | null) ?? null,
         });
   }, 250);
   updateFollowButton();

@@ -1,5 +1,10 @@
 /** Ephemeral presentation state, independent of notebook command/revision state. */
+export interface MicroscopeTarget {
+  cell_id: string;
+  microscope_id: string;
+}
 export interface FollowView {
+  microscope?: MicroscopeTarget | null;
   protocol_version: 1;
   notebook_path: string;
   scroll_fraction: number;
@@ -11,13 +16,26 @@ export interface FollowTransport {
 }
 export type FollowPosition = Pick<
   FollowView,
-  "protocol_version" | "notebook_path" | "scroll_fraction" | "selected_cell_id"
+  | "protocol_version"
+  | "notebook_path"
+  | "scroll_fraction"
+  | "selected_cell_id"
+  | "microscope"
 >;
 export interface FollowPublisher {
   publish(view: FollowPosition): Promise<void>;
 }
 export function validateFollowView(value: unknown): FollowView {
   const view = value as FollowView;
+  if (
+    view?.microscope != null &&
+    (typeof view.microscope.cell_id !== "string" ||
+      !view.microscope.cell_id ||
+      view.microscope.cell_id.length > 128 ||
+      typeof view.microscope.microscope_id !== "string" ||
+      !/^[a-z0-9]{7}$/.test(view.microscope.microscope_id))
+  )
+    throw new Error("Invalid microscope follow target");
   if (
     !view ||
     view.protocol_version !== 1 ||

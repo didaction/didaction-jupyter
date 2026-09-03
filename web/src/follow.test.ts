@@ -23,8 +23,20 @@ it("rejects unsafe paths, versions and unbounded positions", () => {
     { selected_cell_id: "" },
     { selected_cell_id: "x".repeat(129) },
     { selected_cell_id: 3 },
+    { microscope: { cell_id: "cell", microscope_id: "../oops" } },
+    { microscope: { cell_id: "", microscope_id: "abc1234" } },
+    { microscope: { cell_id: "x".repeat(129), microscope_id: "abc1234" } },
   ])
     expect(() => validateFollowView({ ...view, ...change })).toThrow();
+});
+it("accepts a bounded microscope target and explicit notebook mode", () => {
+  for (const microscope of [
+    null,
+    { cell_id: "cell-2", microscope_id: "abc1234" },
+  ])
+    expect(validateFollowView({ ...view, microscope }).microscope).toEqual(
+      microscope,
+    );
 });
 it("requires opt in, cancels pending navigation on opt out and ignores late transport events", async () => {
   let receive: (view: FollowView | null) => void = () => {};

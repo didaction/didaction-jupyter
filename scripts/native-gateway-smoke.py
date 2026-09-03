@@ -38,6 +38,36 @@ with httpx.Client(base_url=os.environ["DIDACTION_GATEWAY_URL"], timeout=45) as c
         return value
 
     state = call("setup", path=path, kernel="python3", create=True)
+    # Microscope metadata and its derived sidecar survive through real Contents.
+    microscope_cell = state["snapshot"]["cells"][0]["id"]
+    micro = {"cell_id": microscope_cell, "microscope_id": "micro01"}
+    create_micro = command("create_microscope", **micro, title="Closer look")
+    created_micro = client.post("/api/v1/commands", headers=a, json=create_micro).json()
+    assert not created_micro.get("error"), created_micro
+    assert client.post("/api/v1/commands", headers=a, json=create_micro).json() == created_micro
+    assert call("read_microscope", **micro)["microscope"]["microscope"]["title"] == "Closer look"
+    assert (
+        call("query", query="full")["snapshot"]["cells"][0]["metadata"]["didaction_microscopes"][
+            "items"
+        ][0]["id"]
+        == "micro01"
+    )
+    denied = client.post(
+        "/api/v1/commands", headers=b, json=command("create_microscope", **micro, title="Denied")
+    ).json()
+    assert denied["error"]["code"] == "not_driver", denied
+    entries_micro = client.get("/api/v1/notebooks", params={"directory": ""}).json()["entries"]
+    sidecar_micro = next(e["path"] for e in entries_micro if e["path"].endswith(".micro01"))
+    assert sidecar_micro.startswith(path + ".")
+    call("delete_microscope", **micro)
+    assert not any(
+        e["path"] == sidecar_micro
+        for e in client.get("/api/v1/notebooks", params={"directory": ""}).json()["entries"]
+    )
+    assert (
+        "didaction_microscopes"
+        not in call("query", query="full")["snapshot"]["cells"][0]["metadata"]
+    )
     # Create-only artifact API uses the same workspace driver capability.
     folder = {"path": "uploads", "kind": "directory"}
     assert client.post("/api/v1/artifacts", headers=b, json=folder).status_code == 403

@@ -187,6 +187,9 @@ pub struct NotebookEguiApp {
     pub diagnostics_toggle_requested: bool,
     pub following_driver: bool,
     pub host_status: String,
+    pub microscope_target: Option<notebook_protocol::microscope::MicroscopeTarget>,
+    microscope_document: Option<notebook_protocol::microscope::MicroscopeDocument>,
+    microscope_delete: Option<(String, notebook_protocol::microscope::MicroscopeRef)>,
     output_views: HashMap<String, OutputViewMode>,
     hidden_line_numbers: HashSet<String>,
     find_open: bool,
@@ -202,6 +205,67 @@ pub struct NotebookEguiApp {
 }
 
 impl NotebookEguiApp {
+    pub fn open_microscope(
+        &mut self,
+        target: Option<notebook_protocol::microscope::MicroscopeTarget>,
+    ) -> Result<(), String> {
+        if self.microscope_target == target {
+            return Ok(());
+        }
+        if let Some(target) = &target {
+            notebook_protocol::microscope::document(
+                &self.state.snapshot,
+                &target.cell_id,
+                &target.microscope_id,
+            )
+            .map_err(|e| e.to_string())?;
+            self.save_visible_edits();
+            self.state.snapshot.selected_cell_id = Some(target.cell_id.clone());
+            self.selected_cells.clear();
+            self.emit(NotebookCommandKind::ReadMicroscope {
+                cell_id: target.cell_id.clone(),
+                microscope_id: target.microscope_id.clone(),
+            });
+        }
+        self.microscope_target = target;
+        self.microscope_document = None;
+        Ok(())
+    }
+    pub fn show_microscope(
+        &mut self,
+        doc: Option<notebook_protocol::microscope::MicroscopeDocument>,
+    ) -> Result<(), String> {
+        if let Some(doc) = &doc {
+            let expected = notebook_protocol::microscope::document(
+                &self.state.snapshot,
+                &doc.cell_id,
+                &doc.microscope.id,
+            )
+            .map_err(|e| e.to_string())?;
+            if &expected != doc {
+                return Err("Microscope document identity mismatch".into());
+            }
+            self.state.snapshot.selected_cell_id = Some(doc.cell_id.clone());
+            self.selected_cells.clear();
+            self.microscope_target = Some(notebook_protocol::microscope::MicroscopeTarget {
+                cell_id: doc.cell_id.clone(),
+                microscope_id: doc.microscope.id.clone(),
+            });
+        } else {
+            self.microscope_target = None;
+        }
+        self.microscope_document = doc;
+        Ok(())
+    }
+    pub fn accept_microscope(&mut self, doc: notebook_protocol::microscope::MicroscopeDocument) {
+        if self
+            .microscope_target
+            .as_ref()
+            .is_some_and(|t| t.cell_id == doc.cell_id && t.microscope_id == doc.microscope.id)
+        {
+            let _ = self.show_microscope(Some(doc));
+        }
+    }
     pub fn new(state: NotebookState) -> Self {
         let editors = state
             .snapshot
@@ -255,6 +319,9 @@ impl NotebookEguiApp {
             diagnostics_toggle_requested: false,
             following_driver: false,
             host_status: "Connecting…".into(),
+            microscope_target: None,
+            microscope_document: None,
+            microscope_delete: None,
             output_views: HashMap::new(),
             hidden_line_numbers: HashSet::new(),
             find_open: false,
@@ -352,6 +419,17 @@ impl NotebookEguiApp {
             .collect();
         let selected = self.state.snapshot.selected_cell_id.clone();
         self.state = state;
+        if self.microscope_target.as_ref().is_some_and(|t| {
+            notebook_protocol::microscope::document(
+                &self.state.snapshot,
+                &t.cell_id,
+                &t.microscope_id,
+            )
+            .is_err()
+        }) {
+            self.microscope_target = None;
+            self.microscope_document = None;
+        }
         if let Some(selected) = selected
             && self
                 .state
@@ -395,7 +473,7 @@ impl NotebookEguiApp {
         self.dirty_editors.clear();
     }
     fn emit(&mut self, mut kind: NotebookCommandKind) {
-        if self.read_only {
+        if self.read_only && !matches!(kind, NotebookCommandKind::ReadMicroscope { .. }) {
             return;
         }
         if !self.suppress_history
@@ -526,6 +604,8 @@ impl NotebookEguiApp {
             "cell_index": selected.as_ref().map(|(index, _)| index),
             "mode": if self.edit_mode { "edit" } else { "command" },
             "scroll_fraction": self.scroll_fraction,
+            "microscope": self.microscope_target,
+            "microscope_loaded": self.microscope_document.is_some(),
         })
     }
     fn selected_cell(&self) -> Option<(usize, Cell)> {
@@ -1493,6 +1573,53 @@ impl NotebookEguiApp {
                 if prompt.clicked() {
                     self.select_cell(index, ui.input(|input| input.modifiers.shift));
                 }
+                let microscopes = notebook_protocol::microscope::list(&cell).unwrap_or_default();
+                if !microscopes.is_empty() {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.menu_button(format!("Microscopes ({})", microscopes.len()), |ui| {
+                            for item in microscopes {
+                                ui.horizontal(|ui| {
+                                    let delete = ui
+                                        .add_enabled(
+                                            !self.read_only,
+                                            egui::Button::new("").min_size(egui::vec2(24.0, 30.0)),
+                                        )
+                                        .on_hover_text("Delete microscope");
+                                    let rect = egui::Rect::from_center_size(
+                                        delete.rect.center(),
+                                        egui::vec2(8.0, 8.0),
+                                    );
+                                    let stroke = Stroke::new(
+                                        1.5,
+                                        ui.style().interact(&delete).fg_stroke.color,
+                                    );
+                                    ui.painter().line_segment(
+                                        [rect.left_top(), rect.right_bottom()],
+                                        stroke,
+                                    );
+                                    ui.painter().line_segment(
+                                        [rect.right_top(), rect.left_bottom()],
+                                        stroke,
+                                    );
+                                    if delete.clicked() {
+                                        self.microscope_delete =
+                                            Some((cell.id.clone(), item.clone()));
+                                        ui.close();
+                                    }
+                                    if ui.button(&item.title).clicked() {
+                                        let _ = self.open_microscope(Some(
+                                            notebook_protocol::microscope::MicroscopeTarget {
+                                                cell_id: cell.id.clone(),
+                                                microscope_id: item.id.clone(),
+                                            },
+                                        ));
+                                        ui.close();
+                                    }
+                                });
+                            }
+                        });
+                    });
+                }
             });
             if !collapsed {
                 if cell.cell_type == CellType::Markdown {
@@ -1902,6 +2029,83 @@ impl eframe::App for NotebookEguiApp {
         });
         install_data_image_loader(ctx);
         egui_extras::install_image_loaders(ctx);
+        if let Some((cell_id, item)) = self.microscope_delete.clone() {
+            egui::Window::new("Delete microscope?")
+                .collapsible(false)
+                .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+                .default_width(400.0)
+                .show(ctx, |ui| {
+                    ui.label(format!(
+                        "Delete “{}” and its content file? This cannot be undone.",
+                        item.title
+                    ));
+                    ui.horizontal(|ui| {
+                        if ui.button("Cancel").clicked() {
+                            self.microscope_delete = None;
+                        }
+                        if ui
+                            .add_enabled(!self.read_only, egui::Button::new("Delete microscope"))
+                            .clicked()
+                        {
+                            self.emit(NotebookCommandKind::DeleteMicroscope {
+                                cell_id,
+                                microscope_id: item.id,
+                            });
+                            self.microscope_delete = None;
+                        }
+                    });
+                });
+        }
+        if let Some(target) = self.microscope_target.clone() {
+            egui::TopBottomPanel::top("microscope-toolbar").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("Back to notebook").clicked() {
+                        let _ = self.open_microscope(None);
+                    }
+                    if self.read_only
+                        && toolbar_icon_button(
+                            ui,
+                            true,
+                            ToolbarIcon::Follow(self.following_driver),
+                            if self.following_driver {
+                                "Stop following driver"
+                            } else {
+                                "Follow driver"
+                            },
+                        )
+                    {
+                        self.follow_toggle_requested = true;
+                    }
+                    if let Ok(doc) = notebook_protocol::microscope::document(
+                        &self.state.snapshot,
+                        &target.cell_id,
+                        &target.microscope_id,
+                    ) {
+                        ui.heading(doc.microscope.title);
+                    }
+                });
+            });
+            egui::TopBottomPanel::bottom("status").show(ctx, |ui| self.status(ui));
+            egui::CentralPanel::default().show(ctx,|ui| {
+                if self.microscope_document.is_some() {
+                    ui.heading("Microscope workspace");
+                    ui.label("This microscope is empty.");
+                    ui.label("Walkthroughs, graphics and executable playgrounds will be added in later steps.");
+                    ui.separator();
+                    ui.label(format!("Cell: {} · Microscope: {}",target.cell_id,target.microscope_id));
+                } else if let Some(error) = &self.state.last_error {
+                    ui.colored_label(Color32::from_rgb(198,40,40),&error.message);
+                    if ui.button("Retry loading microscope").clicked() {
+                        self.emit(NotebookCommandKind::ReadMicroscope {cell_id:target.cell_id,microscope_id:target.microscope_id});
+                    }
+                } else {
+                    ui.spinner();
+                    ui.label("Loading microscope…");
+                }
+            });
+            return;
+        }
         if !self.read_only {
             let now = ctx.input(|input| input.time);
             if self.autosave_due.is_some_and(|deadline| deadline <= now) {
@@ -3133,6 +3337,48 @@ fn output_collapse_summary(count: usize) -> String {
 mod tests {
     use super::*;
     use notebook_protocol::{KernelIdentity, KernelState, NotebookIdentity, NotebookSnapshot};
+    #[test]
+    fn microscope_navigation_is_local_single_target_and_ignores_late_loads() {
+        use notebook_protocol::microscope::{self, MicroscopeTarget};
+        let mut app = app();
+        for id in ["micro01", "micro02"] {
+            microscope::prepare(
+                &mut app.state.snapshot,
+                &NotebookCommandKind::CreateMicroscope {
+                    cell_id: "code".into(),
+                    microscope_id: id.into(),
+                    title: id.into(),
+                },
+            )
+            .unwrap();
+        }
+        app.read_only = true;
+        let first = microscope::document(&app.state.snapshot, "code", "micro01").unwrap();
+        let second = microscope::document(&app.state.snapshot, "code", "micro02").unwrap();
+        app.open_microscope(Some(MicroscopeTarget {
+            cell_id: "code".into(),
+            microscope_id: "micro01".into(),
+        }))
+        .unwrap();
+        assert!(matches!(
+            app.drain_commands()[0].kind,
+            NotebookCommandKind::ReadMicroscope { .. }
+        ));
+        app.show_microscope(Some(second.clone())).unwrap();
+        app.accept_microscope(first.clone());
+        assert_eq!(app.microscope_document, Some(second));
+        app.open_microscope(None).unwrap();
+        app.accept_microscope(first);
+        assert!(app.microscope_target.is_none());
+        assert!(app.microscope_document.is_none());
+        assert!(app.drain_commands().is_empty());
+        assert_eq!(
+            microscope::list(&app.state.snapshot.cells[0])
+                .unwrap()
+                .len(),
+            2
+        );
+    }
     #[test]
     fn active_context_tracks_live_selection_and_mode() {
         let mut app = app();

@@ -232,7 +232,17 @@ impl Collaboration {
         {
             return Err(fail(ErrorCode::InvalidInput, "Invalid follow view"));
         }
-        let normalized = json!({"protocol_version":1,"notebook_path":target,"scroll_fraction":view["scroll_fraction"],"selected_cell_id":view["selected_cell_id"],"driver_id":self.driver});
+        if !view["microscope"].is_null() {
+            let microscope: notebook_protocol::microscope::MicroscopeTarget =
+                serde_json::from_value(view["microscope"].clone()).map_err(|_| {
+                    fail(ErrorCode::InvalidInput, "Invalid microscope follow target")
+                })?;
+            notebook_protocol::microscope::validate_id(&microscope.microscope_id)?;
+            if microscope.cell_id.is_empty() || microscope.cell_id.len() > 128 {
+                return Err(fail(ErrorCode::InvalidInput, "Invalid microscope cell ID"));
+            }
+        }
+        let normalized = json!({"protocol_version":1,"notebook_path":target,"scroll_fraction":view["scroll_fraction"],"selected_cell_id":view["selected_cell_id"],"microscope":view["microscope"],"driver_id":self.driver});
         if self.view.as_ref() != Some(&normalized) {
             self.view = Some(normalized);
             self.view_sequence += 1;
@@ -308,6 +318,14 @@ mod tests {
         c.join("a", "u", Some("b".into()), 0).unwrap();
         c.publish_view("a", "t", "t", json!({"protocol_version":1,"notebook_path":"b","scroll_fraction":0.4,"selected_cell_id":"cell"}), 1).unwrap();
         assert_eq!(c.view.as_ref().unwrap()["selected_cell_id"], "cell");
+        let view = json!({"protocol_version":1,"notebook_path":"b","scroll_fraction":0.4,"selected_cell_id":"cell","microscope":{"cell_id":"cell","microscope_id":"micro01"}});
+        c.publish_view("a", "t", "t", view.clone(), 1).unwrap();
+        assert_eq!(c.view.as_ref().unwrap()["microscope"], view["microscope"]);
+        let before = c.view.clone();
+        let mut malformed = view;
+        malformed["microscope"]["microscope_id"] = "../bad".into();
+        assert!(c.publish_view("a", "t", "t", malformed, 1).is_err());
+        assert_eq!(c.view, before);
         assert!(c.publish_view("a", "u", "t", json!({}), 1).is_err());
         c.change_driver("b").unwrap();
         assert!(c.view.is_none());

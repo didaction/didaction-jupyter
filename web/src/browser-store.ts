@@ -13,6 +13,14 @@ export function browserPath(path: string, directory = false): string {
   return path;
 }
 export interface NotebookStore {
+  artifacts?(): Promise<
+    { path: string; directory: boolean; bytes: Uint8Array }[]
+  >;
+  commitMicroscope?(
+    snapshot: NotebookSnapshot,
+    path: string,
+    content: string | null,
+  ): Promise<void>;
   read(path: string): Promise<NotebookSnapshot | undefined>;
   write(path: string, snapshot: NotebookSnapshot): Promise<void>;
   rename(
@@ -27,6 +35,60 @@ export interface NotebookStore {
 }
 /** Origin-local notebooks, deliberately separate from the kernel's temporary FS. */
 export class IndexedNotebookStore implements NotebookStore {
+  async commitMicroscope(
+    snapshot: NotebookSnapshot,
+    path: string,
+    content: string | null,
+  ): Promise<void> {
+    browserPath(path, true);
+    const bytes = content === null ? null : new TextEncoder().encode(content);
+    const notebook = (snapshot.notebook as { path: string }).path;
+    const db = await this.db;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(["notebooks", "artifacts"], "readwrite");
+      const files = tx.objectStore("artifacts"),
+        books = tx.objectStore("notebooks");
+      const count = books.count(),
+        saved = files.getAll();
+      saved.onsuccess = () => {
+        const existing = saved.result.find(
+          (f: { path: string }) => f.path === path,
+        );
+        if (
+          (content !== null && existing) ||
+          (content !== null &&
+            (count.result + saved.result.length >= 1000 ||
+              saved.result.reduce(
+                (n: number, f: { bytes: Uint8Array }) => n + f.bytes.length,
+                0,
+              ) +
+                bytes!.length >
+                20_000_000))
+        ) {
+          tx.abort();
+          return;
+        }
+        if (content === null) files.delete(path);
+        else
+          files.add(
+            {
+              path,
+              directory: false,
+              bytes,
+            },
+            path,
+          );
+        books.put(snapshot, browserPath(notebook));
+      };
+      tx.oncomplete = () => resolve();
+      tx.onabort = tx.onerror = () =>
+        reject(
+          new Error(
+            "Microscope transaction failed; notebook and file were not changed",
+          ),
+        );
+    });
+  }
   private db: Promise<IDBDatabase>;
   constructor() {
     this.db = new Promise((resolve, reject) => {

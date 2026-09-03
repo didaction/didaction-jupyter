@@ -195,6 +195,38 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
     .poll(async () => Math.abs((await scroll(page)) - (await scroll(observer))))
     .toBeLessThan(0.02);
   await observer.screenshot({ path: ".runtime/follow-desktop.png" });
+  const scope = { notebook_path: names[1], cell_id: "tail-note" };
+  const created = await call(page, "create_microscope", {
+    ...scope,
+    title: "Following a closer look",
+  });
+  expect(created.isError, JSON.stringify(created)).toBe(false);
+  const microscope = {
+    ...scope,
+    microscope_id: created.structuredContent.microscope_id,
+  };
+  expect(
+    (await call(observer, "create_microscope", { ...scope, title: "Denied" }))
+      .isError,
+  ).toBe(true);
+  expect((await call(page, "open_microscope", microscope)).isError).toBe(false);
+  const activeMicroscope = async (target: Page) =>
+    (
+      (await call(target, "get_active_context")).structuredContent.context as {
+        microscope: unknown;
+      }
+    ).microscope;
+  expect(await activeMicroscope(page)).toEqual({
+    cell_id: "tail-note",
+    microscope_id: microscope.microscope_id,
+  });
+  await expect
+    .poll(() => activeMicroscope(observer))
+    .toEqual({ cell_id: "tail-note", microscope_id: microscope.microscope_id });
+  expect(
+    (await call(page, "close_microscope", { notebook_path: names[1] })).isError,
+  ).toBe(false);
+  await expect.poll(() => activeMicroscope(observer)).toBeNull();
   await observer.setViewportSize({ width: 520, height: 720 });
   await expect
     .poll(async () => Math.abs((await scroll(page)) - (await scroll(observer))))
@@ -215,6 +247,15 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
     "aria-pressed",
     "false",
   );
+  // An observer may navigate locally without becoming a driver.
+  expect((await call(observer, "open_microscope", microscope)).isError).toBe(
+    false,
+  );
+  expect(await activeMicroscope(page)).toBeNull();
+  expect(
+    (await call(observer, "close_microscope", { notebook_path: names[1] }))
+      .isError,
+  ).toBe(false);
   const observerRole = (
     await call(observer, "get_collaboration", {
       notebook_path: names[1],

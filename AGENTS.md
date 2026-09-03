@@ -25,6 +25,10 @@ separate from authoritative proposals and acknowledge only durable host commits.
 Human egui and WebMCP calls both enter `web/src/command-gateway.ts`. Never add a
 second mutation path or a generic Jupyter forwarding method.
 
+For microscope metadata, sidecar lifecycle or microscope follow navigation, read
+`docs/microscope.md`. Keep file references derived and full ownership bindings
+validated; do not bypass the dedicated commands with ordinary metadata edits.
+
 Execution progress travels as bounded NDJSON snapshots from kernel IOPub through
 the same command gateway. TypeScript passes progress through the narrow mounted
 WASM callback; only the final result commits the command and ends executing state.

@@ -77,7 +77,32 @@ impl NotebookState {
         let status = match &command.kind {
             NotebookCommandKind::ModifyCells { changes } => {
                 apply_optimistic_changes(&mut next.snapshot.cells, changes)?;
+                notebook_protocol::microscope::preserve_references(&self.snapshot, &next.snapshot)?;
                 SyncState::Dirty
+            }
+            NotebookCommandKind::CreateMicroscope { .. }
+            | NotebookCommandKind::DeleteMicroscope { .. } => {
+                notebook_protocol::microscope::prepare(&mut next.snapshot, &command.kind)?;
+                SyncState::Dirty
+            }
+            NotebookCommandKind::ReadMicroscope { .. } => {
+                notebook_protocol::microscope::prepare(&mut next.snapshot, &command.kind)?;
+                next.sync_state.clone()
+            }
+            NotebookCommandKind::RenameNotebook { .. } => {
+                if self.snapshot.cells.iter().any(|c| {
+                    !notebook_protocol::microscope::list(c)
+                        .unwrap_or_default()
+                        .is_empty()
+                }) {
+                    return Err(notebook_protocol::ProtocolError {
+                        code: notebook_protocol::ErrorCode::InvalidInput,
+                        message: "Delete microscopes before renaming this notebook".into(),
+                        retryable: false,
+                    }
+                    .into());
+                }
+                next.sync_state.clone()
             }
             NotebookCommandKind::ExecuteCell { .. } | NotebookCommandKind::ExecuteCode { .. } => {
                 SyncState::Executing
@@ -102,6 +127,21 @@ impl NotebookState {
     }
 
     pub fn apply_result(&self, result: CommandResult) -> Result<NotebookState, DomainError> {
+        if let Some(doc) = &result.microscope {
+            let expected = notebook_protocol::microscope::document(
+                result.snapshot.as_ref().unwrap_or(&self.snapshot),
+                &doc.cell_id,
+                &doc.microscope.id,
+            )?;
+            if &expected != doc {
+                return Err(notebook_protocol::ProtocolError {
+                    code: ErrorCode::MalformedResponse,
+                    message: "Microscope document identity mismatch".into(),
+                    retryable: false,
+                }
+                .into());
+            }
+        }
         if self.applied_results.contains(&result.command_id) {
             return Ok(self.clone());
         }
@@ -404,6 +444,7 @@ mod tests {
             .unwrap()
             .optimistic_state;
         let result = CommandResult {
+            microscope: None,
             protocol_version: 1,
             command_id: Uuid::from_u128(1),
             idempotency_key: "one".into(),
@@ -426,6 +467,7 @@ mod tests {
             .optimistic_state;
         let before = state.clone();
         let result = CommandResult {
+            microscope: None,
             protocol_version: 1,
             command_id: Uuid::from_u128(1),
             idempotency_key: "one".into(),
@@ -459,6 +501,7 @@ mod tests {
             .unwrap()
             .optimistic_state;
         let result = CommandResult {
+            microscope: None,
             protocol_version: 1,
             command_id: Uuid::from_u128(2),
             idempotency_key: "completion".into(),

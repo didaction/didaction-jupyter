@@ -15,6 +15,33 @@ use wasm_bindgen::prelude::*;
 pub fn wasm_build_info() -> String {
     serde_json::json!({"git_sha":env!("DIDACTION_WASM_GIT_SHA"),"dirty":env!("DIDACTION_WASM_DIRTY")}).to_string()
 }
+#[wasm_bindgen(js_name = microscopeDocument)]
+pub fn microscope_document(
+    snapshot: &str,
+    cell_id: &str,
+    id: &str,
+    stored: Option<String>,
+) -> Result<String, JsError> {
+    if snapshot.len() > notebook_protocol::MAX_RESPONSE_BYTES
+        || stored.as_ref().is_some_and(|s| s.len() > 4096)
+    {
+        return Err(JsError::new("Microscope input exceeds limit"));
+    }
+    let snapshot: NotebookSnapshot = serde_json::from_str(snapshot).map_err(js_error)?;
+    validate_snapshot(&snapshot).map_err(js_error)?;
+    let document =
+        notebook_protocol::microscope::document(&snapshot, cell_id, id).map_err(js_error)?;
+    if let Some(stored) = stored {
+        let parsed: notebook_protocol::microscope::MicroscopeDocument =
+            serde_json::from_str(&stored).map_err(js_error)?;
+        if document != parsed {
+            return Err(JsError::new("Microscope content identity mismatch"));
+        }
+    }
+    let path = notebook_protocol::microscope::sidecar(&snapshot.notebook.path, cell_id, id)
+        .map_err(js_error)?;
+    Ok(serde_json::json!({"path":path,"document":document}).to_string())
+}
 #[wasm_bindgen(js_name = prepareRuntimeCommand)]
 pub fn prepare_runtime_command(snapshot: &str, command: &str) -> Result<String, JsError> {
     if snapshot.len() > notebook_protocol::MAX_RESPONSE_BYTES
@@ -146,9 +173,9 @@ impl eframe::App for MountedApp {
                 locked.state.sync_state = match &command.kind {
                     // These replies have no snapshot to clear a dirty flag.
                     // Read-only editor assistance must not block run/tool actions.
-                    NotebookCommandKind::Complete { .. } | NotebookCommandKind::Inspect { .. } => {
-                        locked.state.sync_state.clone()
-                    }
+                    NotebookCommandKind::Complete { .. }
+                    | NotebookCommandKind::Inspect { .. }
+                    | NotebookCommandKind::ReadMicroscope { .. } => locked.state.sync_state.clone(),
                     NotebookCommandKind::ExecuteCell { .. }
                     | NotebookCommandKind::ExecuteCode { .. } => {
                         notebook_core::SyncState::Executing
@@ -258,6 +285,9 @@ impl eframe::App for MountedApp {
                 app.lock()
                     .expect("notebook app mutex poisoned")
                     .finish_command(result.command_id);
+                if let Some(doc) = result.microscope.clone() {
+                    app.lock().expect("app mutex").accept_microscope(doc);
+                }
                 if let Some(completion) = result.completion.clone() {
                     app.lock()
                         .expect("notebook app mutex poisoned")
@@ -378,6 +408,39 @@ pub struct MountedNotebook {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 impl MountedNotebook {
+    #[wasm_bindgen(js_name = followMicroscope)]
+    pub fn follow_microscope(&self, target: &str) -> Result<(), JsError> {
+        if target.len() > 1024 {
+            return Err(JsError::new("Microscope target exceeds limit"));
+        }
+        let target: Option<notebook_protocol::microscope::MicroscopeTarget> =
+            serde_json::from_str(target).map_err(js_error)?;
+        self.app
+            .lock()
+            .expect("app mutex")
+            .open_microscope(target)
+            .map_err(|e| JsError::new(&e))?;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
+    #[wasm_bindgen(js_name = showMicroscope)]
+    pub fn show_microscope(&self, document: &str) -> Result<(), JsError> {
+        if document.len() > 4096 {
+            return Err(JsError::new("Microscope document exceeds limit"));
+        }
+        let doc = serde_json::from_str(document).map_err(js_error)?;
+        self.app
+            .lock()
+            .expect("app mutex")
+            .show_microscope(doc)
+            .map_err(|e| JsError::new(&e))?;
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
+    }
     #[wasm_bindgen(js_name = activeContext)]
     pub fn active_context(&self) -> String {
         self.app
@@ -507,6 +570,9 @@ impl MountedNotebook {
     pub fn apply_external_result(&self, serialized: &str, progress: bool) -> Result<(), JsError> {
         let result: CommandResult = serde_json::from_str(serialized).map_err(js_error)?;
         let mut app = self.app.lock().expect("app mutex");
+        if let Some(doc) = result.microscope.clone() {
+            app.accept_microscope(doc);
+        }
         if let Some(snapshot) = result.snapshot {
             let next = if progress {
                 apply_progress_snapshot(&app.state, snapshot)
