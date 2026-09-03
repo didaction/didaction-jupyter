@@ -2922,12 +2922,12 @@ impl MathRenderCache {
 const MATH_PIXELS_PER_POINT: f32 = 2.0;
 const MATH_RASTER_PADDING_POINTS: f32 = 4.0;
 const INLINE_MATH_RASTER_PADDING_POINTS: f32 = 1.0;
-const INLINE_MATH_BASELINE_OFFSET_POINTS: f32 = 4.0;
+const INLINE_MATH_DESCENDER_RESERVE_POINTS: f32 = 4.0;
 
 fn inline_math_layout(texture_size: egui::Vec2) -> (egui::Vec2, egui::Vec2) {
     (
-        texture_size + egui::vec2(0.0, INLINE_MATH_BASELINE_OFFSET_POINTS),
-        egui::vec2(0.0, INLINE_MATH_BASELINE_OFFSET_POINTS),
+        texture_size + egui::vec2(0.0, INLINE_MATH_DESCENDER_RESERVE_POINTS),
+        egui::Vec2::ZERO,
     )
 }
 
@@ -4306,7 +4306,7 @@ mod tests {
     }
 
     #[test]
-    fn inline_markdown_math_is_not_painted_above_the_text_run() {
+    fn inline_markdown_math_is_optically_centered_with_the_text_run() {
         let context = egui::Context::default();
         let output = context.run(egui::RawInput::default(), |context| {
             egui::CentralPanel::default().show(context, |ui| {
@@ -4321,34 +4321,35 @@ mod tests {
                 );
             });
         });
-        let text_top = output
+        let text_bounds = output
             .shapes
             .iter()
             .filter_map(|clipped| match &clipped.shape {
-                egui::Shape::Text(_) => Some(clipped.shape.visual_bounding_rect().top()),
+                egui::Shape::Text(_) => Some(clipped.shape.visual_bounding_rect()),
                 _ => None,
             })
-            .reduce(f32::min)
+            .reduce(|left, right| left.union(right))
             .expect("surrounding text shape");
-        let math_top = output
+        let math_bounds = output
             .shapes
             .iter()
             .find_map(|clipped| match &clipped.shape {
                 egui::Shape::Mesh(mesh) if mesh.texture_id != egui::TextureId::default() => {
-                    Some(clipped.shape.visual_bounding_rect().top())
+                    Some(clipped.shape.visual_bounding_rect())
                 }
                 _ => None,
             })
             .expect("inline math texture");
+        let center_delta = math_bounds.center().y - text_bounds.center().y;
 
         assert!(
-            math_top >= text_top + 3.0,
-            "inline math starts above text: math={math_top}, text={text_top}"
+            center_delta.abs() <= 1.0,
+            "inline math is not centered with text: delta={center_delta}, math={math_bounds:?}, text={text_bounds:?}"
         );
     }
 
     #[test]
-    fn inline_math_baseline_offset_is_inside_its_allocated_row() {
+    fn inline_math_descender_reserve_keeps_paint_inside_its_allocated_row() {
         let texture_size = egui::vec2(20.0, 14.0);
         let (allocation_size, paint_offset) = inline_math_layout(texture_size);
 
