@@ -673,6 +673,7 @@ async function boot(): Promise<void> {
     const browserUrl = new URL(location.href);
     browserUrl.searchParams.set("notebook", chosen.path);
     browserUrl.searchParams.set("kernel", chosen.kernel);
+    browserUrl.searchParams.set("workspace", chosen.workspace);
     browserUrl.searchParams.delete("runtime");
     history.replaceState(null, "", browserUrl);
     startup = chosen;

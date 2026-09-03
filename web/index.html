@@ -82,8 +82,12 @@
         automatically.
       </p>
       <div id="browser-continue" hidden>
-        <label for="browser-saved">Saved notebook</label>
+        <label for="browser-saved">Saved workspace</label>
         <select id="browser-saved"></select>
+        <details open>
+          <summary>Notebooks in this workspace</summary>
+          <ul id="browser-workspace-contents"></ul>
+        </details>
         <button id="browser-resume" type="button">
           Continue saved workspace
         </button>

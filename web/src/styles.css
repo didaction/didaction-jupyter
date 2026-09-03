@@ -208,6 +208,15 @@ body {
 #browser-launch-status {
   color: #53636b;
 }
+#browser-continue details {
+  margin: 16px 0;
+}
+#browser-workspace-contents {
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding-left: 24px;
+}
 #file-explorer {
   width: 248px;
   flex: 0 0 248px;

@@ -1,11 +1,17 @@
 import type { BrowserWorkspace } from "./browser-workspace";
 import { readWorkspaceZip, ZIP_LIMIT } from "./workspace-zip";
+import {
+  savedWorkspaces,
+  rememberWorkspace,
+} from "./browser-workspace-catalog";
 
 export async function chooseBrowserWorkspace(
   workspace: BrowserWorkspace,
   requested: string | null,
   requestedKernel: string | null,
-): Promise<{ path: string; kernel: string }> {
+): Promise<{ path: string; kernel: string; workspace: string }> {
+  let workspaceId =
+    new URL(location.href).searchParams.get("workspace") ?? "legacy";
   const supportedKernels = new Set(["pyodide"]);
   const directKernel = requestedKernel ?? "pyodide";
   if (!supportedKernels.has(directKernel))
@@ -13,7 +19,7 @@ export async function chooseBrowserWorkspace(
       "Unsupported browser kernel. Open / and choose Python (Pyodide).",
     );
   if (requested && (await workspace.store.read(requested)))
-    return { path: requested, kernel: directKernel };
+    return { path: requested, kernel: directKernel, workspace: workspaceId };
   const panel = document.querySelector<HTMLElement>("#browser-launch")!;
   const layout = document.querySelector<HTMLElement>(".workspace-layout")!;
   const message = document.querySelector<HTMLElement>(
@@ -24,23 +30,28 @@ export async function chooseBrowserWorkspace(
   const file = document.querySelector<HTMLInputElement>("#browser-zip")!;
   const picker = document.querySelector<HTMLSelectElement>("#browser-saved")!;
   const kernel = document.querySelector<HTMLSelectElement>("#browser-kernel")!;
-  // Bounded recursive listing includes notebooks in imported subfolders.
-  const paths: string[] = [];
-  async function collect(directory: string): Promise<void> {
-    for (const entry of (await workspace.store.list(directory)).entries) {
-      if (entry.type === "notebook") paths.push(entry.path);
-      else if (entry.type === "directory") await collect(entry.path);
-    }
-  }
-  await collect("");
-  for (const path of paths) {
+  const saved = (await savedWorkspaces()).filter((w) => w.notebooks.length);
+  for (const entry of saved) {
     const option = document.createElement("option");
-    option.value = path;
-    option.textContent = path;
+    option.value = entry.id;
+    option.textContent = `${entry.name} (${entry.notebooks.length} ${entry.notebooks.length === 1 ? "notebook" : "notebooks"})`;
     picker.append(option);
   }
+  const contents = document.querySelector<HTMLElement>(
+    "#browser-workspace-contents",
+  )!;
+  picker.onchange = () => {
+    contents.replaceChildren();
+    for (const path of saved.find((w) => w.id === picker.value)?.notebooks ??
+      []) {
+      const item = document.createElement("li");
+      item.textContent = path;
+      contents.append(item);
+    }
+  };
+  picker.dispatchEvent(new Event("change"));
   document.querySelector<HTMLElement>("#browser-continue")!.hidden =
-    !paths.length;
+    !saved.length;
   panel.hidden = false;
   layout.hidden = true;
   demo.focus();
@@ -58,7 +69,7 @@ export async function chooseBrowserWorkspace(
         const path = await action();
         panel.hidden = true;
         layout.hidden = false;
-        resolve({ path, kernel: selectedKernel });
+        resolve({ path, kernel: selectedKernel, workspace: workspaceId });
       } catch (error) {
         message.textContent =
           error instanceof Error
@@ -70,8 +81,23 @@ export async function chooseBrowserWorkspace(
         file.value = "";
       }
     }
-    demo.onclick = () => void run(() => workspace.artifacts.demo());
-    resume.onclick = () => void run(async () => picker.value);
+    async function select(id: string) {
+      await workspace.store.selectWorkspace(id);
+      workspaceId = id;
+    }
+    demo.onclick = () =>
+      void run(async () => {
+        await rememberWorkspace({ id: "demo", name: "Demo workspace" });
+        await select("demo");
+        return workspace.artifacts.demo();
+      });
+    resume.onclick = () =>
+      void run(async () => {
+        const entry = saved.find((w) => w.id === picker.value);
+        if (!entry) throw new Error("Select a saved workspace");
+        await select(entry.id);
+        return entry.notebooks[0]!;
+      });
     file.onchange = () => {
       const zip = file.files?.[0];
       if (!zip) return;
@@ -82,6 +108,19 @@ export async function chooseBrowserWorkspace(
           throw new Error(
             "ZIP needs at least one .ipynb notebook. Use the explorer to upload other files.",
           );
+        const id = crypto.randomUUID();
+        const baseName =
+          zip.name.replace(/\.zip$/i, "").slice(0, 100) || "Imported workspace";
+        const names = new Set((await savedWorkspaces()).map((w) => w.name));
+        let name = baseName;
+        for (let suffix = 2; names.has(name); suffix++)
+          name = `${baseName} (${suffix})`;
+        // Register before importing so a successful data commit is always discoverable.
+        await rememberWorkspace({
+          id,
+          name,
+        });
+        await select(id);
         return (await workspace.artifacts.import(entries))[0]!;
       });
     };

@@ -35,7 +35,12 @@ test("upgrades existing v1 browser notebooks without losing saved work", async (
     });
   });
   await page.goto("/");
-  await expect(page.locator("#browser-saved")).toContainText("old.ipynb");
+  await expect(page.locator("#browser-saved")).toContainText(
+    "Existing browser workspace",
+  );
+  await expect(page.locator("#browser-workspace-contents")).toContainText(
+    "old.ipynb",
+  );
   await page.locator("#browser-resume").click();
   await expect(page.locator("#connection-status")).toContainText(
     "Browser kernel",
@@ -75,6 +80,7 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
   const buffer = zipFixture(
     [
       { name: "lesson/demo.ipynb", text: notebook },
+      { name: "lesson/practice.ipynb", text: notebook },
       { name: "lesson/data.csv", text: "value\n42" },
     ],
     true,
@@ -204,12 +210,40 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
   ).toContain("lesson/extra/new.txt");
   await page.goto("/");
   await expect(page.locator("#browser-resume")).toBeVisible();
+  await expect(page.locator("#browser-saved")).toContainText(
+    "lesson (2 notebooks)",
+  );
+  await expect(page.locator("#browser-workspace-contents")).toContainText(
+    "lesson/demo.ipynb",
+  );
+  await expect(page.locator("#browser-workspace-contents li")).toHaveText([
+    "lesson/demo.ipynb",
+    "lesson/practice.ipynb",
+  ]);
   await page
     .locator("#browser-zip")
     .setInputFiles({ name: "lesson.zip", mimeType: "application/zip", buffer });
-  await expect(page.locator("#browser-launch-status")).toContainText(
-    "Existing files were preserved",
+  await expect(page.locator("#connection-status")).toContainText(
+    "Browser kernel",
   );
+  // A repeated archive is a separate workspace, not a merge or overwrite.
+  expect(
+    await page.evaluate(async () => {
+      const { IndexedNotebookStore } = await import(
+        String("/src/browser-store.ts")
+      );
+      return (await new IndexedNotebookStore().artifacts()).map(
+        (entry: { path: string }) => entry.path,
+      );
+    }),
+  ).not.toContain("lesson/extra/new.txt");
+  await page.goto("/");
+  await expect(page.locator("#browser-saved option")).toHaveCount(2);
+  await expect(page.locator("#browser-saved")).toContainText("lesson (2)");
+  for (const width of [1280, 739]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({ path: `.runtime/saved-workspaces-${width}.png` });
+  }
   await page.locator("#browser-resume").click();
   await expect(page.locator("#connection-status")).toContainText(
     "Browser kernel",

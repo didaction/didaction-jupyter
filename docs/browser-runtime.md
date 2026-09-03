@@ -43,12 +43,20 @@ Unsupported browser kernel names fail closed. For frontend development,
 - The home icon at the top right, before Local, returns to the workspace chooser.
   It requires saved/idle notebooks and confirmation: saved files remain, but this
   tab's live kernels and temporary playgrounds are discarded. Import can then
-  add another ZIP or reopen the demo/saved workspace. Storage is still one
-  origin-local workspace; this is not a new isolated database per ZIP.
+  open another ZIP or reopen the demo/saved workspace. Each new ZIP import has
+  its own origin-local IndexedDB database, including notebooks, artifacts and
+  microscope sidecars. Identical paths in different workspaces do not conflict.
+  The demo has its own reusable workspace. Existing pre-workspace storage is
+  preserved intact as **Existing browser workspace**, since its original import
+  boundaries cannot be recovered reliably.
   The header shows the active notebook filename instead of “local notebook”.
 
-- Launch without a notebook query parameter to show the chooser. Saved notebooks
-  also appear under **Continue saved workspace**. Reloading a valid notebook URL
+- Launch without a notebook query parameter to show the chooser. **Saved workspace**
+  lists workspace names and notebook counts, with an expandable list of their
+  current notebook paths. Continue opens the first notebook (alphabetically);
+  all its other notebooks and files are available in the explorer. A `workspace`
+  URL parameter preserves the selected database across reloads and notebook switches.
+  Old URLs without it still address the existing storage. Reloading a valid notebook URL
   reopens it directly; opening the demo never replaces an existing demo.
 - A ZIP must contain at least one nbformat 4 notebook. Subfolders, empty folders
   and binary/text artifacts are imported together. Notebooks are normalized to
@@ -143,7 +151,8 @@ runtime compatibility is tested with the pinned assets.
   It excludes temporary kernel files and variables; save edits and finish running
   commands first. Limits are 1 MB per file, 1,000 items and 20 MB including ZIP
   overhead; oversized exports fail rather than omit data. The ZIP can be selected
-  at browser workspace startup (existing-name conflicts remain create-only).
+  at browser workspace startup as a separate workspace. Within an open workspace,
+  file uploads remain create-only.
   File → Create Checkpoint is disabled in browser mode; notebook download remains
   available for individual notebook backups without sidecars.
 - Kernel side effects can occur even if saving/receiving a result fails. Do not

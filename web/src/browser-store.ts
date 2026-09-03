@@ -154,9 +154,30 @@ export class IndexedNotebookStore implements NotebookStore {
     });
   }
   private db: Promise<IDBDatabase>;
-  constructor() {
-    this.db = new Promise((resolve, reject) => {
-      const request = indexedDB.open("didaction-browser-notebooks-v1", 2);
+  constructor(
+    id = new URL(location.href).searchParams.get("workspace") ?? "legacy",
+  ) {
+    this.db = this.open(id);
+  }
+  async selectWorkspace(id: string): Promise<void> {
+    const next = this.open(id);
+    const db = await next;
+    (await this.db).close();
+    this.db = Promise.resolve(db);
+  }
+  async close(): Promise<void> {
+    (await this.db).close();
+  }
+  private open(id: string): Promise<IDBDatabase> {
+    if (!/^(legacy|demo|[a-f0-9-]{36})$/.test(id))
+      throw new Error("Invalid browser workspace identity");
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(
+        id === "legacy"
+          ? "didaction-browser-notebooks-v1"
+          : `didaction-workspace-${id}`,
+        2,
+      );
       request.onupgradeneeded = () => {
         for (const name of ["notebooks", "artifacts"])
           if (!request.result.objectStoreNames.contains(name))
