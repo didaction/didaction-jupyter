@@ -127,7 +127,9 @@ has a deadline but no browser-enforced heap cap; keep source bounds conservative
 state and localized error for diagnosis. It never includes pixel buffers.
 `capture_microscope_step` returns a bounded PNG of the current stage—background
 and overlays, excluding fixed navigation—so an agent can inspect its composition
-and iterate with visual feedback.
+and iterate with visual feedback. It takes no arguments and captures the active
+microscope. If necessary, the PNG is downscaled to fit the agent transport; the
+result reports `source_width`, `source_height`, and `downscaled`.
 
 Run `pnpm test`, `cargo test -p notebook-protocol -p notebook-egui`, and
 `pnpm exec playwright test --config playwright.browser-kernel.config.ts graphics.spec.ts`.

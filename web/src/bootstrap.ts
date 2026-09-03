@@ -41,6 +41,36 @@ interface NotebookContext extends OpenNotebook {
 }
 const openContexts = new Set<NotebookContext>();
 
+const boundedPng = (
+  source: HTMLCanvasElement,
+  maxBase64Bytes = 750_000,
+): { data: string; width: number; height: number; downscaled: boolean } => {
+  let canvas = source;
+  let data = canvas.toDataURL("image/png").split(",")[1] ?? "";
+  let downscaled = false;
+  while (
+    data.length > maxBase64Bytes &&
+    (canvas.width > 128 || canvas.height > 128)
+  ) {
+    const ratio = Math.min(
+      0.85,
+      Math.max(0.35, Math.sqrt(maxBase64Bytes / data.length) * 0.9),
+    );
+    const next = document.createElement("canvas");
+    next.width = Math.max(128, Math.floor(canvas.width * ratio));
+    next.height = Math.max(128, Math.floor(canvas.height * ratio));
+    const context = next.getContext("2d");
+    if (!context) throw new Error("PNG capture canvas is unavailable");
+    context.drawImage(canvas, 0, 0, next.width, next.height);
+    canvas = next;
+    data = canvas.toDataURL("image/png").split(",")[1] ?? "";
+    downscaled = true;
+  }
+  if (!data || data.length > maxBase64Bytes)
+    throw new Error("Microscope capture cannot fit the image transport limit");
+  return { data, width: canvas.width, height: canvas.height, downscaled };
+};
+
 const status = document.querySelector<HTMLOutputElement>("#connection-status")!;
 const fatal = document.querySelector<HTMLElement>("#fatal-error")!;
 const command = (
@@ -443,15 +473,14 @@ async function createContext(
                 isError: false,
               };
             }
+            let captureCellId = id;
+            let captureMicroscopeId = args.microscope_id as string | undefined;
             if (name === "capture_microscope_step") {
               const active = JSON.parse(mounted.activeContext());
-              if (
-                active.microscope?.cell_id !== id ||
-                active.microscope?.microscope_id !== args.microscope_id
-              )
-                throw new Error(
-                  "Open the addressed microscope before capturing it",
-                );
+              if (!active.microscope?.loaded)
+                throw new Error("Open a microscope before capturing it");
+              captureCellId = active.microscope.cell_id;
+              captureMicroscopeId = active.microscope.microscope_id;
               mounted.captureMicroscopeStep();
             } else {
               mounted.cellView(id, "capture", "");
@@ -481,25 +510,27 @@ async function createContext(
                   0,
                   0,
                 );
-              const data = canvas.toDataURL("image/png").split(",")[1];
-              if (!data || data.length > 2_000_000)
-                throw new Error("Cell capture exceeds image limit");
+              const encoded = boundedPng(canvas);
               const result = {
                 ok: true,
-                cell_id: id,
+                cell_id: captureCellId,
                 ...(name === "capture_microscope_step"
-                  ? { microscope_id: args.microscope_id }
+                  ? { microscope_id: captureMicroscopeId }
                   : {}),
-                width: capture.width,
-                height: capture.height,
+                width: encoded.width,
+                height: encoded.height,
+                source_width: capture.width,
+                source_height: capture.height,
+                downscaled: encoded.downscaled,
                 clipped: capture.clipped,
               };
               return {
                 content: [
+                  { type: "text" as const, text: JSON.stringify(result) },
                   {
                     type: "image" as const,
                     mimeType: "image/png" as const,
-                    data,
+                    data: encoded.data,
                   },
                 ],
                 structuredContent: result,

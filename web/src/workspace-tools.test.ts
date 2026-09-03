@@ -70,12 +70,28 @@ it("requires explicit notebook addresses and routes only to open notebooks", asy
     (await workspace.callTool("open_notebook", { notebook_path: "two.ipynb" }))
       .isError,
   ).toBe(false);
+  expect(
+    workspace
+      .listTools()
+      .find((tool) => tool.name === "capture_microscope_step")?.inputSchema
+      .required,
+  ).toEqual([]);
+  expect(
+    (await workspace.callTool("capture_microscope_step", {})).isError,
+  ).toBe(false);
+  expect(contexts.get("two.ipynb")!.tools.callTool).toHaveBeenCalledWith(
+    "capture_microscope_step",
+    {},
+  );
   await workspace.callTool("read_notebook", { notebook_path: "one.ipynb" });
   expect(contexts.get("one.ipynb")!.tools.callTool).toHaveBeenCalledWith(
     "read_notebook",
     {},
   );
-  expect(contexts.get("two.ipynb")!.tools.callTool).not.toHaveBeenCalled();
+  expect(contexts.get("two.ipynb")!.tools.callTool).not.toHaveBeenCalledWith(
+    "read_notebook",
+    {},
+  );
   expect(
     (await workspace.callTool("list_open_notebooks", {})).structuredContent
       .notebooks,
@@ -98,7 +114,10 @@ it("requires explicit notebook addresses and routes only to open notebooks", asy
     },
     playground: null,
   });
-  expect(contexts.get("two.ipynb")!.tools.callTool).not.toHaveBeenCalled();
+  expect(contexts.get("two.ipynb")!.tools.callTool).not.toHaveBeenCalledWith(
+    "get_active_context",
+    {},
+  );
   expect(
     (
       await workspace.callTool("get_active_context", {

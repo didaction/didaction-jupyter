@@ -35,6 +35,7 @@ export async function microscopeCall(
               execute(args: unknown): Promise<{
                 isError: boolean;
                 structuredContent: Record<string, unknown>;
+                content: Array<Record<string, unknown>>;
               }>;
             }
           >;

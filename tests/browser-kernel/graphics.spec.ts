@@ -147,10 +147,12 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
     .poll(async () => (await status())?.frames ?? 0)
     .toBeGreaterThan(pausedFrames);
   await page.screenshot({ path: ".runtime/graphics-desktop.png" });
-  const captured = await call("capture_microscope_step");
-  expect(captured.isError).toBe(false);
+  const captured = await microscopeCall(page, "capture_microscope_step");
+  expect(captured.isError, JSON.stringify(captured)).toBe(false);
   expect(Number(captured.structuredContent.width)).toBeGreaterThan(100);
   expect(Number(captured.structuredContent.height)).toBeGreaterThan(100);
+  const image = captured.content.find((item) => item.type === "image");
+  expect(String(image?.data ?? "").length).toBeLessThanOrEqual(750_000);
   await page.setViewportSize({ width: 900, height: 800 });
   await expect.poll(async () => (await status())?.width).toBeLessThan(width);
   await page.screenshot({ path: ".runtime/graphics-narrow.png" });

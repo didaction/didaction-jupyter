@@ -109,6 +109,8 @@ Browser-to-browser following is intentionally unsupported.
   focus or select another annotation.
 - `capture_microscope_step` captures the current stage background and positioned
   overlays as a bounded PNG for agent visual feedback; fixed navigation is omitted.
+  It takes no arguments because it captures the active view. Large captures are
+  downscaled and report both returned and source dimensions.
 - `get_active_context().context.microscope.walkthrough` reports `title`, `step_index`,
   `step_count`, `step_id`, and nullable `annotation_id`. UI numbering starts at 1.
 

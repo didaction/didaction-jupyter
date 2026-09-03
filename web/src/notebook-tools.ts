@@ -316,8 +316,8 @@ define(
 define(
   "capture_microscope_step",
   "Capture the currently rendered microscope stage as PNG for visual design feedback. Includes the graphics background and all overlays, but not fixed navigation.",
-  microScope,
-  undefined,
+  {},
+  [],
   true,
 );
 define(

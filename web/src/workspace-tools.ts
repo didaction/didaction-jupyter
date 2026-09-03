@@ -59,17 +59,21 @@ export class WorkspaceTools implements NotebookToolInvoker {
     private readonly list: (directory: string) => Promise<unknown>,
   ) {}
   listTools(): ToolDefinition[] {
-    const scoped: ToolDefinition[] = this.catalog.map((tool) => ({
-      ...tool,
-      inputSchema: {
-        ...tool.inputSchema,
-        properties: {
-          notebook_path: pathField,
-          ...tool.inputSchema.properties,
-        },
-        required: ["notebook_path", ...tool.inputSchema.required],
-      },
-    }));
+    const scoped: ToolDefinition[] = this.catalog.map((tool) =>
+      tool.name === "capture_microscope_step"
+        ? tool
+        : {
+            ...tool,
+            inputSchema: {
+              ...tool.inputSchema,
+              properties: {
+                notebook_path: pathField,
+                ...tool.inputSchema.properties,
+              },
+              required: ["notebook_path", ...tool.inputSchema.required],
+            },
+          },
+    );
     for (const name of [
       "get_active_context",
       "list_open_notebooks",
@@ -180,6 +184,33 @@ export class WorkspaceTools implements NotebookToolInvoker {
           active: notebook_path === this.active,
         })),
       });
+    if (name === "capture_microscope_step") {
+      const notebook = this.active;
+      const context = this.notebooks.get(notebook ?? "");
+      if (!notebook || !context)
+        return result(
+          {
+            ok: false,
+            error: {
+              code: "notebook_not_open",
+              message: "Open a notebook and microscope before capturing",
+            },
+          },
+          true,
+        );
+      const response = await context.tools.callTool(name, args);
+      const addressed = result(
+        { ...response.structuredContent, notebook_path: notebook },
+        response.isError,
+      );
+      return {
+        ...addressed,
+        content: [
+          ...response.content.filter((item) => item.type === "image"),
+          ...addressed.content,
+        ],
+      };
+    }
     if (name === "list_notebooks")
       return result({
         ok: true,

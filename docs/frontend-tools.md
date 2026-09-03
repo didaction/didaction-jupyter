@@ -45,8 +45,9 @@ WebMCP-unavailable browsers remain fully usable by humans.
 - set_cell_visibility(cell_id, collapsed)
 - set_output_visibility(cell_id, mode): expanded, windowed, collapsed
 - capture_cell(cell_id): PNG image content plus dimensions and clipped flag
-- capture_microscope_step(cell_id, microscope_id): PNG of the current graphics
-  stage and all egui overlays for visual authoring feedback
+- capture_microscope_step(): bounded PNG of the currently open graphics stage
+  and all egui overlays for visual authoring feedback. Large stages are
+  downscaled to stay within the browser-agent image transport limit.
 
 Read the advertised JSON Schemas for exact arguments. Cells are addressed by
 required `notebook_path` (workspace-relative, including `.ipynb`) and stable
