@@ -243,6 +243,15 @@ use the pinned kernel `pip` through IPython's `%pip`; package installation remai
 unavailable to WebMCP and typed gateway commands. PNG and SVG graph output are
 bounded; SVG is decoded only by egui's image loader.
 
+## License
+
+Copyright 2026 didaction. Original project material is licensed under the
+[Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.
+Third-party dependencies, fonts and imported content retain their own licenses;
+see [Third-party licenses](THIRD_PARTY_LICENSES.md) for the initial inventory and
+release checklist. This license does not grant rights to third-party notebooks
+or datasets that you import into a workspace.
+
 ## Current limitations
 
 Multiple frontend clients now use [single-driver collaboration](docs/collaboration.md):

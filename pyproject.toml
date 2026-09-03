@@ -1,6 +1,8 @@
 [project]
 name = "didaction-jupyter"
 version = "0.1.0"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md"]
 description = "Local-first egui and Jupyter notebook environment"
 requires-python = ">=3.11,<3.14"
 dependencies = [
