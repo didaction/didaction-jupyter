@@ -173,6 +173,11 @@ body {
   display: block;
   margin: 20px 0 8px;
 }
+#browser-kernel {
+  display: block;
+  min-width: 240px;
+  margin-bottom: 20px;
+}
 #browser-launch input,
 #browser-launch select {
   max-width: 100%;

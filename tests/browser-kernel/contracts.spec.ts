@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("browser transport validates in WASM and preserves state across storage failures and duplicate execution", async ({
   page,
 }) => {
-  await page.goto("/?runtime=browser");
+  await page.goto("/");
   await page.getByRole("button", { name: "Open demo workspace" }).click();
   await expect(page.locator("#connection-status")).toContainText(
     "Browser kernel",

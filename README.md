@@ -32,11 +32,12 @@ same-origin Rust gateway, and a real Jupyter Server/IPython kernel. It uses
 Jupyter's native Contents, Sessions, Kernels, and kernel-channel protocols. No
 MCP server sits between the gateway and Jupyter.
 
-An opt-in [browser-only Python runtime](docs/browser-runtime.md) is available:
-`pnpm build:wasm && pnpm dev:browser`, then open
-`http://127.0.0.1:5175/?runtime=browser`. It runs JupyterLite/Pyodide in a Worker
+A separate [browser-only Python environment](docs/browser-runtime.md) is available:
+`pnpm build:browser && pnpm serve:browser`, then open
+`http://127.0.0.1:5175/`. This serves static files from `dist-browser/`;
+JupyterLite/Pyodide runs in a Worker
 through the same egui/WebMCP command path, with browser-local notebook storage.
-At launch, choose **Open demo workspace**, **Import ZIP workspace**, or
+At launch, select **Python (Pyodide)**, then choose **Open demo workspace**, **Import ZIP workspace**, or
 **Continue saved workspace**. ZIP imports preserve subfolders and include notebooks
 and data files; they never execute uploaded notebooks automatically. Files are
 copied into the Python worker, with relative paths resolved from the notebook's
@@ -44,7 +45,8 @@ folder. Notebook reloads reopen saved work without showing the chooser.
 ZIP limits: 20 MB compressed/expanded, 1 MB per file, 1,000 entries; stored/deflate
 ZIP only, no encrypted archives, symlinks, hidden paths or overwriting.
 Browser storage persists uploads, but files created/changed by Python are temporary.
-It is a single-user spike; the server runtime remains the default.
+It is single-user. `pnpm build` produces the separate server-only `dist/`;
+the server build has no browser runtime switch, including via URL parameters.
 
 ## Frontend diagnostics
 

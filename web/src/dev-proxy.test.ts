@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { createServer, type UserConfig } from "vite";
-import config from "../../vite.config";
+import { runtimeConfig } from "../../vite.config";
 
 it("preserves browser Host/Origin through the real development proxy", async () => {
   const upstream = createHttpServer((request, response) => {
@@ -16,7 +16,7 @@ it("preserves browser Host/Origin through the real development proxy", async () 
     upstream.listen(0, "127.0.0.1", resolve),
   );
   const target = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
-  const settings = config as UserConfig;
+  const settings = runtimeConfig("server") as UserConfig;
   const proxy = Object.fromEntries(
     Object.entries(settings.server!.proxy!).map(([path, options]) => [
       path,

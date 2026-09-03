@@ -34,7 +34,7 @@ test("upgrades existing v1 browser notebooks without losing saved work", async (
       };
     });
   });
-  await page.goto("/?runtime=browser");
+  await page.goto("/");
   await expect(page.locator("#browser-saved")).toContainText("old.ipynb");
   await page.locator("#browser-resume").click();
   await expect(page.locator("#connection-status")).toContainText(
@@ -45,10 +45,14 @@ test("upgrades existing v1 browser notebooks without losing saved work", async (
 test("ZIP startup persists notebooks and files, mounts real Python workspace, rejects partial imports", async ({
   page,
 }) => {
-  await page.goto("/?runtime=browser");
+  await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Open a browser workspace" }),
   ).toBeVisible();
+  await expect(page.getByLabel("Kernel", { exact: true })).toHaveValue(
+    "pyodide",
+  );
+  await expect(page.locator("#browser-kernel option")).toHaveCount(1);
   for (const width of [1280, 739]) {
     await page.setViewportSize({ width, height: 900 });
     await page.screenshot({ path: `.runtime/browser-launch-${width}.png` });
@@ -82,6 +86,7 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
     "Browser kernel",
   );
   await expect(page).toHaveURL(/notebook=lesson%2Fdemo.ipynb/);
+  await expect(page).toHaveURL(/kernel=pyodide/);
   const execute = () =>
     page.evaluate(async () => {
       const { IndexedNotebookStore } = await import(
@@ -197,7 +202,7 @@ test("ZIP startup persists notebooks and files, mounts real Python workspace, re
       return (await store.artifacts()).map((f: { path: string }) => f.path);
     }),
   ).toContain("lesson/extra/new.txt");
-  await page.goto("/?runtime=browser");
+  await page.goto("/");
   await expect(page.locator("#browser-resume")).toBeVisible();
   await page
     .locator("#browser-zip")

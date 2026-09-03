@@ -76,6 +76,19 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("server build cannot switch to browser runtime using a URL parameter", async ({
+  page,
+}) => {
+  let configRequests = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/v1/config")) configRequests++;
+  });
+  await page.goto("/?runtime=browser");
+  await expect(page.locator("#connection-status")).toContainText("Connected");
+  await expect(page.locator("#browser-launch")).toBeHidden();
+  expect(configRequests).toBe(1);
+});
+
 test("WASM mounts a credential-free notebook shell with fallback", async ({
   page,
 }) => {

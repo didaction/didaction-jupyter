@@ -7,7 +7,8 @@ export default defineConfig({
   workers: 1,
   use: { baseURL: "http://127.0.0.1:43175", trace: "off" },
   webServer: {
-    command: "pnpm exec vite --host 127.0.0.1 --port 43175 --strictPort",
+    command:
+      "pnpm exec vite --mode browser --host 127.0.0.1 --port 43175 --strictPort",
     url: "http://127.0.0.1:43175",
     reuseExistingServer: false,
   },

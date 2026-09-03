@@ -55,18 +55,19 @@ async function createContext(
   startup: { path: string; kernel: string },
   create = false,
 ): Promise<NotebookContext> {
-  const collaboration = browserWorkspace
-    ? new (await import("./browser-workspace")).LocalNotebookConnection(
-        startup.path,
-      )
-    : new NotebookCollaboration(startup.path, (path) => {
-        const connection = [...openContexts].find(
-          (context) => context.path?.() === path,
-        )?.connection;
-        return connection instanceof NotebookCollaboration
-          ? connection
-          : undefined;
-      });
+  const collaboration =
+    import.meta.env.VITE_NOTEBOOK_RUNTIME === "browser"
+      ? new (await import("./browser-workspace")).LocalNotebookConnection(
+          startup.path,
+        )
+      : new NotebookCollaboration(startup.path, (path) => {
+          const connection = [...openContexts].find(
+            (context) => context.path?.() === path,
+          )?.connection;
+          return connection instanceof NotebookCollaboration
+            ? connection
+            : undefined;
+        });
   await collaboration.join();
   let readOnly = !collaboration.state?.is_driver;
   const transport =
@@ -416,7 +417,7 @@ async function boot(): Promise<void> {
     JSON.parse(wasmBuildInfo()),
   );
   let startup: { path: string; kernel: string };
-  if (new URL(location.href).searchParams.get("runtime") === "browser") {
+  if (import.meta.env.VITE_NOTEBOOK_RUNTIME === "browser") {
     const { BrowserWorkspace } = await import("./browser-workspace");
     browserWorkspace = new BrowserWorkspace();
     await browserWorkspace.acquire();
@@ -424,11 +425,14 @@ async function boot(): Promise<void> {
     const chosen = await chooseBrowserWorkspace(
       browserWorkspace,
       new URL(location.href).searchParams.get("notebook"),
+      new URL(location.href).searchParams.get("kernel"),
     );
     const browserUrl = new URL(location.href);
-    browserUrl.searchParams.set("notebook", chosen);
+    browserUrl.searchParams.set("notebook", chosen.path);
+    browserUrl.searchParams.set("kernel", chosen.kernel);
+    browserUrl.searchParams.delete("runtime");
     history.replaceState(null, "", browserUrl);
-    startup = { path: chosen, kernel: "pyodide" };
+    startup = chosen;
     document.querySelector<HTMLOutputElement>("#driver-status")!.textContent =
       "Local";
   } else {

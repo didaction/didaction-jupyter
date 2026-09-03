@@ -4,8 +4,16 @@ import { readWorkspaceZip, ZIP_LIMIT } from "./workspace-zip";
 export async function chooseBrowserWorkspace(
   workspace: BrowserWorkspace,
   requested: string | null,
-): Promise<string> {
-  if (requested && (await workspace.store.read(requested))) return requested;
+  requestedKernel: string | null,
+): Promise<{ path: string; kernel: string }> {
+  const supportedKernels = new Set(["pyodide"]);
+  const directKernel = requestedKernel ?? "pyodide";
+  if (!supportedKernels.has(directKernel))
+    throw new Error(
+      "Unsupported browser kernel. Open / and choose Python (Pyodide).",
+    );
+  if (requested && (await workspace.store.read(requested)))
+    return { path: requested, kernel: directKernel };
   const panel = document.querySelector<HTMLElement>("#browser-launch")!;
   const layout = document.querySelector<HTMLElement>(".workspace-layout")!;
   const message = document.querySelector<HTMLElement>(
@@ -15,6 +23,7 @@ export async function chooseBrowserWorkspace(
   const resume = document.querySelector<HTMLButtonElement>("#browser-resume")!;
   const file = document.querySelector<HTMLInputElement>("#browser-zip")!;
   const picker = document.querySelector<HTMLSelectElement>("#browser-saved")!;
+  const kernel = document.querySelector<HTMLSelectElement>("#browser-kernel")!;
   // Bounded recursive listing includes notebooks in imported subfolders.
   const paths: string[] = [];
   async function collect(directory: string): Promise<void> {
@@ -43,10 +52,13 @@ export async function chooseBrowserWorkspace(
       demo.disabled = resume.disabled = file.disabled = true;
       message.textContent = "Preparing browser workspace…";
       try {
+        if (!supportedKernels.has(kernel.value))
+          throw new Error("Select a supported browser kernel.");
+        const selectedKernel = kernel.value;
         const path = await action();
         panel.hidden = true;
         layout.hidden = false;
-        resolve(path);
+        resolve({ path, kernel: selectedKernel });
       } catch (error) {
         message.textContent =
           error instanceof Error

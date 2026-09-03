@@ -1,22 +1,42 @@
-# Browser kernel spike
+# Browser-only environment
 
-An opt-in, real browser-only Python runtime. The native Rust gateway is separate;
-browser mode requires no gateway. Server mode and its workspace-wide
-driver coordination are unchanged.
+A separate, real browser-only Python runtime. The HTTP host serves static files;
+protocol validation, storage and kernel execution all happen in the browser.
+The native Rust gateway and server-side driver coordination are a separate build.
 
 ## Start and stop
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm build:wasm
-pnpm dev:browser
+pnpm build:browser
+pnpm serve:browser
 ```
 
-Open `http://127.0.0.1:5175/?runtime=browser`. Stop the foreground process with
+Open `http://127.0.0.1:5175/`. Stop the foreground process with
 Ctrl+C. Existing Docker notebooks on ports 5173/5174 are unaffected. The starter
 notebook includes arithmetic, Matplotlib, and intermediate output replacement
 examples. Choose **Open demo workspace** to load it, or **Import ZIP workspace**
 to load your own notebooks and files. Use the normal cell play button or Shift+Enter.
+
+Select the workspace kernel before opening it: **Python (Pyodide)** is currently
+the only option. The chosen kernel is carried in the notebook URL for reloads.
+Unsupported browser kernel names fail closed. For frontend development,
+`pnpm build:wasm && pnpm dev:browser` serves the same environment with Vite HMR.
+
+## Deployment separation
+
+- `pnpm build` (or `pnpm build:server`) produces server-only `dist/`.
+  The existing Docker/gateway workflow uses this output and has no browser mode.
+- `pnpm build:browser` produces browser-only `dist-browser/`, including pinned
+  Python assets. Serve that folder at the HTTP site's root. No gateway, Python
+  host process, API proxy, Jupyter Server or Docker kernel is needed.
+- `pnpm serve:browser` serves the already-built files with isolation headers.
+  A generic static HTTP server also works, for example
+  `python3 -m http.server 5175 --bind 127.0.0.1 --directory dist-browser`;
+  without isolation headers, Stop uses worker termination instead of shared
+  interrupt buffers. Remote hosting requires HTTPS for Web Locks.
+- `?runtime=browser` no longer selects a runtime; Vite's build mode fixes it.
+  Browser and server outputs are independent and may be built in either order.
 
 ## Browser workspace startup and files
 
@@ -49,9 +69,7 @@ to load your own notebooks and files. Use the normal cell play button or Shift+E
   Keep originals/backups outside browser storage. Only the bundled Python
   environment executes; importing a Julia notebook does not install Julia.
 
-`pnpm build:browser` creates a static deployment in `dist`. Serve it with
-`pnpm exec vite preview --host 127.0.0.1 --port 5175`, then use the same query
-parameter. Other static hosts must supply `Cross-Origin-Opener-Policy: same-origin`
+Static hosts can supply `Cross-Origin-Opener-Policy: same-origin`
 and `Cross-Origin-Embedder-Policy: require-corp` to enable shared interrupt
 buffers. Stop attempts cooperative interruption, then terminates the worker
 after 1.5 seconds if the request has not settled. Without isolation it stops the
@@ -129,6 +147,8 @@ pnpm build:wasm
 pnpm run typecheck
 pnpm test
 pnpm test:browser-kernel
+pnpm build:browser
+pnpm test:browser-static
 scripts/check.sh
 ```
 
@@ -139,6 +159,8 @@ guard. Unit tests cover output ordering/coalescing, clear-after-wait, display ID
 bounds, malformed output, paths and ZIP admission. Workspace browser tests import
 a real compressed ZIP, read its data using Python, mount subsequent uploads,
 check persistence, and reject conflicting imports without partial writes.
+The browser-static test repeats real egui/WebMCP execution and plotting against
+the production static build and asserts that no gateway API is requested.
 
 The browser contract tests also use real WASM validation with injected storage
 failures to check rollback and idempotency after uncertain execution outcomes.

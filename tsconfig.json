@@ -14,6 +14,7 @@
     "tests/browser/**/*.ts",
     "tests/browser-kernel/**/*.ts",
     "vite.config.ts",
-    "playwright.browser-kernel.config.ts"
+    "playwright.browser-kernel.config.ts",
+    "playwright.browser-static.config.ts"
   ]
 }

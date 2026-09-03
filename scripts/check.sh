@@ -18,5 +18,7 @@ pnpm prepare:browser-kernel
 pnpm run build
 pnpm run test:browser
 pnpm run test:browser-kernel
+pnpm run build:browser
+pnpm run test:browser-static
 DIDACTION_GATEWAY_IMPLEMENTATION=python scripts/smoke.sh
 DIDACTION_GATEWAY_IMPLEMENTATION=rust DIDACTION_NATIVE_BROWSER_CHECK=1 scripts/smoke.sh
