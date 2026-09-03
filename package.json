@@ -10,6 +10,7 @@
     "prepare:xeus": "uv run --project deploy/xeus --frozen python scripts/prepare-xeus.py",
     "build:server": "pnpm build:wasm && vite build --mode server",
     "build:browser": "pnpm prepare:browser-kernel && node scripts/build-xeus-worker.mjs && pnpm build:wasm && vite build --mode browser --outDir ../dist-browser",
+    "build:site": "pnpm prepare:browser-kernel && node scripts/build-xeus-worker.mjs && pnpm build:wasm && vite build --mode browser --outDir ../out",
     "serve:browser": "vite preview --mode browser --host 127.0.0.1 --port 5175 --outDir ../dist-browser",
     "dev:browser": "pnpm prepare:browser-kernel && node scripts/build-xeus-worker.mjs && vite --mode browser --host 127.0.0.1 --port 5175",
     "test:browser-kernel": "playwright test --config playwright.browser-kernel.config.ts",
