@@ -2894,10 +2894,11 @@ impl MathRenderCache {
         });
         match self.textures.get(&key) {
             Some(Ok((texture, size))) if inline => {
-                let (rect, _) = ui.allocate_exact_size(*size, egui::Sense::hover());
+                let (allocation_size, paint_offset) = inline_math_layout(*size);
+                let (rect, _) = ui.allocate_exact_size(allocation_size, egui::Sense::hover());
                 ui.painter().image(
                     texture.id(),
-                    rect.translate(egui::vec2(0.0, INLINE_MATH_BASELINE_OFFSET_POINTS)),
+                    egui::Rect::from_min_size(rect.min + paint_offset, *size),
                     egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
                     Color32::WHITE,
                 );
@@ -2922,6 +2923,13 @@ const MATH_PIXELS_PER_POINT: f32 = 2.0;
 const MATH_RASTER_PADDING_POINTS: f32 = 4.0;
 const INLINE_MATH_RASTER_PADDING_POINTS: f32 = 1.0;
 const INLINE_MATH_BASELINE_OFFSET_POINTS: f32 = 4.0;
+
+fn inline_math_layout(texture_size: egui::Vec2) -> (egui::Vec2, egui::Vec2) {
+    (
+        texture_size + egui::vec2(0.0, INLINE_MATH_BASELINE_OFFSET_POINTS),
+        egui::vec2(0.0, INLINE_MATH_BASELINE_OFFSET_POINTS),
+    )
+}
 
 const MATH_PREAMBLE: &str = r#"
 #let mitexmathbf(it) = math.bold(math.upright(it))
@@ -4337,6 +4345,14 @@ mod tests {
             math_top >= text_top + 3.0,
             "inline math starts above text: math={math_top}, text={text_top}"
         );
+    }
+
+    #[test]
+    fn inline_math_baseline_offset_is_inside_its_allocated_row() {
+        let texture_size = egui::vec2(20.0, 14.0);
+        let (allocation_size, paint_offset) = inline_math_layout(texture_size);
+
+        assert!(paint_offset.y + texture_size.y <= allocation_size.y);
     }
 
     #[test]
