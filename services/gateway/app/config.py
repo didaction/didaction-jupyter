@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     request_limit: int = Field(default=300_000, ge=1, le=4_000_000)
     response_limit: int = Field(default=4_000_000, ge=1, le=8_000_000)
     timeout_seconds: float = Field(default=30.0, ge=0.1, le=120.0)
+    allowed_origins: str = ""
 
     @model_validator(mode="after")
     def connection_settings(self) -> "Settings":
@@ -35,7 +36,47 @@ class Settings(BaseSettings):
             self.jupyter_token = self.jupyter_token_file.read_text().strip()
             if not self.jupyter_token or len(self.jupyter_token) > 4096:
                 raise ValueError("Invalid Jupyter token file")
+        origins = [item.strip() for item in self.allowed_origins.split(",") if item.strip()]
+        normalized = [self._normalize_origin(item) for item in origins]
+        if any(item is None for item in normalized):
+            raise ValueError("Allowed origins must be exact HTTP(S) origins")
+        self.allowed_origins = ",".join(item for item in normalized if item is not None)
         return self
+
+    def origin_allowed(self, raw: str, host: str) -> bool:
+        parsed = urlsplit(raw)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return False
+        normalized = f"{parsed.scheme}://{parsed.netloc}"
+        configured = {
+            value
+            for item in self.allowed_origins.split(",")
+            if (value := self._normalize_origin(item.strip())) is not None
+        }
+        return parsed.netloc == host or normalized in configured
+
+    @staticmethod
+    def _normalize_origin(raw: str) -> str | None:
+        parsed = urlsplit(raw)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return None
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     def confined_path(self, raw: str) -> str:
         raw = self.confined_directory(raw, allow_root=False)

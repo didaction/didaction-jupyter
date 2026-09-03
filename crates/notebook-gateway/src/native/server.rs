@@ -9,7 +9,7 @@ use axum::{
     Json, Router,
     body::Body,
     extract::{DefaultBodyLimit, Path, Query, Request, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -160,7 +160,7 @@ pub async fn serve() -> Result<()> {
     }
     let router = router
         .layer(DefaultBodyLimit::max(config.request_limit))
-        .layer(middleware::from_fn(origin_guard))
+        .layer(middleware::from_fn_with_state(config.clone(), origin_guard))
         .with_state(host.clone());
     let listener = tokio::net::TcpListener::bind(&config.listen)
         .await
@@ -198,21 +198,47 @@ async fn shutdown() {
     }
     let _ = tokio::signal::ctrl_c().await;
 }
-async fn origin_guard(request: Request, next: Next) -> Response {
-    if let Some(origin) = request.headers().get(header::ORIGIN) {
-        let allowed = origin
-            .to_str()
-            .ok()
-            .and_then(|o| url::Url::parse(o).ok())
-            .is_some_and(|o| {
-                o[url::Position::BeforeHost..url::Position::AfterPort]
-                    == *headers_value(request.headers(), "host")
-            });
-        if !allowed {
-            return (StatusCode::FORBIDDEN, Json(json!({"code":"invalid_input"}))).into_response();
-        }
+async fn origin_guard(State(config): State<Arc<Config>>, request: Request, next: Next) -> Response {
+    let origin = request
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    if let Some(origin) = request.headers().get(header::ORIGIN)
+        && !origin.to_str().is_ok_and(|value| {
+            config.origin_allowed(value, headers_value(request.headers(), "host"))
+        })
+    {
+        return (StatusCode::FORBIDDEN, Json(json!({"code":"invalid_input"}))).into_response();
     }
-    let mut response = next.run(request).await;
+    let preflight = request.method() == Method::OPTIONS
+        && request
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_REQUEST_METHOD);
+    let mut response = if preflight {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        next.run(request).await
+    };
+    if let Some(origin) = origin.and_then(|value| HeaderValue::from_str(&value).ok()) {
+        let headers = response.headers_mut();
+        headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+        headers.insert(
+            header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+            HeaderValue::from_static("true"),
+        );
+        headers.insert(
+            header::ACCESS_CONTROL_ALLOW_METHODS,
+            HeaderValue::from_static("GET, POST, OPTIONS"),
+        );
+        headers.insert(
+            header::ACCESS_CONTROL_ALLOW_HEADERS,
+            HeaderValue::from_static(
+                "content-type, x-notebook-path, x-notebook-client, x-notebook-target-client",
+            ),
+        );
+        headers.insert(header::VARY, HeaderValue::from_static("Origin"));
+    }
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());

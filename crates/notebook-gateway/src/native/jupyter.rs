@@ -575,6 +575,7 @@ mod tests {
             request_limit: 300000,
             response_limit: 4000000,
             timeout: Duration::from_secs(1),
+            allowed_origins: std::collections::HashSet::new(),
         }))
         .unwrap()
     }

@@ -170,10 +170,16 @@ configuration. For example:
 DIDACTION_NOTEBOOK_WORKSPACE=/absolute/notebooks \
 DIDACTION_NOTEBOOK_PATH=course/week-1.ipynb \
 DIDACTION_KERNEL_NAME=python3 \
+DIDACTION_ALLOWED_ORIGINS='https://notebooks.example,http://localhost:5173' \
 scripts/dev.sh
 ```
 
 The path is relative to the configured workspace and cannot contain traversal.
+`DIDACTION_ALLOWED_ORIGINS` is an optional comma-separated list of exact
+`http://` or `https://` frontend origins. Same-origin requests remain allowed;
+wildcards, paths, credentials, query strings, and fragments are rejected at
+startup. The allowlist controls both request admission and CORS preflights and
+must also be applied to any future browser-facing WebSocket handshake.
 Browser and WebMCP callers cannot select a different path or kernel. List
 installed kernelspecs with:
 

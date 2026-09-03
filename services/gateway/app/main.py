@@ -4,7 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -120,12 +120,23 @@ app = FastAPI(title="didaction notebook gateway", version="1", lifespan=lifespan
 @app.middleware("http")
 async def bounds(request: Request, call_next: Any) -> Any:
     origin = request.headers.get("origin")
-    if origin and urlsplit(origin).netloc != request.url.netloc:
+    if origin and not settings.origin_allowed(origin, request.url.netloc):
         return JSONResponse(status_code=403, content={"code": "invalid_input"})
-    length = int(request.headers.get("content-length", "0") or "0")
-    if length > settings.request_limit:
-        return JSONResponse(status_code=413, content={"code": "bounds_exceeded"})
-    response = await call_next(request)
+    if request.method == "OPTIONS" and request.headers.get("access-control-request-method"):
+        response: Response = Response(status_code=204)
+    else:
+        length = int(request.headers.get("content-length", "0") or "0")
+        if length > settings.request_limit:
+            return JSONResponse(status_code=413, content={"code": "bounds_exceeded"})
+        response = await call_next(request)
+    if origin:
+        response.headers["access-control-allow-origin"] = origin
+        response.headers["access-control-allow-credentials"] = "true"
+        response.headers["access-control-allow-methods"] = "GET, POST, OPTIONS"
+        response.headers["access-control-allow-headers"] = (
+            "content-type, x-notebook-path, x-notebook-client, x-notebook-target-client"
+        )
+        response.headers["vary"] = "Origin"
     return response
 
 

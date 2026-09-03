@@ -1,6 +1,6 @@
 use super::{Result, error};
 use notebook_protocol::ErrorCode;
-use std::{env, path::PathBuf, time::Duration};
+use std::{collections::HashSet, env, path::PathBuf, time::Duration};
 use url::Url;
 
 pub struct Config {
@@ -14,6 +14,7 @@ pub struct Config {
     pub request_limit: usize,
     pub response_limit: usize,
     pub timeout: Duration,
+    pub allowed_origins: HashSet<String>,
 }
 fn value(key: &str, default: &str) -> String {
     env::var(format!("DIDACTION_{key}")).unwrap_or_else(|_| default.into())
@@ -71,12 +72,21 @@ impl Config {
             request_limit,
             response_limit,
             timeout: Duration::from_secs_f64(seconds),
+            allowed_origins: parse_origins(&value("ALLOWED_ORIGINS", ""))?,
         };
         config.path(&config.notebook, false)?;
         if config.kernel.is_empty() || config.kernel.len() > 128 {
             return Err(invalid());
         }
         Ok(config)
+    }
+    pub fn origin_allowed(&self, raw: &str, host: &str) -> bool {
+        normalize_origin(raw).is_ok_and(|origin| {
+            self.allowed_origins.contains(&origin)
+                || Url::parse(raw).is_ok_and(|url| {
+                    url[url::Position::BeforeHost..url::Position::AfterPort] == *host
+                })
+        })
     }
     pub fn path(&self, raw: &str, directory: bool) -> Result<String> {
         confined(raw, directory)?;
@@ -104,6 +114,27 @@ impl Config {
             format!("{raw}.ipynb")
         })
     }
+}
+fn normalize_origin(raw: &str) -> Result<String> {
+    let url = Url::parse(raw).map_err(|_| invalid())?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !matches!(url.path(), "" | "/")
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(invalid());
+    }
+    Ok(url.origin().ascii_serialization())
+}
+fn parse_origins(raw: &str) -> Result<HashSet<String>> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(normalize_origin)
+        .collect()
 }
 pub fn confined(raw: &str, directory: bool) -> Result<()> {
     if directory && raw.is_empty() {
@@ -136,5 +167,19 @@ mod tests {
         }
         assert!(confined("lesson/λ.ipynb", false).is_ok());
         assert!(confined("", true).is_ok());
+    }
+    #[test]
+    fn origins_are_exact_and_bounded_to_http_origins() {
+        let origins = parse_origins("https://notebooks.example, http://localhost:5173").unwrap();
+        assert!(origins.contains("https://notebooks.example"));
+        assert!(origins.contains("http://localhost:5173"));
+        for invalid in [
+            "*",
+            "https://example.com/path",
+            "file:///tmp/app",
+            "https://u:p@example.com",
+        ] {
+            assert!(parse_origins(invalid).is_err(), "{invalid}");
+        }
     }
 }

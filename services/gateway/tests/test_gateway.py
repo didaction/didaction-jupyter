@@ -87,6 +87,52 @@ def test_startup_notebook_and_kernel_are_configuration(tmp_path: Path) -> None:
     assert settings.kernel_name == "python-custom"
 
 
+def test_allowed_origins_are_explicit_and_exact() -> None:
+    settings = Settings(
+        allowed_origins="https://notebooks.example, http://localhost:5173/"
+    )
+
+    assert settings.origin_allowed("https://notebooks.example", "gateway.example")
+    assert settings.origin_allowed("http://localhost:5173", "gateway.example")
+    assert settings.origin_allowed("https://gateway.example", "gateway.example")
+    assert not settings.origin_allowed("https://evil.example", "gateway.example")
+    with pytest.raises(ValueError, match=r"exact HTTP\(S\) origins"):
+        Settings(allowed_origins="*")
+
+
+@pytest.mark.asyncio
+async def test_configured_origin_receives_bounded_cors_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        gateway_main,
+        "settings",
+        Settings(allowed_origins="https://notebooks.example"),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=gateway_main.app), base_url="http://gateway.example"
+    ) as client:
+        allowed = await client.get(
+            "/healthz", headers={"origin": "https://notebooks.example"}
+        )
+        denied = await client.get(
+            "/healthz", headers={"origin": "https://untrusted.example"}
+        )
+        preflight = await client.options(
+            "/api/v1/commands",
+            headers={
+                "origin": "https://notebooks.example",
+                "access-control-request-method": "POST",
+            },
+        )
+
+    assert allowed.headers["access-control-allow-origin"] == "https://notebooks.example"
+    assert allowed.headers["access-control-allow-credentials"] == "true"
+    assert denied.status_code == 403
+    assert preflight.status_code == 204
+    assert preflight.headers["access-control-allow-methods"] == "GET, POST, OPTIONS"
+
+
 @pytest.mark.asyncio
 async def test_discovery_reports_startup_race_as_typed_disconnect(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

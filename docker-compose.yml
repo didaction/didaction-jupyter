@@ -49,6 +49,7 @@ services:
       DIDACTION_NOTEBOOK_PATH: ${DIDACTION_NOTEBOOK_PATH:-notebook-parity-demo.ipynb}
       DIDACTION_KERNEL_NAME: ${DIDACTION_KERNEL_NAME:-python3}
       DIDACTION_TIMEOUT_SECONDS: ${DIDACTION_TIMEOUT_SECONDS:-30}
+      DIDACTION_ALLOWED_ORIGINS: ${DIDACTION_ALLOWED_ORIGINS:-}
     ports: ["127.0.0.1:${DIDACTION_PORT:-5173}:8080"]
     secrets: [jupyter_token]
     security_opt: [no-new-privileges:true]
