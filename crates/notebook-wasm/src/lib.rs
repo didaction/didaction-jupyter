@@ -112,6 +112,11 @@ impl eframe::App for MountedApp {
             {
                 let mut locked = self.app.lock().expect("notebook app mutex poisoned");
                 locked.state.sync_state = match &command.kind {
+                    // These replies have no snapshot to clear a dirty flag.
+                    // Read-only editor assistance must not block run/tool actions.
+                    NotebookCommandKind::Complete { .. } | NotebookCommandKind::Inspect { .. } => {
+                        locked.state.sync_state.clone()
+                    }
                     NotebookCommandKind::ExecuteCell { .. }
                     | NotebookCommandKind::ExecuteCode { .. } => {
                         notebook_core::SyncState::Executing
