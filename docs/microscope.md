@@ -16,8 +16,9 @@ Agents call `create_microscope` with `notebook_path`, `cell_id`, `title` and a
 required, nonempty `walkthrough`. Creation saves the entire document in one call.
 The result includes a seven-character `microscope_id`. `list_microscopes` reads
 the references for that notebook/cell. `open_microscope` takes the same scope and
-ID; `close_microscope` takes the notebook path. `get_active_context` reports the
-active microscope and whether its content has loaded.
+ID; `close_microscope` takes the notebook path. `get_active_context` reports
+`view: "microscope"` and a nullable `microscope` object containing its target,
+loaded state and walkthrough context.
 
 Use `update_microscope` to replace the complete saved walkthrough and its title.
 The ID and owning cell stay unchanged; omitted steps/annotations are removed.
@@ -68,7 +69,10 @@ The playground fills the notebook area with the existing single-cell editor,
 completion, run/interrupt and output controls. **Back to microscope** stops the
 temporary kernel and discards edits, outputs and variables, returning to the same
 walkthrough. Saved step source and the original notebook remain unchanged.
-Only one playground is active at a time. Replacement/deletion of its microscope
+Only one playground is active at a time. While mounted,
+`get_active_context().context` reports `view: "playground"`; its `playground`
+object keeps owner and step identity, draft text, exact executing source/status,
+execution count and current outputs distinct. Replacement/deletion of its microscope
 or leaving the notebook closes it.
 
 WebMCP offers `open_playground` (notebook/cell/microscope scope and zero-based
@@ -102,7 +106,7 @@ Browser-to-browser following is intentionally unsupported.
 - `clear_microscope_focus` clears the pulse in the addressed, currently open
   microscope. The step and saved annotations remain. Humans can also use Clear
   focus or select another annotation.
-- `get_active_context().context.walkthrough` reports `title`, `step_index`,
+- `get_active_context().context.microscope.walkthrough` reports `title`, `step_index`,
   `step_count`, `step_id`, and nullable `annotation_id`. UI numbering starts at 1.
 
 Authoring requires the server workspace driver; reading and local navigation do

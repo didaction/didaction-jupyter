@@ -16,10 +16,18 @@ WebMCP-unavailable browsers remain fully usable by humans.
 
 ## Tools
 
-- get_active_context(): one local call returning `context` with notebook_path,
-  cell_id, zero-based cell_index, and mode (edit/command). Null context means no
-  active view; null cell ID/index means no valid selected cell. Reads live mounted
-  egui state, not the transport snapshot, including while dirty or executing.
+- get_active_context(): one local call returning a canonical `context` with
+  `view` (`notebook`, `microscope`, or `playground`), `notebook`, nullable
+  `selection`, `scroll_fraction`, nullable `microscope`, and nullable
+  `playground`. A selection contains its zero-based cell index, edit/command mode,
+  live `draft` source/dirty flag, and nullable queued/running execution source.
+  Playground context separately reports its owning notebook cell/microscope,
+  walkthrough step, role, live draft, executing source/status/count, and latest
+  bounded outputs. Null context means no active view. This is mounted UI state,
+  not a queued kernel read, so unsubmitted editor text is visible.
+- read_playground(notebook_path): queue-independent reconciled temporary snapshot;
+  it can observe intermediate outputs while execution continues. It intentionally
+  does not duplicate mounted draft/executing-source fields from active context.
 - list_notebooks(directory): confined folders/notebooks; empty string means root
 - list_open_notebooks(): this frontend workspace's open notebooks and active view
 - open_notebook(notebook_path): open an existing notebook and select its egui view

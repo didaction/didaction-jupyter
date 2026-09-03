@@ -5,8 +5,8 @@ use egui_code_editor::{CodeEditor, ColorTheme, Syntax};
 use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 use notebook_core::{NotebookState, SyncState};
 use notebook_protocol::{
-    Cell, CellMutation, CellOutput, CellType, CompletionReply, InspectionReply, NotebookCommand,
-    NotebookCommandKind, PROTOCOL_VERSION,
+    Cell, CellMutation, CellOutput, CellType, CompletionReply, InspectionReply, KernelState,
+    NotebookCommand, NotebookCommandKind, PROTOCOL_VERSION,
 };
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
@@ -166,6 +166,7 @@ pub struct NotebookEguiApp {
     pending_completions: BTreeMap<Uuid, String>,
     pending_inspections: BTreeMap<Uuid, String>,
     pending_execution_cells: BTreeMap<Uuid, String>,
+    pending_execution_sources: BTreeMap<Uuid, String>,
     inspections: HashMap<String, String>,
     caret_byte_positions: HashMap<String, usize>,
     completion_due: HashMap<String, f64>,
@@ -311,6 +312,7 @@ impl NotebookEguiApp {
             pending_completions: BTreeMap::new(),
             pending_inspections: BTreeMap::new(),
             pending_execution_cells: BTreeMap::new(),
+            pending_execution_sources: BTreeMap::new(),
             inspections: HashMap::new(),
             caret_byte_positions: HashMap::new(),
             completion_due: HashMap::new(),
@@ -426,6 +428,7 @@ impl NotebookEguiApp {
     }
     pub fn finish_command(&mut self, command_id: Uuid) {
         self.pending_execution_cells.remove(&command_id);
+        self.pending_execution_sources.remove(&command_id);
     }
     pub fn replace_state(&mut self, state: NotebookState) {
         let previous_markdown: HashSet<_> = self
@@ -522,6 +525,16 @@ impl NotebookEguiApp {
         if let NotebookCommandKind::ExecuteCell { cell_id } = &kind {
             self.pending_execution_cells
                 .insert(command_id, cell_id.clone());
+            if let Some(cell) = self
+                .state
+                .snapshot
+                .cells
+                .iter()
+                .find(|cell| &cell.id == cell_id)
+            {
+                self.pending_execution_sources
+                    .insert(command_id, self.editor_source(cell));
+            }
         }
         let timeout_ms = if self.state.snapshot.kernel.name.starts_with("julia")
             && matches!(
@@ -630,15 +643,51 @@ impl NotebookEguiApp {
     }
     pub fn active_context(&self) -> serde_json::Value {
         let selected = self.selected_cell();
+        let selection = selected.as_ref().map(|(index, cell)| {
+            let execution = self
+                .pending_execution_cells
+                .iter()
+                .find(|(_, cell_id)| *cell_id == &cell.id)
+                .and_then(|(command_id, _)| self.pending_execution_sources.get(command_id))
+                .map(|source| {
+                    serde_json::json!({
+                        "status": if matches!(self.state.sync_state, SyncState::Executing)
+                            || self.state.snapshot.kernel.state == KernelState::Busy
+                        { "running" } else { "queued" },
+                        "source": source,
+                    })
+                });
+            serde_json::json!({
+                "cell_id": cell.id,
+                "cell_index": index,
+                "mode": if self.edit_mode { "edit" } else { "command" },
+                "draft": {
+                    "source": self.editor_source(cell),
+                    "dirty": self.dirty_editors.contains(&cell.id),
+                },
+                "execution": execution,
+            })
+        });
+        let microscope = self.microscope_target.as_ref().map(|target| {
+            serde_json::json!({
+                "cell_id": target.cell_id,
+                "microscope_id": target.microscope_id,
+                "revision": target.revision,
+                "focus": target.focus,
+                "loaded": self.microscope_document.is_some(),
+                "walkthrough": self.walkthrough_context(),
+            })
+        });
         serde_json::json!({
-            "notebook_path": self.state.snapshot.notebook.path,
-            "cell_id": selected.as_ref().map(|(_, cell)| &cell.id),
-            "cell_index": selected.as_ref().map(|(index, _)| index),
-            "mode": if self.edit_mode { "edit" } else { "command" },
+            "view": if microscope.is_some() { "microscope" } else { "notebook" },
+            "notebook": {
+                "path": self.state.snapshot.notebook.path,
+                "revision": self.state.snapshot.revision,
+            },
+            "selection": selection,
             "scroll_fraction": self.scroll_fraction,
-            "microscope": self.microscope_target,
-            "microscope_loaded": self.microscope_document.is_some(),
-            "walkthrough": self.walkthrough_context(),
+            "microscope": microscope,
+            "playground": null,
         })
     }
     fn selected_cell(&self) -> Option<(usize, Cell)> {
@@ -3486,7 +3535,7 @@ fn output_collapse_summary(count: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use notebook_protocol::{KernelIdentity, KernelState, NotebookIdentity, NotebookSnapshot};
+    use notebook_protocol::{KernelIdentity, NotebookIdentity, NotebookSnapshot};
     #[test]
     fn microscope_navigation_is_local_single_target_and_ignores_late_loads() {
         use notebook_protocol::microscope::{self, MicroscopeTarget};
@@ -3537,15 +3586,31 @@ mod tests {
         let mut app = app();
         app.state.snapshot.selected_cell_id = Some("code".into());
         app.edit_mode = true;
+        app.editors[0].1 = "print('draft')".into();
+        app.dirty_editors.insert("code".into());
         let context = app.active_context();
-        assert_eq!(context["cell_id"], "code");
-        assert_eq!(context["cell_index"], 0);
-        assert_eq!(context["mode"], "edit");
+        assert_eq!(context["view"], "notebook");
+        assert_eq!(context["notebook"]["path"], "completion.ipynb");
+        assert_eq!(context["selection"]["cell_id"], "code");
+        assert_eq!(context["selection"]["cell_index"], 0);
+        assert_eq!(context["selection"]["mode"], "edit");
+        assert_eq!(context["selection"]["draft"]["source"], "print('draft')");
+        assert_eq!(context["selection"]["draft"]["dirty"], true);
+        app.emit(NotebookCommandKind::ExecuteCell {
+            cell_id: "code".into(),
+        });
+        assert_eq!(
+            app.active_context()["selection"]["execution"]["status"],
+            "queued"
+        );
+        assert_eq!(
+            app.active_context()["selection"]["execution"]["source"],
+            "print('draft')"
+        );
         app.state.snapshot.selected_cell_id = None;
         app.edit_mode = false;
-        assert!(app.active_context()["cell_id"].is_null());
-        assert_eq!(app.active_context()["mode"], "command");
-        assert!(app.drain_commands().is_empty());
+        assert!(app.active_context()["selection"].is_null());
+        assert_eq!(app.drain_commands().len(), 1);
     }
 
     fn app() -> NotebookEguiApp {

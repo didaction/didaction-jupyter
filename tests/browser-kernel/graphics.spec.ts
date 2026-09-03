@@ -78,16 +78,18 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
   const status = async () => {
     const context = (await microscopeCall(page, "get_active_context"))
       .structuredContent.context as {
-      walkthrough: {
-        graphics: {
-          frames: number;
-          width: number;
-          paused: boolean;
-          error: string | null;
-        } | null;
+      microscope: {
+        walkthrough: {
+          graphics: {
+            frames: number;
+            width: number;
+            paused: boolean;
+            error: string | null;
+          } | null;
+        };
       };
     };
-    return context.walkthrough.graphics;
+    return context.microscope.walkthrough.graphics;
   };
   await expect
     .poll(

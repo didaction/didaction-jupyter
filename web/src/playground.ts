@@ -27,6 +27,8 @@ type View = {
   cell_id: string;
   microscope_id: string;
   step_index: number;
+  step_id: string;
+  step_title: string;
   snapshot: NotebookSnapshot;
   closing?: boolean;
 };
@@ -87,6 +89,7 @@ export class PlaygroundController {
   private polling = false;
   private disposed = false;
   private following = false;
+  private executingSource?: string;
   private contentRevision?: number;
   private timer: ReturnType<typeof setInterval>;
   constructor(private readonly hooks: Hooks) {
@@ -106,6 +109,59 @@ export class PlaygroundController {
   snapshot() {
     if (this.mounted) return JSON.parse(this.mounted.notebookSnapshot());
     return this.wasm ? JSON.parse(this.wasm.publicSnapshot()).snapshot : null;
+  }
+  activeContext() {
+    if (!this.current) return null;
+    const snapshot = this.snapshot() as NotebookSnapshot & {
+      kernel?: { state?: string };
+      cells: Array<{
+        source?: string;
+        outputs?: unknown[];
+        execution_count?: number | null;
+      }>;
+    };
+    const cell = snapshot.cells[0] ?? {};
+    const mounted = this.mounted
+      ? (JSON.parse(this.mounted.activeContext()) as {
+          selection?: {
+            draft?: { source?: string; dirty?: boolean };
+            execution?: { status?: string; source?: string } | null;
+          } | null;
+        })
+      : {};
+    const selection = mounted.selection;
+    const uiExecution = selection?.execution;
+    const running =
+      this.executingSource !== undefined ||
+      uiExecution?.status === "running" ||
+      uiExecution?.status === "queued" ||
+      snapshot.kernel?.state === "busy";
+    return {
+      owner: {
+        notebook_path: this.current.notebook_path,
+        cell_id: this.current.cell_id,
+        microscope_id: this.current.microscope_id,
+      },
+      step: {
+        index: this.current.step_index,
+        id: this.current.step_id,
+        title: this.current.step_title,
+      },
+      role: this.hooks.canWrite() ? "owner" : "observer",
+      draft: {
+        source: selection?.draft?.source ?? cell.source ?? "",
+        dirty: selection?.draft?.dirty ?? false,
+      },
+      execution: {
+        status: this.current.closing ? "closing" : running ? "running" : "idle",
+        source:
+          this.executingSource ??
+          uiExecution?.source ??
+          (running ? (cell.source ?? "") : null),
+        execution_count: cell.execution_count ?? null,
+      },
+      outputs: cell.outputs ?? [],
+    };
   }
   private async request(route: string, body?: unknown): Promise<unknown> {
     const response = await fetch(`/api/v1/playground${route}`, {
@@ -137,6 +193,13 @@ export class PlaygroundController {
     const generation = this.generation;
     try {
       const doc = await this.hooks.document(cellId, microscopeId);
+      const step = (
+        doc as {
+          walkthrough?: { steps?: Array<{ id?: string; title?: string }> };
+        }
+      ).walkthrough?.steps?.[stepIndex];
+      if (!step?.id || !step.title)
+        throw new Error("Playground step is unavailable");
       this.contentRevision =
         (doc as { microscope: { revision?: number } }).microscope.revision ?? 0;
       let view: View;
@@ -185,6 +248,8 @@ export class PlaygroundController {
           cell_id: cellId,
           microscope_id: microscopeId,
           step_index: stepIndex,
+          step_id: step.id,
+          step_title: step.title,
           snapshot: setup.snapshot!,
         };
       } else {
@@ -193,6 +258,8 @@ export class PlaygroundController {
           microscope_id: microscopeId,
           step_index: stepIndex,
         })) as View;
+        view.step_id = step.id;
+        view.step_title = step.title;
         transport = this.serverTransport(view.id);
       }
       if (this.disposed || this.generation !== generation) {
@@ -350,9 +417,14 @@ export class PlaygroundController {
           ],
         }),
       );
-    return send(
-      command("execute_cell", { cell_id: "playground", timeout_ms: 120000 }),
-    );
+    this.executingSource = code;
+    try {
+      return await send(
+        command("execute_cell", { cell_id: "playground", timeout_ms: 120000 }),
+      );
+    } finally {
+      this.executingSource = undefined;
+    }
   }
   async close() {
     if (
@@ -379,6 +451,7 @@ export class PlaygroundController {
     this.panel?.remove();
     this.panel = undefined;
     this.current = undefined;
+    this.executingSource = undefined;
     const canvas =
       document.querySelector<HTMLCanvasElement>("#notebook-canvas");
     if (canvas) canvas.style.visibility = "";

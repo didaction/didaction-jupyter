@@ -110,7 +110,7 @@ These are application-level restrictions, not a guarantee against browser engine
 vulnerabilities or whole-process out-of-memory failures. In particular, compilation
 has a deadline but no browser-enforced heap cap; keep source bounds conservative.
 
-`get_active_context` includes walkthrough graphics frame count, dimensions, pause
+`get_active_context().context.microscope.walkthrough` includes graphics frame count, dimensions, pause
 state and localized error for diagnosis. It never includes pixel buffers.
 
 Run `pnpm test`, `cargo test -p notebook-protocol -p notebook-egui`, and

@@ -55,6 +55,28 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
       .isError,
   ).toBe(false);
   await expect(page.locator("#playground-canvas")).toBeVisible();
+  expect(
+    (await microscopeCall(page, "get_active_context")).structuredContent
+      .context,
+  ).toMatchObject({
+    view: "playground",
+    notebook: { path: cell.notebook_path },
+    selection: null,
+    playground: {
+      owner: {
+        notebook_path: cell.notebook_path,
+        cell_id: cell.cell_id,
+        microscope_id: scope.microscope_id,
+      },
+      step: { index: 0, id: "one", title: "Setup then experiment" },
+      draft: {
+        source: walkthrough.steps[0]!.playground_code,
+        dirty: false,
+      },
+      execution: { status: "idle", source: null },
+      outputs: [],
+    },
+  });
   await page.locator("#playground-canvas").evaluate((canvas) => canvas.focus());
   for (const key of [
     "ArrowLeft",
@@ -101,7 +123,11 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
   expect(
     (await microscopeCall(page, "get_active_context")).structuredContent
       .context,
-  ).toMatchObject({ walkthrough: { step_index: 0 } });
+  ).toMatchObject({
+    view: "microscope",
+    microscope: { walkthrough: { step_index: 0 } },
+    playground: null,
+  });
   expect(
     (await microscopeCall(page, "open_playground", { ...scope, step_index: 0 }))
       .isError,
@@ -123,6 +149,21 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
   await expect
     .poll(async () => JSON.stringify((await read()).cells[0]!.outputs))
     .toContain("running");
+  const live = (await microscopeCall(page, "get_active_context"))
+    .structuredContent.context as {
+    view: string;
+    playground: {
+      execution: { status: string; source: string };
+      outputs: unknown[];
+    };
+  };
+  expect(live.view).toBe("playground");
+  expect(live.playground.execution).toMatchObject({
+    status: "running",
+    source:
+      "import asyncio\nprint('running', flush=True)\nawait asyncio.sleep(10)",
+  });
+  expect(JSON.stringify(live.playground.outputs)).toContain("running");
   await page
     .getByRole("button", { name: "Back to microscope", exact: true })
     .click();

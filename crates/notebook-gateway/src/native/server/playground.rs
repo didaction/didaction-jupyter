@@ -9,6 +9,8 @@ pub(super) struct Playground {
     cell_id: String,
     microscope_id: String,
     step_index: usize,
+    step_id: String,
+    step_title: String,
     kernel_id: String,
     session_id: String,
     snapshot: NotebookSnapshot,
@@ -24,6 +26,7 @@ impl Playground {
     fn public(&self) -> Value {
         json!({"id":self.id,"notebook_path":self.notebook_path,"cell_id":self.cell_id,
             "microscope_id":self.microscope_id,"step_index":self.step_index,
+            "step_id":self.step_id,"step_title":self.step_title,
             "snapshot":self.snapshot,"closing":self.closing})
     }
 }
@@ -66,6 +69,13 @@ pub(super) async fn open(
             .read_microscope(&identity)
             .await?
             .ok_or_else(malformed)?;
+        let step = doc
+            .walkthrough
+            .as_ref()
+            .and_then(|walkthrough| walkthrough.steps.get(input.step_index))
+            .ok_or_else(malformed)?;
+        let step_id = step.id.clone();
+        let step_title = step.title.clone();
         let snapshot =
             microscope::playground_snapshot(&doc, input.step_index, &host.config.kernel)?;
         let id = Uuid::new_v4().to_string();
@@ -89,6 +99,8 @@ pub(super) async fn open(
             cell_id: input.cell_id,
             microscope_id: input.microscope_id,
             step_index: input.step_index,
+            step_id,
+            step_title,
             kernel_id,
             session_id,
             snapshot,

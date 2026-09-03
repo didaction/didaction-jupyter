@@ -97,7 +97,7 @@ export class WorkspaceTools implements NotebookToolInvoker {
         name,
         description: {
           get_active_context:
-            "Read this frontend's active notebook, selected cell ID, zero-based cell index and edit/command mode. Local UI state only; no kernel request.",
+            "Read this frontend's active notebook, view, selection and temporary playground state. Playground draft source, executing source/status and latest outputs are reported separately. Local UI state only; no kernel request.",
           list_open_notebooks:
             "List notebooks open in this frontend workspace (not other browser tabs).",
           list_notebooks:

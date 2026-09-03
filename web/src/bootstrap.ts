@@ -358,14 +358,14 @@ async function createContext(
                 if (
                   active.microscope?.cell_id !== id ||
                   active.microscope?.microscope_id !== args.microscope_id ||
-                  !active.walkthrough
+                  !active.microscope?.walkthrough
                 )
                   throw new Error(
                     "Open this microscope's walkthrough before clearing focus",
                   );
                 mounted.focusWalkthrough(
                   JSON.stringify({
-                    step_index: active.walkthrough.step_index,
+                    step_index: active.microscope.walkthrough.step_index,
                     annotation_id: null,
                   }),
                 );
@@ -532,8 +532,8 @@ async function createContext(
       } | null;
       if (!mounted || !current()) return;
       const active = JSON.parse(mounted.activeContext()).microscope;
-      if (JSON.stringify(active) === JSON.stringify(requested)) return;
       if (!requested) {
+        if (!active) return;
         mounted.showMicroscope("null");
         return;
       }
@@ -541,7 +541,7 @@ async function createContext(
         active?.cell_id === requested.cell_id &&
         active?.microscope_id === requested.microscope_id &&
         (active?.revision ?? 0) === (requested.revision ?? 0) &&
-        JSON.parse(mounted.activeContext()).microscope_loaded
+        active.loaded
       ) {
         if (requested.focus)
           mounted.focusWalkthrough(JSON.stringify(requested.focus));
@@ -589,10 +589,22 @@ async function createContext(
       clients: collaboration.state?.clients ?? [],
     }),
     changeDriver: (clientId) => collaboration.changeDriver(clientId),
-    activeContext: () =>
-      mounted
-        ? (JSON.parse(mounted.activeContext()) as Record<string, unknown>)
-        : null,
+    activeContext: () => {
+      if (!mounted) return null;
+      const context = JSON.parse(mounted.activeContext()) as Record<
+        string,
+        unknown
+      >;
+      const activePlayground = playground.activeContext();
+      return activePlayground
+        ? {
+            ...context,
+            view: "playground",
+            selection: null,
+            playground: activePlayground,
+          }
+        : context;
+    },
     path: () =>
       JSON.parse(wasm.publicSnapshot()).snapshot.notebook.path as string,
     ready: () => mounted?.assertExternalReady(),
@@ -840,19 +852,31 @@ async function boot(): Promise<void> {
     if (active?.takeFollowToggle()) followButton.click();
     active?.hostStatus(follow.enabled, status.textContent ?? "Connecting…");
     if (!active?.canWrite?.()) return;
-    for (const context of openContexts)
-      if (context.canWrite?.())
+    const view = active.activeContext?.();
+    const selectedCell = (view?.selection as { cell_id?: string } | null)
+      ?.cell_id;
+    const microscopeView = view?.microscope as
+      | (import("./follow").MicroscopeTarget & Record<string, unknown>)
+      | null;
+    const microscope = microscopeView
+      ? {
+          cell_id: microscopeView.cell_id,
+          microscope_id: microscopeView.microscope_id,
+          revision: microscopeView.revision,
+          focus: microscopeView.focus,
+        }
+      : null;
+    for (const context of openContexts) {
+      if (context.canWrite?.()) {
         void context.connection.publish({
           protocol_version: 1,
           notebook_path: active.path!(),
           scroll_fraction: active.scrollFraction(),
-          selected_cell_id:
-            (active.activeContext?.()?.cell_id as string | null) ?? null,
-          microscope:
-            (active.activeContext?.()?.microscope as
-              | import("./follow").MicroscopeTarget
-              | null) ?? null,
+          selected_cell_id: selectedCell ?? null,
+          microscope,
         });
+      }
+    }
   }, 250);
   updateFollowButton();
   installExplorer(

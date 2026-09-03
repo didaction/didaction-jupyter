@@ -16,10 +16,16 @@ it("requires explicit notebook addresses and routes only to open notebooks", asy
       },
       ready: vi.fn(),
       activeContext: () => ({
-        notebook_path: path,
-        cell_id: "selected",
-        cell_index: 2,
-        mode: "edit",
+        view: "notebook",
+        notebook: { path, revision: 4 },
+        selection: {
+          cell_id: "selected",
+          cell_index: 2,
+          mode: "edit",
+          draft: { source: "value", dirty: true },
+          execution: null,
+        },
+        playground: null,
       }),
       activate: vi.fn(),
       deactivate: vi.fn(),
@@ -81,10 +87,16 @@ it("requires explicit notebook addresses and routes only to open notebooks", asy
     (await workspace.callTool("get_active_context", {})).structuredContent
       .context,
   ).toEqual({
-    notebook_path: "two.ipynb",
-    cell_id: "selected",
-    cell_index: 2,
-    mode: "edit",
+    view: "notebook",
+    notebook: { path: "two.ipynb", revision: 4 },
+    selection: {
+      cell_id: "selected",
+      cell_index: 2,
+      mode: "edit",
+      draft: { source: "value", dirty: true },
+      execution: null,
+    },
+    playground: null,
   });
   expect(contexts.get("two.ipynb")!.tools.callTool).not.toHaveBeenCalled();
   expect(

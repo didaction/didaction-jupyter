@@ -219,7 +219,10 @@ test("Markdown keyboard run returns to rendered mode and highlights remain separ
                 execute(input: unknown): Promise<{
                   isError: boolean;
                   structuredContent: {
-                    context: { cell_id: string; mode: string };
+                    context: {
+                      view: string;
+                      selection: { cell_id: string; mode: string };
+                    };
                   };
                 }>;
               }
@@ -242,7 +245,8 @@ test("Markdown keyboard run returns to rendered mode and highlights remain separ
   await expect
     .poll(
       async () =>
-        (await call("get_active_context")).structuredContent.context.cell_id,
+        (await call("get_active_context")).structuredContent.context.selection
+          .cell_id,
     )
     .toBe("markdown");
   // Click the rendered "42" output in this fixed desktop fixture, not its editor.
@@ -250,21 +254,24 @@ test("Markdown keyboard run returns to rendered mode and highlights remain separ
   await expect
     .poll(
       async () =>
-        (await call("get_active_context")).structuredContent.context.cell_id,
+        (await call("get_active_context")).structuredContent.context.selection
+          .cell_id,
     )
     .toBe("code");
   await page.keyboard.press("ArrowUp");
   await expect
     .poll(
       async () =>
-        (await call("get_active_context")).structuredContent.context.cell_id,
+        (await call("get_active_context")).structuredContent.context.selection
+          .cell_id,
     )
     .toBe("markdown");
   await page.keyboard.press("Enter");
   await expect
     .poll(
       async () =>
-        (await call("get_active_context")).structuredContent.context.mode,
+        (await call("get_active_context")).structuredContent.context.selection
+          .mode,
     )
     .toBe("edit");
   await page.keyboard.press("Shift+Enter");
@@ -272,7 +279,10 @@ test("Markdown keyboard run returns to rendered mode and highlights remain separ
     .poll(
       async () => (await call("get_active_context")).structuredContent.context,
     )
-    .toMatchObject({ cell_id: "code", mode: "command" });
+    .toMatchObject({
+      view: "notebook",
+      selection: { cell_id: "code", mode: "command" },
+    });
   expect(
     (await call("highlight_cell", { cell_id: "markdown", color: "blue-light" }))
       .isError,

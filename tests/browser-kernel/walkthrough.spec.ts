@@ -41,13 +41,15 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   const active = async () =>
     (await microscopeCall(page, "get_active_context")).structuredContent
       .context as {
-      walkthrough: {
-        step_index: number;
-        step_count: number;
-        annotation_id: string | null;
+      microscope: {
+        walkthrough: {
+          step_index: number;
+          step_count: number;
+          annotation_id: string | null;
+        };
       };
     };
-  expect((await active()).walkthrough).toMatchObject({
+  expect((await active()).microscope.walkthrough).toMatchObject({
     step_index: 0,
     step_count: 3,
     annotation_id: null,
@@ -66,31 +68,31 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   const canvas = (await page.locator("#notebook-canvas").boundingBox())!;
   await page.mouse.click(canvas.x + 330, canvas.y + 94);
   await expect
-    .poll(async () => (await active()).walkthrough.step_index)
+    .poll(async () => (await active()).microscope.walkthrough.step_index)
     .toBe(1);
   await page.waitForTimeout(150);
   await page.mouse.click(canvas.x + 35, canvas.y + 94);
   await expect
-    .poll(async () => (await active()).walkthrough.step_index)
+    .poll(async () => (await active()).microscope.walkthrough.step_index)
     .toBe(0);
   await page.keyboard.press("ArrowRight");
   await expect
-    .poll(async () => (await active()).walkthrough.step_index)
+    .poll(async () => (await active()).microscope.walkthrough.step_index)
     .toBe(1);
   await page.keyboard.press("ArrowDown");
   await expect
-    .poll(async () => (await active()).walkthrough.annotation_id)
+    .poll(async () => (await active()).microscope.walkthrough.annotation_id)
     .toBe("bars");
   await page.keyboard.press("ArrowLeft");
   await expect
-    .poll(async () => (await active()).walkthrough.annotation_id)
+    .poll(async () => (await active()).microscope.walkthrough.annotation_id)
     .toBeNull();
   await page.keyboard.press("ArrowUp");
   await expect
-    .poll(async () => (await active()).walkthrough.annotation_id)
+    .poll(async () => (await active()).microscope.walkthrough.annotation_id)
     .toBe("values");
   await page.keyboard.press("Backspace");
-  await expect.poll(async () => (await active()).walkthrough).toBeNull();
+  await expect.poll(async () => (await active()).microscope).toBeNull();
   expect((await call("open_microscope")).isError).toBe(false);
   expect(
     (
@@ -100,7 +102,7 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
       })
     ).isError,
   ).toBe(false);
-  expect((await active()).walkthrough).toMatchObject({
+  expect((await active()).microscope.walkthrough).toMatchObject({
     step_index: 2,
     annotation_id: "last",
   });
@@ -108,14 +110,14 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   await page.waitForTimeout(150);
   await page.screenshot({ path: ".runtime/walkthrough-narrow.png" });
   expect((await call("clear_microscope_focus")).isError).toBe(false);
-  expect((await active()).walkthrough).toMatchObject({
+  expect((await active()).microscope.walkthrough).toMatchObject({
     step_index: 2,
     annotation_id: null,
   });
   expect(
     (await call("focus_microscope_step", { step_index: 63 })).isError,
   ).toBe(true);
-  expect((await active()).walkthrough.step_index).toBe(2);
+  expect((await active()).microscope.walkthrough.step_index).toBe(2);
   const invalid = structuredClone(exampleWalkthrough);
   invalid.steps[0]!.annotations[0]!.end_line = 999;
   expect(
@@ -157,7 +159,7 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   expect((await call("focus_microscope_step", { step_index: 1 })).isError).toBe(
     false,
   );
-  expect((await active()).walkthrough).toMatchObject({
+  expect((await active()).microscope.walkthrough).toMatchObject({
     step_index: 1,
     step_count: 3,
   });

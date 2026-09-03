@@ -205,8 +205,10 @@ test("WebMCP tools load WASM, mutate, execute, refresh and reject injected field
   const notebook_path = new URL(page.url()).searchParams.get("notebook")!;
   const context = (await call("get_active_context")).structuredContent
     .context as Record<string, unknown>;
-  expect(context.notebook_path).toBe(notebook_path);
-  expect(["edit", "command"]).toContain(context.mode);
+  expect((context.notebook as { path: string }).path).toBe(notebook_path);
+  expect(["edit", "command"]).toContain(
+    (context.selection as { mode: string }).mode,
+  );
   expect(
     (await call("read_notebook", { notebook_path: "not-open.ipynb" })).isError,
   ).toBe(true);

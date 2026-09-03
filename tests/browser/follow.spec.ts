@@ -178,9 +178,9 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   const selected = async (target: Page) =>
     (
       (await call(target, "get_active_context")).structuredContent.context as {
-        cell_id: string;
+        selection: { cell_id: string } | null;
       }
-    ).cell_id;
+    ).selection?.cell_id ?? null;
   await expect.poll(() => selected(page)).toBe("tail-note");
   await expect.poll(() => selected(observer)).toBe("tail-note");
   expect(
