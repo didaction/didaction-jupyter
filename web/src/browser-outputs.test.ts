@@ -1,6 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { initSync } from "../pkg/notebook_wasm";
 import { OutputReducer } from "./browser-outputs";
 import { browserPath } from "./browser-store";
+
+beforeAll(() => {
+  initSync({
+    module: readFileSync(
+      new URL("../pkg/notebook_wasm_bg.wasm", import.meta.url),
+    ),
+  });
+});
 
 describe("browser output protocol reducer", () => {
   it("streams in order and coalesces same-channel text", () => {

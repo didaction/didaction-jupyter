@@ -7,6 +7,7 @@ import type {
   WasmApplication,
 } from "./types";
 import type { BrowserKernel } from "./browser-kernel";
+import { prepareRuntimeCommand } from "../pkg/notebook_wasm";
 import { OutputReducer, type Output } from "./browser-outputs";
 import { browserPath, type NotebookStore } from "./browser-store";
 
@@ -139,7 +140,12 @@ export class BrowserNotebookTransport implements NotebookTransport {
     try {
       model = this.model(JSON.stringify(this.snapshot));
       model.prepareCommand(JSON.stringify(command));
-      let next = JSON.parse(model.publicSnapshot()).snapshot as BrowserSnapshot;
+      let next = JSON.parse(
+        prepareRuntimeCommand(
+          JSON.stringify(this.snapshot),
+          JSON.stringify(command),
+        ),
+      ) as BrowserSnapshot;
       let result: CommandResult;
       if (command.type === "setup") {
         if (

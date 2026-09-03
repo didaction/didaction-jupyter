@@ -15,6 +15,12 @@ reconciles results. TypeScript owns browser APIs. The Python gateway owns the
 Jupyter token and directly adapts Contents/Sessions/Kernels REST plus the kernel
 channels WebSocket into internal snapshots.
 
+`notebook-runtime` owns validated authoritative proposals and atomic output
+reduction, compiled natively and to WASM. Browser mode uses it now; the Python
+gateway has not yet migrated. For native gateway migration or shared execution
+semantics, read `docs/rust-runtime-migration.md`. Keep the optimistic UI replica
+separate from authoritative proposals and acknowledge only durable host commits.
+
 Human egui and WebMCP calls both enter `web/src/command-gateway.ts`. Never add a
 second mutation path or a generic Jupyter forwarding method.
 

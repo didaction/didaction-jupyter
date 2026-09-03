@@ -2297,6 +2297,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "notebook-runtime"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "notebook-core",
+ "notebook-protocol",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "notebook-wasm"
 version = "0.1.0"
 dependencies = [
@@ -2305,6 +2316,7 @@ dependencies = [
  "notebook-core",
  "notebook-egui",
  "notebook-protocol",
+ "notebook-runtime",
  "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-futures",

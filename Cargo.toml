@@ -5,6 +5,7 @@ members = [
   "crates/notebook-core",
   "crates/notebook-egui",
   "crates/notebook-wasm",
+  "crates/notebook-runtime",
 ]
 
 [workspace.package]
@@ -26,6 +27,7 @@ js-sys = "0.3.82"
 notebook-core = { path = "crates/notebook-core" }
 notebook-egui = { path = "crates/notebook-egui" }
 notebook-protocol = { path = "crates/notebook-protocol" }
+notebook-runtime = { path = "crates/notebook-runtime" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 thiserror = "2.0.17"

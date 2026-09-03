@@ -5,6 +5,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo check --workspace --target wasm32-unknown-unknown
+pnpm run build:wasm
 pnpm run format
 pnpm run typecheck
 pnpm test

@@ -11,6 +11,34 @@ use std::sync::{Arc, Mutex};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
+#[wasm_bindgen(js_name = prepareRuntimeCommand)]
+pub fn prepare_runtime_command(snapshot: &str, command: &str) -> Result<String, JsError> {
+    if snapshot.len() > notebook_protocol::MAX_RESPONSE_BYTES
+        || command.len() > notebook_protocol::MAX_RESPONSE_BYTES
+    {
+        return Err(JsError::new("Runtime input exceeds limit"));
+    }
+    let proposed = notebook_runtime::prepare(
+        serde_json::from_str(snapshot).map_err(js_error)?,
+        serde_json::from_str(command).map_err(js_error)?,
+    )
+    .map_err(js_error)?;
+    serde_json::to_string(&proposed).map_err(js_error)
+}
+
+#[wasm_bindgen(js_name = reduceKernelOutput)]
+pub fn reduce_kernel_output(state: &str, event: &str) -> Result<String, JsError> {
+    if state.len() > notebook_protocol::MAX_RESPONSE_BYTES
+        || event.len() > notebook_protocol::MAX_RESPONSE_BYTES
+    {
+        return Err(JsError::new("Kernel output exceeds limit"));
+    }
+    let mut state: notebook_runtime::OutputState = serde_json::from_str(state).map_err(js_error)?;
+    state
+        .apply(serde_json::from_str(event).map_err(js_error)?)
+        .map_err(js_error)?;
+    serde_json::to_string(&state).map_err(js_error)
+}
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 

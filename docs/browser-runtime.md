@@ -33,10 +33,11 @@ access; browser execution alone does not make arbitrary deployments offline-read
 ## Shared command path
 
 Human egui actions and WebMCP tools retain `CommandGateway` and WASM validation.
-`BrowserNotebookTransport` implements `NotebookTransport`. It uses a separate
-`NotebookApplication` instance to prepare Rust cell mutations, rather than
-implementing insert/edit/delete/move again in JavaScript. Storage commits precede
-acknowledgement. The frontend optimistic replica remains separate.
+`BrowserNotebookTransport` implements `NotebookTransport`. It uses the shared
+`notebook-runtime` Rust module to prepare authoritative cell-change proposals and
+reduce kernel output; JavaScript does not implement those transitions separately.
+Storage commits precede acknowledgement. The frontend optimistic replica remains
+separate. See [migration status](rust-runtime-migration.md) for the native host work.
 
 `WorkerKernel` owns JavaScript message correlation, worker lifetime and deadlines.
 The worker subclasses JupyterLite's `PyodideRemoteKernel`; JupyterLite/IPython
