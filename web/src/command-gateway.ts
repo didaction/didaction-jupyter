@@ -60,6 +60,7 @@ export class CommandGateway {
 export function createQueuedNotebookDispatcher(
   gateway: CommandGateway,
   currentRevision: () => number,
+  committed?: (command: NotebookCommand, result: CommandResult) => void,
 ): ((
   serialized: string,
   onProgress?: (serialized: string) => void,
@@ -73,16 +74,19 @@ export function createQueuedNotebookDispatcher(
     );
     return task;
   };
-  const execute = (
+  const execute = async (
     serialized: string,
     onProgress?: (serialized: string) => void,
   ) => {
     const command = JSON.parse(serialized) as NotebookCommand;
     command.expected_revision = currentRevision();
-    return gateway.execute(
+    const serializedResult = await gateway.execute(
       JSON.stringify(command),
       onProgress ? (result) => onProgress(JSON.stringify(result)) : undefined,
     );
+    const result = JSON.parse(serializedResult) as CommandResult;
+    if (!result.error) committed?.(command, result);
+    return serializedResult;
   };
   return Object.assign(
     (serialized: string, onProgress?: (serialized: string) => void) =>

@@ -7,6 +7,52 @@ import { MockNotebookTransport } from "./gateway-client";
 import type { CommandResult, NotebookCommand, WasmApplication } from "./types";
 
 describe("CommandGateway", () => {
+  it("notifies the host of renames only after successful reconciliation", async () => {
+    const order: string[] = [];
+    let fail = false;
+    const wasm: WasmApplication = {
+      prepareCommand: (value) => value,
+      applyCommandResult: (value) => {
+        order.push("reconciled");
+        return value;
+      },
+      publicSnapshot: () => "{}",
+      dispose: () => {},
+    };
+    const transport = new MockNotebookTransport((command) => ({
+      protocol_version: 1,
+      command_id: command.command_id,
+      idempotency_key: command.idempotency_key,
+      ...(fail
+        ? {
+            error: {
+              code: "transport_error",
+              message: "Rename failed",
+              retryable: true,
+            },
+          }
+        : {}),
+    }));
+    const dispatch = createQueuedNotebookDispatcher(
+      new CommandGateway(wasm, transport),
+      () => 0,
+      (command) => order.push(`committed:${command.path}`),
+    );
+    const command = JSON.stringify({
+      protocol_version: 1,
+      command_id: "rename",
+      idempotency_key: "rename",
+      type: "rename_notebook",
+      path: "renamed.ipynb",
+      timeout_ms: 1000,
+    });
+    await dispatch(command);
+    expect(order).toEqual(["reconciled", "committed:renamed.ipynb"]);
+    fail = true;
+    order.length = 0;
+    await dispatch(command);
+    expect(order).toEqual(["reconciled"]);
+  });
   it("uses one validation and transport path", async () => {
     const calls: string[] = [];
     const wasm: WasmApplication = {

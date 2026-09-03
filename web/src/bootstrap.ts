@@ -90,13 +90,26 @@ async function createContext(
   const snapshot = setup.snapshot as NotebookSnapshot;
   const wasm = new NotebookApplication(JSON.stringify(snapshot));
   const gateway = new CommandGateway(wasm, transport);
-  const dispatchEguiCommand = createQueuedNotebookDispatcher(gateway, () =>
-    Number(
-      (JSON.parse(wasm.publicSnapshot()) as { snapshot: NotebookSnapshot })
-        .snapshot.revision,
-    ),
-  );
   let mounted: Awaited<ReturnType<typeof mountNotebook>> | undefined;
+  const dispatchEguiCommand = createQueuedNotebookDispatcher(
+    gateway,
+    () =>
+      Number(
+        (JSON.parse(wasm.publicSnapshot()) as { snapshot: NotebookSnapshot })
+          .snapshot.revision,
+      ),
+    (command) => {
+      if (command.type !== "rename_notebook") return;
+      const path = JSON.parse(wasm.publicSnapshot()).snapshot.notebook
+        .path as string;
+      if (mounted) {
+        const url = new URL(location.href);
+        url.searchParams.set("notebook", path);
+        history.replaceState(null, "", url);
+      }
+      if (browserWorkspace) collaboration.rename(path);
+    },
+  );
   let incomingSnapshot: NotebookSnapshot | undefined;
   let reconciliationQueued = false;
   void collaboration.watch(
@@ -524,6 +537,8 @@ async function boot(): Promise<void> {
 
 boot().catch((error: unknown) => {
   status.textContent = "Disconnected";
+  const listingStatus = document.querySelector("#explorer-status");
+  if (listingStatus) listingStatus.textContent = "Notebook startup failed";
   fatal.hidden = false;
   fatal.querySelector("p")!.textContent =
     error instanceof Error ? error.message : "Unknown startup failure";
