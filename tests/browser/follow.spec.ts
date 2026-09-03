@@ -230,7 +230,7 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
     });
   expect(
     (
-      await call(observer, "set_microscope_walkthrough", {
+      await call(observer, "update_microscope", {
         ...microscope,
         walkthrough: exampleWalkthrough,
       })
@@ -238,7 +238,7 @@ test("opt-in follows actual egui scroll and notebook switches; opt-out stays ind
   ).toBe(true);
   expect(
     (
-      await call(page, "set_microscope_walkthrough", {
+      await call(page, "update_microscope", {
         ...microscope,
         walkthrough: exampleWalkthrough,
       })

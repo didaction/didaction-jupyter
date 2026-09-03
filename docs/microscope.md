@@ -68,9 +68,10 @@ displayed excerpt: include imports and setup because the kernel starts fresh,
 without the parent notebook's variables. `playground_code` is optional, nonblank
 when present, and bounded to 64,000 UTF-8 bytes within the document aggregate limit.
 
-The playground opens as a bounded window above the still-visible Microscope stage,
-using the existing single-cell editor, completion, run/interrupt and output
-controls. **Close playground** stops the temporary kernel and discards edits,
+The playground opens as a movable, resizable window bounded to the still-visible
+Microscope workspace, using the existing single-cell editor, completion,
+run/interrupt and output controls. Its title bar moves it; its visible bottom-right
+grip resizes it. **Close playground** stops the temporary kernel and discards edits,
 outputs and variables. Closing the window and the WebMCP close operation share
 that cleanup path. Saved step source and the original notebook remain unchanged.
 Only one playground is active at a time. While mounted,

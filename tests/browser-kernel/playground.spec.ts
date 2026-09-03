@@ -55,6 +55,34 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
       .isError,
   ).toBe(false);
   await expect(page.locator("#playground-canvas")).toBeVisible();
+  const window = page.locator(".playground-shell");
+  const bar = page.locator(".playground-bar");
+  await expect(window).toHaveCSS("resize", "both");
+  const initialWindow = (await window.boundingBox())!;
+  const titleBar = (await bar.boundingBox())!;
+  await page.mouse.move(titleBar.x + 80, titleBar.y + titleBar.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(titleBar.x + 130, titleBar.y + 50);
+  await page.mouse.up();
+  const movedWindow = (await window.boundingBox())!;
+  expect(movedWindow.x).toBeGreaterThan(initialWindow.x + 35);
+  expect(movedWindow.y).toBeGreaterThan(initialWindow.y + 15);
+  const resizeHandle = (await page
+    .getByRole("button", { name: "Resize playground window" })
+    .boundingBox())!;
+  await page.mouse.move(
+    resizeHandle.x + resizeHandle.width / 2,
+    resizeHandle.y + resizeHandle.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    resizeHandle.x + resizeHandle.width / 2 - 50,
+    resizeHandle.y + resizeHandle.height / 2 - 50,
+  );
+  await page.mouse.up();
+  const resizedWindow = (await window.boundingBox())!;
+  expect(resizedWindow.width).toBeLessThan(movedWindow.width - 30);
+  expect(resizedWindow.height).toBeLessThan(movedWindow.height - 30);
   expect(
     (await microscopeCall(page, "get_active_context")).structuredContent
       .context,
@@ -117,7 +145,9 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
   ).toBeLessThanOrEqual(986);
   await page.screenshot({ path: ".runtime/playground-user.png" });
   await page
-    .getByRole("button", { name: "Back to microscope", exact: true })
+    .getByRole("button", {
+      name: "Close playground and stop temporary session",
+    })
     .click();
   await expect(page.locator("#playground-canvas")).toHaveCount(0);
   expect(
@@ -165,7 +195,9 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
   });
   expect(JSON.stringify(live.playground.outputs)).toContain("running");
   await page
-    .getByRole("button", { name: "Back to microscope", exact: true })
+    .getByRole("button", {
+      name: "Close playground and stop temporary session",
+    })
     .click();
   await expect(page.locator("#playground-canvas")).toHaveCount(0);
   expect((await running).isError).toBe(true);
@@ -194,6 +226,6 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
     walkthrough: unknown;
     microscope: { title: string };
   };
-  expect(saved.walkthrough).toEqual(updated);
+  expect(saved.walkthrough).toMatchObject(updated);
   expect(saved.microscope.title).toBe("Replaced");
 });

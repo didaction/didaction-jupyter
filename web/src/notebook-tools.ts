@@ -63,8 +63,10 @@ const walkthroughMarkdown: Field = {
   type: "string",
   maxLength: 64000,
   description:
-    "Rendered CommonMark. Inline math uses $...$ and display math uses $$...$$; both are typeset in the notebook and microscope UI.",
+    "Concise rendered CommonMark for explanation or caption regions. Inline math uses $...$ and display math uses $$...$$. Do not repeat the step title: fixed navigation already displays it, and large text wastes the teaching canvas.",
 };
+const microscopeAuthoringGuide =
+  "Authoring workflow: inspect the live schemas; use list_microscopes and read_microscope before replacing existing work; create or update the complete walkthrough; open/focus each step; call capture_microscope_step; inspect the PNG and graphics health; then revise and recapture. Teach one clear concept per step. Make each step a distinct, topic-specific, animated, diagram-led explanation—not a text-heavy slide. Use arrows, connections and consistent colors to make causality memorable. Separate diagram, concise explanation, caption and code regions. Never assume a valid save looks good: accept only when the capture has clear hierarchy with no overlap or clipping, graphics.error is null, and graphics.frames is greater than zero.";
 const index: Field = { type: "integer", minimum: 0, maximum: 2047 };
 const timeout: Field = { type: "integer", minimum: 1, maximum: 120000 };
 const definitions: ToolDefinition[] = [];
@@ -95,7 +97,7 @@ function define(
 }
 define(
   "list_microscopes",
-  "List microscope IDs and titles for a cell.",
+  "Start microscope work here: list IDs and titles already owned by a cell. Read an existing microscope before deciding whether to update it or create a distinct one.",
   { cell_id: id },
   undefined,
   true,
@@ -123,24 +125,24 @@ const microScope = {
 };
 define(
   "open_playground",
-  "Open a step's separate playground code in a temporary one-cell notebook with a fresh kernel. Driver only. Does not execute automatically.",
+  "Open a microscope step's playground_code in a movable, resizable temporary one-cell window with a fresh isolated kernel. Use it for a hands-on experiment that reinforces the current step, not for the step's explanatory graphics. Driver only; does not execute automatically and cannot alter the owning notebook.",
   { ...microScope, step_index: { type: "integer", minimum: 0, maximum: 63 } },
 );
 define(
   "close_playground",
-  "Exit the temporary notebook and destroy its kernel; discard edits and outputs.",
+  "Close the playground window, stop its temporary kernel, and permanently discard its draft, variables and outputs. The owning microscope and notebook are unchanged.",
   {},
 );
 define(
   "read_playground",
-  "Read the currently displayed temporary notebook and its outputs.",
+  "Read the current playground draft, execution count, kernel state and latest outputs without waiting for queued execution. Use during a running experiment to observe intermediate output; returns null when no playground is open.",
   {},
   [],
   true,
 );
 define(
   "execute_playground",
-  "Execute the temporary cell, optionally replacing its source first. Driver-only unsafe local execution.",
+  "Execute the playground's one temporary cell, optionally replacing its draft source first. Read it afterward to inspect outputs. Driver-only unsafe local execution; changes, variables and outputs disappear when close_playground is called or the window is closed.",
   { source },
   [],
   false,
@@ -150,6 +152,8 @@ const shortId: Field = { type: "string", minLength: 1, maxLength: 64 };
 const title: Field = { type: "string", minLength: 1, maxLength: 128 };
 const annotation: Field = {
   type: "object",
+  description:
+    "A precise code explanation: highlight only the lines or character range that perform the stated action, and explain both what the code does and why it matters. Use focus_microscope_annotation when the range must be visually obvious.",
   additionalProperties: false,
   required: ["id", "start_line", "end_line", "text"],
   properties: {
@@ -217,7 +221,12 @@ const walkthrough: Field = {
           title,
           code: source,
           markdown: walkthroughMarkdown,
-          playground_code: { ...source, minLength: 1 },
+          playground_code: {
+            ...source,
+            minLength: 1,
+            description:
+              "Optional self-contained hands-on experiment for this step. It runs only when explicitly opened and executed in a fresh isolated temporary kernel; do not depend on the notebook kernel or earlier playgrounds.",
+          },
           graphics: {
             type: "object",
             additionalProperties: false,
@@ -228,7 +237,7 @@ const walkthrough: Field = {
                 ...source,
                 minLength: 1,
                 description:
-                  "AssemblyScript exports: init(width:i32,height:i32,stepIndex:i32):void; render(width:i32,height:i32,elapsed:f64,delta:f64):usize returns a pointer to width*height*4 unpremultiplied RGBA bytes; dispose():void. Physical pixels, seconds, max 1024x768; fixed 16 MiB stub runtime, reuse allocations. Only memory and abort imports are allowed; no browser/kernel APIs.",
+                  "Animated AssemblyScript RGBA graphics. Export init(width:i32,height:i32,stepIndex:i32):void, render(width:i32,height:i32,elapsed:f64,delta:f64):usize, and dispose():void. render returns a pointer to width*height*4 unpremultiplied RGBA bytes. Dimensions are physical pixels, usually no more than 1024x768; elapsed/delta are seconds. Allocate one fixed StaticArray<u8> pixel buffer, reuse it, never allocate inside render, and bounds-check every pixel write. The stub runtime is fixed at 16 MiB; only memory and abort imports are allowed—no browser or kernel APIs.",
               },
               description: { type: "string", minLength: 1, maxLength: 1024 },
               artifact: {
@@ -247,7 +256,7 @@ const walkthrough: Field = {
             maxItems: 32,
             items: walkthroughOverlay,
             description:
-              "Workspace-relative overlays in thousandths (0..1000). Markdown may appear multiple times; navigation remains fixed above the stage.",
+              "Place code, concise Markdown explanation/caption regions, and graphics controls over the stage. Coordinates are workspace-relative thousandths (0..1000), while graphics use physical pixels, so convert deliberately. Navigation and the step title remain fixed above the stage: do not add a title overlay. Markdown may appear multiple times. Keep important graphics above about overlay y=440 when code begins near y=650.",
           },
         },
       },
@@ -256,22 +265,17 @@ const walkthrough: Field = {
 };
 define(
   "create_microscope",
-  "Create a complete microscope and its walkthrough in one operation. A nonempty walkthrough is required; playground_code optionally supplies separate self-contained executable code per step.",
+  `Create a complete microscope and walkthrough in one operation. A nonempty walkthrough is required; playground_code optionally supplies separate self-contained executable code per step. ${microscopeAuthoringGuide}`,
   { cell_id: id, title, walkthrough },
 );
 define(
   "update_microscope",
-  "Replace the entire microscope content and title, preserving its ID and owning cell.",
-  { ...microScope, walkthrough },
-);
-define(
-  "set_microscope_walkthrough",
-  "Replace a microscope's complete walkthrough. Display-only code, ordered steps, Markdown and inclusive one-based line annotations, optionally narrowed to one-based character columns on one line. Driver-only; saved in its sidecar.",
+  `Replace a microscope's complete walkthrough and title, preserving its ID and owning cell. Code is display-only; annotations use inclusive one-based lines and may narrow to one-based character columns on a single line. Driver-only; saved in its sidecar. ${microscopeAuthoringGuide}`,
   { ...microScope, walkthrough },
 );
 define(
   "read_microscope",
-  "Read the saved microscope document and its walkthrough.",
+  `Read the saved microscope document and full walkthrough before editing so an update preserves deliberate steps, overlays, annotations and graphics. ${microscopeAuthoringGuide}`,
   microScope,
   undefined,
   true,
@@ -285,7 +289,7 @@ define(
 );
 define(
   "focus_microscope_annotation",
-  "Open a step and pulse the named annotation's code range. Does not change saved annotations or execute code.",
+  "Open a step and pulse the named annotation's exact code range so it is obvious in the UI and captures. Use after saving to verify annotation placement; does not change content or execute code.",
   {
     ...microScope,
     step_index: { type: "integer", minimum: 0, maximum: 63 },
@@ -321,7 +325,7 @@ define(
 );
 define(
   "capture_microscope_step",
-  "Capture the currently rendered microscope stage as PNG for visual design feedback. Includes the graphics background and all overlays, but not fixed navigation.",
+  "Capture the currently rendered microscope stage as PNG for required visual design feedback. Open or focus the intended step first, inspect the returned image for hierarchy, overlap, clipping, legibility and topic-specific visual impact, then revise and capture again. Includes graphics and overlays, not fixed navigation. Accept only when graphics.error is null and graphics.frames is greater than zero.",
   {},
   [],
   true,
@@ -691,11 +695,7 @@ export class NotebookTools implements NotebookToolInvoker {
               )?.items ?? [],
           });
         }
-        if (
-          name === "set_microscope_walkthrough" ||
-          name === "update_microscope" ||
-          name === "read_microscope"
-        ) {
+        if (name === "update_microscope" || name === "read_microscope") {
           const result = await send(
             name === "update_microscope" ? "set_microscope_walkthrough" : name,
             {

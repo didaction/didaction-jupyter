@@ -287,12 +287,39 @@ describe("transport-neutral notebook tools", () => {
       },
     });
     expect(installed.available).toBe(true);
-    expect(registered).toHaveLength(33);
+    expect(registered).toHaveLength(32);
     expect(
       registered.find((tool) => tool.name === "create_microscope")!.inputSchema
         .properties.walkthrough!.properties?.steps?.items?.properties?.markdown
         ?.description,
     ).toContain("$...$");
+    expect(
+      registered.find((tool) => tool.name === "create_microscope")!.description,
+    ).toContain("capture_microscope_step");
+    expect(
+      registered.find((tool) => tool.name === "create_microscope")!.description,
+    ).toContain("one clear concept per step");
+    expect(
+      registered.find((tool) => tool.name === "create_microscope")!.description,
+    ).toContain("list_microscopes and read_microscope");
+    expect(
+      registered.find((tool) => tool.name === "create_microscope")!.description,
+    ).toContain("not a text-heavy slide");
+    expect(
+      registered.find((tool) => tool.name === "capture_microscope_step")!
+        .description,
+    ).toContain("graphics.frames is greater than zero");
+    expect(
+      registered.find((tool) => tool.name === "update_microscope")!.inputSchema
+        .properties.walkthrough!.properties?.steps?.items?.properties?.graphics
+        ?.properties?.source?.description,
+    ).toContain("never allocate inside render");
+    expect(
+      registered.find((tool) => tool.name === "open_playground")!.description,
+    ).toContain("movable, resizable temporary one-cell window");
+    expect(
+      registered.find((tool) => tool.name === "set_microscope_walkthrough"),
+    ).toBeUndefined();
     expect(
       (
         await registered
@@ -302,7 +329,7 @@ describe("transport-neutral notebook tools", () => {
     ).toBe(false);
     expect(h.calls).toHaveLength(1);
     installed.dispose();
-    expect(removed).toHaveLength(33);
+    expect(removed).toHaveLength(32);
     expect((await installWebMcp(h.tools, {} as ModelContext)).available).toBe(
       false,
     );
@@ -322,7 +349,7 @@ describe("transport-neutral notebook tools", () => {
     try {
       const installed = await installWebMcp(harness().tools);
       expect(installed.available).toBe(true);
-      expect(completed).toBe(33);
+      expect(completed).toBe(32);
       installed.dispose();
       expect(signals.every((signal) => signal.aborted)).toBe(true);
     } finally {

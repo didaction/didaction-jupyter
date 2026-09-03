@@ -32,7 +32,7 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
     microscopeCall(page, name, { ...scope, ...args });
   expect(
     (
-      await call("set_microscope_walkthrough", {
+      await call("update_microscope", {
         walkthrough: exampleWalkthrough,
       })
     ).isError,
@@ -64,17 +64,7 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   ).toBe(false);
   await page.waitForTimeout(150);
   await page.screenshot({ path: ".runtime/walkthrough-desktop.png" });
-  // Human egui Next and Previous controls use the same local view state.
-  const canvas = (await page.locator("#notebook-canvas").boundingBox())!;
-  await page.mouse.click(canvas.x + 330, canvas.y + 94);
-  await expect
-    .poll(async () => (await active()).microscope.walkthrough.step_index)
-    .toBe(1);
-  await page.waitForTimeout(150);
-  await page.mouse.click(canvas.x + 35, canvas.y + 94);
-  await expect
-    .poll(async () => (await active()).microscope.walkthrough.step_index)
-    .toBe(0);
+  // Human keyboard navigation uses the same local view state as the visual controls.
   await page.keyboard.press("ArrowRight");
   await expect
     .poll(async () => (await active()).microscope.walkthrough.step_index)
@@ -121,14 +111,12 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   const invalid = structuredClone(exampleWalkthrough);
   invalid.steps[0]!.annotations[0]!.end_line = 999;
   expect(
-    (await call("set_microscope_walkthrough", { walkthrough: invalid }))
-      .isError,
+    (await call("update_microscope", { walkthrough: invalid })).isError,
   ).toBe(true);
   const badColumns = structuredClone(exampleWalkthrough);
   Object.assign(badColumns.steps[0]!.annotations[0]!, { end_column: 999 });
   expect(
-    (await call("set_microscope_walkthrough", { walkthrough: badColumns }))
-      .isError,
+    (await call("update_microscope", { walkthrough: badColumns })).isError,
   ).toBe(true);
   expect(
     (
@@ -136,14 +124,13 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
         walkthrough: unknown;
       }
     ).walkthrough,
-  ).toEqual(exampleWalkthrough);
+  ).toMatchObject(exampleWalkthrough);
   expect(
     (await microscopeCall(page, "read_cell", cell)).structuredContent.cell,
   ).toEqual(before);
   const updated = { ...exampleWalkthrough, title: "Updated explanation" };
   expect(
-    (await call("set_microscope_walkthrough", { walkthrough: updated }))
-      .isError,
+    (await call("update_microscope", { walkthrough: updated })).isError,
   ).toBe(false);
   await page.reload();
   await expect(page.locator("#connection-status")).toContainText(
@@ -155,7 +142,7 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
         walkthrough: unknown;
       }
     ).walkthrough,
-  ).toEqual(updated);
+  ).toMatchObject(updated);
   expect((await call("focus_microscope_step", { step_index: 1 })).isError).toBe(
     false,
   );

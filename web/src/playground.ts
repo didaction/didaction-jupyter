@@ -328,8 +328,12 @@ export class PlaygroundController {
     panel.setAttribute("aria-label", "Temporary playground");
     const bar = document.createElement("div");
     bar.className = "playground-bar";
+    const heading = document.createElement("strong");
+    heading.textContent = `Playground · ${view.step_title}`;
     const back = document.createElement("button");
-    back.textContent = "Close playground";
+    back.className = "playground-close";
+    back.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>';
     back.setAttribute(
       "aria-label",
       "Close playground and stop temporary session",
@@ -343,15 +347,114 @@ export class PlaygroundController {
     message.textContent = observer
       ? "Following driver · read-only"
       : "Fresh kernel · discarded on exit";
-    bar.append(back, message);
+    bar.append(heading, message, back);
     const canvas = document.createElement("canvas");
     canvas.id = "playground-canvas";
     canvas.setAttribute("aria-label", "Playground notebook editor");
     const viewport = document.createElement("div");
     viewport.className = "playground-viewport";
     viewport.append(canvas);
-    panel.append(bar, viewport);
-    document.querySelector("#notebook-shell")!.append(panel);
+    const resize = document.createElement("button");
+    resize.className = "playground-resize";
+    resize.type = "button";
+    resize.setAttribute("aria-label", "Resize playground window");
+    resize.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10 10 20M20 15l-5 5M20 5 5 20" /></svg>';
+    panel.append(bar, viewport, resize);
+    const shell = document.querySelector<HTMLElement>("#notebook-shell")!;
+    shell.append(panel);
+    let drag:
+      | {
+          pointer: number;
+          x: number;
+          y: number;
+          left: number;
+          top: number;
+        }
+      | undefined;
+    bar.addEventListener("pointerdown", (event) => {
+      if ((event.target as Element).closest("button")) return;
+      const bounds = panel.getBoundingClientRect();
+      const host = shell.getBoundingClientRect();
+      drag = {
+        pointer: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        left: bounds.left - host.left,
+        top: bounds.top - host.top,
+      };
+      panel.style.transform = "none";
+      panel.style.left = `${drag.left}px`;
+      panel.style.top = `${drag.top}px`;
+      bar.setPointerCapture(event.pointerId);
+    });
+    bar.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointer !== event.pointerId) return;
+      const maxLeft = Math.max(0, shell.clientWidth - panel.offsetWidth);
+      const maxTop = Math.max(0, shell.clientHeight - panel.offsetHeight);
+      panel.style.left = `${Math.min(maxLeft, Math.max(0, drag.left + event.clientX - drag.x))}px`;
+      panel.style.top = `${Math.min(maxTop, Math.max(0, drag.top + event.clientY - drag.y))}px`;
+    });
+    const endDrag = (event: PointerEvent) => {
+      if (drag?.pointer !== event.pointerId) return;
+      drag = undefined;
+      if (bar.hasPointerCapture(event.pointerId))
+        bar.releasePointerCapture(event.pointerId);
+    };
+    bar.addEventListener("pointerup", endDrag);
+    bar.addEventListener("pointercancel", endDrag);
+    let sizing:
+      | {
+          pointer: number;
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }
+      | undefined;
+    resize.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      const bounds = panel.getBoundingClientRect();
+      const host = shell.getBoundingClientRect();
+      panel.style.transform = "none";
+      panel.style.left = `${bounds.left - host.left}px`;
+      panel.style.top = `${bounds.top - host.top}px`;
+      panel.style.width = `${bounds.width}px`;
+      panel.style.height = `${bounds.height}px`;
+      sizing = {
+        pointer: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        width: bounds.width,
+        height: bounds.height,
+      };
+      resize.setPointerCapture(event.pointerId);
+    });
+    resize.addEventListener("pointermove", (event) => {
+      if (!sizing || sizing.pointer !== event.pointerId) return;
+      const minWidth = Math.min(360, shell.clientWidth - 16);
+      const minHeight = Math.min(320, shell.clientHeight - 16);
+      const left = panel.offsetLeft;
+      const top = panel.offsetTop;
+      const width = Math.min(
+        shell.clientWidth - left,
+        Math.max(minWidth, sizing.width + event.clientX - sizing.x),
+      );
+      const height = Math.min(
+        shell.clientHeight - top,
+        Math.max(minHeight, sizing.height + event.clientY - sizing.y),
+      );
+      panel.style.width = `${width}px`;
+      panel.style.height = `${height}px`;
+    });
+    const endResize = (event: PointerEvent) => {
+      if (sizing?.pointer !== event.pointerId) return;
+      sizing = undefined;
+      if (resize.hasPointerCapture(event.pointerId))
+        resize.releasePointerCapture(event.pointerId);
+    };
+    resize.addEventListener("pointerup", endResize);
+    resize.addEventListener("pointercancel", endResize);
     this.panel = panel;
     this.message = message;
     const mounted = await mountNotebook(

@@ -524,9 +524,13 @@ impl NotebookEguiApp {
                                                     },
                                                 )
                                             }))
-                                            .stroke(focused_annotation.map_or(Stroke::NONE, |a| {
-                                                Stroke::new(2.0, color(a.color))
-                                            }))
+                                            .stroke(Stroke::new(
+                                                2.0,
+                                                focused_annotation
+                                                    .map_or(Color32::TRANSPARENT, |a| {
+                                                        color(a.color)
+                                                    }),
+                                            ))
                                             .inner_margin(Margin::symmetric(6, 3))
                                             .show(ui, |ui| {
                                                 ui.label(text);
@@ -547,33 +551,13 @@ impl NotebookEguiApp {
                                                         annotation.start_line, annotation.end_line
                                                     )
                                                 };
-                                            let response = egui::Frame::new()
-                                                .fill(if selected {
-                                                    color(annotation.color).gamma_multiply(0.14)
-                                                } else {
-                                                    Color32::TRANSPARENT
-                                                })
-                                                .stroke(if selected {
-                                                    Stroke::new(2.0, color(annotation.color))
-                                                } else {
-                                                    Stroke::new(
-                                                        1.0,
-                                                        Color32::from_rgb(215, 220, 223),
-                                                    )
-                                                })
-                                                .inner_margin(Margin::symmetric(8, 6))
-                                                .show(ui, |ui| {
-                                                    ui.horizontal_wrapped(|ui| {
-                                                        ui.label(
-                                                            RichText::new(location)
-                                                                .monospace()
-                                                                .strong(),
-                                                        );
-                                                        ui.label(&annotation.text);
-                                                    });
-                                                })
-                                                .response
-                                                .interact(egui::Sense::click());
+                                            let response = walkthrough_annotation_button(
+                                                ui,
+                                                &location,
+                                                &annotation.text,
+                                                color(annotation.color),
+                                                selected,
+                                            );
                                             if response.clicked() {
                                                 let _ = self.focus_walkthrough(WalkthroughFocus {
                                                     step_index: focus.step_index,
@@ -592,6 +576,40 @@ impl NotebookEguiApp {
             });
         }
     }
+}
+
+fn walkthrough_annotation_button(
+    ui: &mut egui::Ui,
+    location: &str,
+    text: &str,
+    accent: Color32,
+    selected: bool,
+) -> egui::Response {
+    egui::Frame::new()
+        .fill(if selected {
+            accent.gamma_multiply(0.14)
+        } else {
+            Color32::TRANSPARENT
+        })
+        // Reserve the focused outline in both states so focusing never changes
+        // the annotation's measured geometry or pushes neighboring content.
+        .stroke(Stroke::new(
+            2.0,
+            if selected {
+                accent
+            } else {
+                Color32::from_rgb(215, 220, 223)
+            },
+        ))
+        .inner_margin(Margin::symmetric(8, 6))
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(location).monospace().strong());
+                ui.label(text);
+            });
+        })
+        .response
+        .interact(egui::Sense::click())
 }
 
 fn walkthrough_light(ui: &mut egui::Ui, active: bool, position: usize, title: &str) -> bool {
@@ -772,5 +790,30 @@ mod tests {
         assert_eq!(highlighted, "🙂x");
         assert_eq!(job.text, "α🙂xy");
         assert_eq!(annotated_line("", &[], "python3").text, " ");
+    }
+
+    #[test]
+    fn focusing_an_annotation_does_not_change_its_layout_size() {
+        let measure = |selected| {
+            let context = egui::Context::default();
+            let mut size = egui::Vec2::ZERO;
+            let _ = context.run(egui::RawInput::default(), |context| {
+                egui::CentralPanel::default().show(context, |ui| {
+                    ui.set_width(320.0);
+                    size = walkthrough_annotation_button(
+                        ui,
+                        "L3-4",
+                        "Draw the bars, then display the figure.",
+                        Color32::from_rgb(45, 105, 143),
+                        selected,
+                    )
+                    .rect
+                    .size();
+                });
+            });
+            size
+        };
+
+        assert_eq!(measure(false), measure(true));
     }
 }

@@ -11,13 +11,15 @@ runtime isolation, cleanup, and tool API.
 
 ## Layout
 
-The temporary view fills the notebook area, not the entire application. A compact
-top row places **Back to microscope** at the left beside the fresh-kernel or
-read-only message. The existing notebook canvas is hidden while this view is
-mounted and restored on exit.
+The temporary view is a bounded window inside the Microscope workspace, not the
+browser viewport. Its title bar names the owning step, reports fresh-kernel or
+read-only state, and can drag the window without moving it outside the workspace.
+The bottom-right grip resizes within minimum and workspace bounds. A standard
+close control stops the temporary session and returns input to the still-visible
+Microscope beneath it.
 
-The editor canvas sits in its own remaining-height viewport below the return row.
-Keep that viewport as the canvas's direct sizing parent so the return row is not
+The editor canvas sits in its own remaining-height viewport below the title bar.
+Keep that viewport as the canvas's direct sizing parent so the title bar is not
 counted again in its height. Within egui, the bottom status panel initially uses
 its previous measured height; wrapping can increase the required height. When
 the measured status row overflows its clip, `status()` requests a discard and
@@ -36,16 +38,16 @@ light palette, code typography, selection treatment, and restrained chrome.
   controls, and “Temporary · edits and outputs are discarded on exit.” Completion,
   code editing, and output rendering reuse the notebook implementation. Save,
   rename, cell insertion, and other document-structure actions are not offered.
-- The return row says “Fresh kernel · discarded on exit” for the driver, or
+- The title bar says “Fresh kernel · discarded on exit” for the driver, or
   “Following driver · read-only” for an observer. Server followers can inspect
-  code and outputs but cannot edit or execute. Their return action leaves
+  code and outputs but cannot edit or execute. Their close action leaves
   following; it does not close the driver's playground. Browser mode is local
   and does not offer browser-to-browser following.
 - Synchronized temporary state reads “Ready,” not “Saved”; uncommitted editing
   reads “Edit pending.” Existing running, disconnected, and action-required states
   remain visible without implying that temporary work is persisted.
 - Driver exit stops the temporary kernel and discards edits, outputs, and
-  variables, returning to the microscope. During server cleanup the return row
+  variables, returning to the microscope. During server cleanup the title bar
   reports “Stopping temporary kernel…”. A failed close leaves a visible error
   and permits retry rather than silently claiming cleanup succeeded.
 
