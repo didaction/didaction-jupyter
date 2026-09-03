@@ -35,7 +35,7 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
         title: "Setup then experiment",
         code: "setup_value",
         annotations: [],
-        markdown: "Explore a fresh kernel.",
+        description: "Explore a fresh kernel.",
         playground_code: "setup_value = 40 + 2\nprint(setup_value)",
       },
     ],
@@ -211,7 +211,7 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
   const updated = {
     ...walkthrough,
     title: "Replaced",
-    steps: [{ ...walkthrough.steps[0]!, markdown: "Replacement" }],
+    steps: [{ ...walkthrough.steps[0]!, description: "Replacement" }],
   };
   expect(
     (

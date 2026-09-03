@@ -32,8 +32,15 @@ test("browser workspace export bundles notebooks and microscopes; explorer stays
           id: "one",
           title: "One",
           code: "42",
-          markdown: "A saved explanation",
-          graphics: { ...waveGraphics, artifact: "waves.ts" },
+          description: "A saved explanation",
+          graphics_regions: [
+            {
+              id: "waves",
+              bounds: { x: 500, y: 100, width: 450, height: 400 },
+              ...waveGraphics,
+              artifact: "waves.ts",
+            },
+          ],
         },
       ],
     },
@@ -80,7 +87,7 @@ test("browser workspace export bundles notebooks and microscopes; explorer stays
     await installMicroscopeTools(restored);
     await restored.goto(new URL("/", page.url()).href);
     await expect(
-      restored.getByRole("heading", { name: "Open a browser workspace" }),
+      restored.getByRole("heading", { name: "Choose a workspace and kernel" }),
     ).toBeVisible();
     await restored.locator("#browser-zip").setInputFiles({
       name: "workspace.zip",
@@ -105,7 +112,7 @@ test("browser workspace export bundles notebooks and microscopes; explorer stays
     .getByRole("button", { name: "Choose another environment" })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Open a browser workspace" }),
+    page.getByRole("heading", { name: "Choose a workspace and kernel" }),
   ).toBeVisible();
   await expect(page.locator("#browser-home")).toBeHidden();
   await page.getByRole("button", { name: "Continue saved workspace" }).click();

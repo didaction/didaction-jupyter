@@ -68,7 +68,7 @@ const stepDescription: Field = {
     "One short, single-paragraph CommonMark explanation shown beside the fixed step navigation. Use inline math with $...$, for example $E = mc^2$, whenever notation improves understanding. Do not repeat the title, add images, HTML, headings, lists, or line breaks.",
 };
 const microscopeAuthoringGuide =
-  "Microscope is a guided visual explanation attached to one notebook cell. Start with get_active_context, then list_microscopes and read_microscope. Teach one clear concept per step: use a clear title, one short math-capable description, focused read-only code, and zero or more topic-specific animated graphics regions. Use code_range annotations to explain code and graphics_point annotations as hoverable callouts on diagrams. After every meaningful edit, open the step, focus important annotations, and call capture_microscope_step; revise until the PNG has clear hierarchy, no overlap or clipping, graphics errors are null, and every region has rendered frames. Prefer diagrams, motion, arrows and consistent color over large text.";
+  "Microscope is a guided visual explanation attached to one notebook cell. Start with get_active_context, then list_microscopes and read_microscope. Teach one clear concept per step: use a clear title, one short math-capable description, focused read-only code, and zero or more topic-specific animated graphics regions. All regions alpha-composite into one shared step canvas in array order; leave unused pixels transparent so regions do not appear as boxes. Use code_range annotations to explain code and graphics_point annotations as hoverable callouts on diagrams. After every meaningful edit, open the step, focus important annotations, and call capture_microscope_step; revise until the PNG has clear hierarchy, no overlap or clipping, graphics errors are null, and every region has rendered frames. Prefer diagrams, motion, arrows and consistent color over large text.";
 const index: Field = { type: "integer", minimum: 0, maximum: 2047 };
 const timeout: Field = { type: "integer", minimum: 1, maximum: 120000 };
 const definitions: ToolDefinition[] = [];
@@ -221,7 +221,7 @@ const graphicsRegion: Field = {
       ...source,
       minLength: 1,
       description:
-        "Animated AssemblyScript RGBA for only this region. Export init(width:i32,height:i32,stepIndex:i32), render(width:i32,height:i32,elapsed:f64,delta:f64):usize, and dispose(). Reuse one fixed StaticArray<u8>; never allocate in render; bounds-check writes. Region dimensions are physical pixels capped at 1024x768.",
+        "Animated AssemblyScript RGBA for this compositing layer. Export init(width:i32,height:i32,stepIndex:i32), render(width:i32,height:i32,elapsed:f64,delta:f64):usize, and dispose(). Reuse one fixed StaticArray<u8>; never allocate in render; bounds-check writes. Region dimensions are physical pixels capped at 1024x768. Clear the buffer to transparent and paint only the intended element; opaque pixels cover earlier layers.",
     },
     description: {
       type: "string",
@@ -270,7 +270,7 @@ const walkthrough: Field = {
             maxItems: 8,
             items: graphicsRegion,
             description:
-              "Independent diagram regions positioned in workspace-relative thousandths (0..1000). Order controls paint order. Use multiple regions only when separate visual elements improve the explanation; do not draw unused full-canvas pixels.",
+              "Transparent diagram layers positioned in workspace-relative thousandths (0..1000) and composited into one canvas. Array order controls paint order. Use multiple regions only when separate visual elements improve the explanation; leave unused pixels transparent and do not repaint rectangular backgrounds unless deliberately requested.",
           },
         },
       },

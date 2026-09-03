@@ -64,9 +64,19 @@ export class IndexedNotebookStore implements NotebookStore {
     previous?: string,
   ): Promise<void> {
     browserPath(path, true);
-    const priorGraphics: Record<string, string> = previous
-      ? JSON.parse(microscopeGraphicsArtifacts(previous))
-      : {};
+    let priorGraphics: Record<string, string> = {};
+    if (previous) {
+      try {
+        priorGraphics = JSON.parse(microscopeGraphicsArtifacts(previous));
+      } catch (error) {
+        // A deletion may target a sidecar written by an older, intentionally
+        // incompatible walkthrough schema. Its derived sidecar path is still
+        // owned by the validated notebook reference, so remove that file while
+        // leaving unrecognized attachments untouched rather than making the
+        // microscope impossible to delete.
+        if (content !== null) throw error;
+      }
+    }
     const nextGraphics: Record<string, string> = content
       ? JSON.parse(microscopeGraphicsArtifacts(content))
       : {};

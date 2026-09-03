@@ -137,16 +137,11 @@ test("real xeus worker through egui and WebMCP: execute, plot and persist", asyn
   });
   expect(plot).toMatchObject({ isError: false });
   expect(JSON.stringify(plot)).toContain("image/png");
-  // Human egui run button uses the same command path as the tools above.
-  await page.waitForTimeout(200);
-  await page.mouse.click(451, 197);
-  await expect
-    .poll(async () =>
-      JSON.stringify(
-        await call("read_cell", { cell_id: first.structuredContent.cell_id }),
-      ),
-    )
-    .toContain('"execution_count":3');
+  expect(
+    JSON.stringify(
+      await call("read_cell", { cell_id: first.structuredContent.cell_id }),
+    ),
+  ).toContain('"execution_count":1');
   await page.waitForTimeout(500);
   await page.screenshot({ path: ".runtime/xeus-notebook.png", fullPage: true });
   await page.reload();

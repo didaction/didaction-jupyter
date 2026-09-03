@@ -176,18 +176,17 @@ impl NotebookEguiApp {
         );
         for region in &step.graphics_regions {
             let rect = stage_rect(stage, &region.bounds);
-            ui.painter().rect_filled(
-                rect,
-                3.0,
-                background_color(region.background.as_ref(), Color32::TRANSPARENT),
-            );
+            // Regions are layers in one stage canvas, not visible cards. Paint
+            // their optional base into the shared canvas, then alpha-composite
+            // the rendered pixels directly over it.
+            if region.background.is_some() {
+                ui.painter().rect_filled(
+                    rect,
+                    0.0,
+                    background_color(region.background.as_ref(), Color32::TRANSPARENT),
+                );
+            }
             self.graphics_region(ui, &region.id, rect);
-            ui.painter().rect_stroke(
-                rect,
-                3.0,
-                Stroke::new(1.0, Color32::from_gray(210)),
-                egui::StrokeKind::Inside,
-            );
             let response = ui.interact(
                 rect,
                 ui.id().with((&region.id, "graphics")),
@@ -224,11 +223,17 @@ impl NotebookEguiApp {
     ) {
         ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
             ui.set_clip_rect(rect);
+            ui.set_min_size(rect.size());
+            ui.set_max_size(rect.size());
             egui::Frame::new()
                 .fill(Color32::from_white_alpha(242))
                 .stroke(Stroke::new(1.0, Color32::from_gray(205)))
                 .inner_margin(Margin::same(8))
                 .show(ui, |ui| {
+                    let viewport_height = (rect.height() * 0.55).clamp(60.0, 280.0);
+                    ui.set_max_width((rect.width() - 18.0).max(40.0));
+                    ui.style_mut().spacing.scroll.floating = false;
+                    ui.style_mut().spacing.scroll.bar_width = 10.0;
                     ui.horizontal(|ui| {
                         if step.playground_code.is_some()
                             && toolbar_icon_button(
@@ -256,7 +261,31 @@ impl NotebookEguiApp {
                     });
                     egui::ScrollArea::both()
                         .id_salt((scope, "code"))
+                        .auto_shrink([false, false])
+                        .scroll_bar_visibility(
+                            egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                        )
+                        .max_height(viewport_height)
+                        .max_width((rect.width() - 18.0).max(40.0))
                         .show(ui, |ui| {
+                            let font = egui::TextStyle::Monospace.resolve(ui.style());
+                            let content_width = step
+                                .code
+                                .split('\n')
+                                .enumerate()
+                                .map(|(line, source)| {
+                                    ui.painter()
+                                        .layout_no_wrap(
+                                            format!("{:>4}  {source}", line + 1),
+                                            font.clone(),
+                                            Color32::BLACK,
+                                        )
+                                        .size()
+                                        .x
+                                        + 16.0
+                                })
+                                .fold(0.0_f32, f32::max);
+                            ui.set_min_width(content_width);
                             for (line, source) in step.code.split('\n').enumerate() {
                                 let code_annotations: Vec<_> = step
                                     .annotations
@@ -286,33 +315,35 @@ impl NotebookEguiApp {
                                     ))
                                     .inner_margin(Margin::symmetric(6, 3))
                                     .show(ui, |ui| {
-                                        ui.label(
-                                            RichText::new(format!("{:>4}  {source}", line + 1))
-                                                .monospace(),
+                                        ui.add(
+                                            egui::Label::new(
+                                                RichText::new(format!("{:>4}  {source}", line + 1))
+                                                    .monospace(),
+                                            )
+                                            .wrap_mode(egui::TextWrapMode::Extend),
                                         );
                                     });
                             }
-                            if !step.annotations.is_empty() {
-                                ui.separator();
-                                for annotation in &step.annotations {
-                                    let selected =
-                                        focus.annotation_id.as_ref() == Some(&annotation.id);
-                                    let response = walkthrough_annotation_button(
-                                        ui,
-                                        &annotation_location(annotation),
-                                        &annotation.text,
-                                        color(annotation.color),
-                                        selected,
-                                    );
-                                    if response.clicked() {
-                                        let _ = self.focus_walkthrough(WalkthroughFocus {
-                                            step_index: focus.step_index,
-                                            annotation_id: Some(annotation.id.clone()),
-                                        });
-                                    }
-                                }
-                            }
                         });
+                    if !step.annotations.is_empty() {
+                        ui.separator();
+                        for annotation in &step.annotations {
+                            let selected = focus.annotation_id.as_ref() == Some(&annotation.id);
+                            let response = walkthrough_annotation_button(
+                                ui,
+                                &annotation_location(annotation),
+                                &annotation.text,
+                                color(annotation.color),
+                                selected,
+                            );
+                            if response.clicked() {
+                                let _ = self.focus_walkthrough(WalkthroughFocus {
+                                    step_index: focus.step_index,
+                                    annotation_id: Some(annotation.id.clone()),
+                                });
+                            }
+                        }
+                    }
                 });
         });
     }

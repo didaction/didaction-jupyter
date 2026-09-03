@@ -201,7 +201,10 @@ export class BrowserNotebookTransport implements NotebookTransport {
           throw new Error("Microscope storage unavailable");
         const files = await this.store.artifacts();
         const stored = files.find((f) => f.path === identity.path);
-        if (stored)
+        // Deletion is keyed by the validated notebook/cell/reference identity.
+        // Do not require an older sidecar body to deserialize with today's
+        // walkthrough schema: removing legacy content must remain possible.
+        if (stored && command.type !== "delete_microscope")
           identity = JSON.parse(
             microscopeDocument(
               JSON.stringify(selected),

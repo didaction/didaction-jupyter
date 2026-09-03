@@ -1,4 +1,4 @@
-//! Bounded, independently rendered graphics regions for microscope steps.
+//! Bounded region renderers composited as layers into one microscope stage.
 use super::*;
 use std::collections::BTreeMap;
 

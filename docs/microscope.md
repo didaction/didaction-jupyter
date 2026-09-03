@@ -185,9 +185,14 @@ both `start_column` and `end_column` to highlight an inclusive range within one
 line. Columns count Unicode characters (not UTF-8 bytes); partial ranges cannot
 span lines. Omitting both columns highlights the complete line range.
 The aggregate walkthrough bound leaves 4 KiB for its ownership envelope. Unknown
-fields are rejected, including arbitrary scripts and kernel configuration. The
+fields are rejected, including arbitrary scripts and kernel configuration.
 Each graphics region accepts only the versioned AssemblyScript RGBA interface,
 uses normalized stage bounds, and may specify a bounded `#RRGGBB` background.
+Regions are transparent compositing layers in one shared step canvas: the step
+background is painted once, an optional region background is painted within its
+bounds, and the region's RGBA pixels are alpha-composited over it. Region bounds
+do not draw cards or borders. Authors should leave pixels transparent wherever
+the shared canvas should remain visible rather than repainting an opaque box.
 
 Rust's `notebook-protocol::microscope` owns the schema and derivation; core/runtime
 own validated transitions. Both egui and WebMCP use the same command gateway for

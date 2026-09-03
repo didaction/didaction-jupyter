@@ -49,7 +49,7 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
       {
         id: "waves",
         title: "Two waves, one phase",
-        code: "sin(x - t)\ncos(x - t)",
+        code: `sin(x - t) + ${"phase_offset + ".repeat(18)}amplitude\ncos(x - t)`,
         description:
           "Sine and cosine share $\\omega$ with $\\cos(x)=\\sin(x+\\pi/2)$.",
         code_bounds: { x: 35, y: 180, width: 430, height: 700 },
