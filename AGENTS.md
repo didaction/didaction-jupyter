@@ -28,6 +28,8 @@ second mutation path or a generic Jupyter forwarding method.
 For microscope metadata, sidecar lifecycle or microscope follow navigation, read
 `docs/microscope.md`. Keep file references derived and full ownership bindings
 validated; do not bypass the dedicated commands with ordinary metadata edits.
+For authoring or reviewing Microscope walkthroughs and graphics, read `SKILLS.md`
+and use its required WebMCP capture-and-iterate loop.
 
 Execution progress travels as bounded NDJSON snapshots from kernel IOPub through
 the same command gateway. TypeScript passes progress through the narrow mounted
