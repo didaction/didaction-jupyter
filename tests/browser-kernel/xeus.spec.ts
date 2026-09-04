@@ -121,7 +121,7 @@ test("real xeus worker through egui and WebMCP: execute, plot and persist", asyn
   );
   const call = (name: string, args: Record<string, unknown>) =>
     microscopeCall(page, name, {
-      notebook_path: "browser-demo.ipynb",
+      notebook_path: "didaction-runtime-tour.ipynb",
       ...args,
     });
   const first = await call("insert_execute_code_cell", {

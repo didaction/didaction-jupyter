@@ -92,7 +92,7 @@ test("real JupyterLite worker through egui/WebMCP: execute, plot, persist and re
           }
         ).testNotebookTools;
         return tools[name]!.execute({
-          notebook_path: "browser-demo.ipynb",
+          notebook_path: "didaction-runtime-tour.ipynb",
           ...args,
         });
       },

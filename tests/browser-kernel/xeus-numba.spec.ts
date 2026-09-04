@@ -38,14 +38,14 @@ test("real xeus Numba compiles numerical code and displays its output", async ({
     "WebMCP ready",
   );
   const result = await microscopeCall(page, "insert_execute_code_cell", {
-    notebook_path: "browser-demo.ipynb",
+    notebook_path: "didaction-runtime-tour.ipynb",
     index: 0,
     source: JSON.parse(
       readFileSync("examples/xeus-numba.ipynb", "utf8"),
     ).cells[1].source.join(""),
   });
   const cell = await microscopeCall(page, "read_cell", {
-    notebook_path: "browser-demo.ipynb",
+    notebook_path: "didaction-runtime-tour.ipynb",
     cell_id: result.structuredContent.cell_id,
   });
   expect(result, JSON.stringify({ result, cell })).toMatchObject({
@@ -55,7 +55,7 @@ test("real xeus Numba compiles numerical code and displays its output", async ({
   expect(output).toContain("Compiled result: 285.0");
   expect(output).toContain("Nopython signatures: 1");
   const plot = await microscopeCall(page, "insert_execute_code_cell", {
-    notebook_path: "browser-demo.ipynb",
+    notebook_path: "didaction-runtime-tour.ipynb",
     index: 1,
     source: JSON.parse(
       readFileSync("examples/xeus-numba.ipynb", "utf8"),

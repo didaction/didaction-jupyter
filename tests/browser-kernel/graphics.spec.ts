@@ -42,7 +42,10 @@ test("real browser compiler animates egui graphics, resizes, tears down, recover
   await expect(page.locator("#connection-status")).toContainText(
     "WebMCP ready",
   );
-  const cell = { notebook_path: "browser-demo.ipynb", cell_id: "browser-plot" };
+  const cell = {
+    notebook_path: "didaction-runtime-tour.ipynb",
+    cell_id: "61731e1d-ea5c-44a7-b946-c8a3cb3c8e89",
+  };
   const walkthrough = {
     title: "Waves",
     steps: [

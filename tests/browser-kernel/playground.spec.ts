@@ -14,8 +14,8 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
     "WebMCP ready",
   );
   const cell = {
-    notebook_path: "browser-demo.ipynb",
-    cell_id: "browser-example",
+    notebook_path: "didaction-runtime-tour.ipynb",
+    cell_id: "614e0f26-970e-438f-85a4-68e4db687acc",
   };
   const before = (await microscopeCall(page, "read_cell", cell))
     .structuredContent.cell;
@@ -137,33 +137,36 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
   await expect
     .poll(async () => {
       const screenshot = await page.locator("#playground-canvas").screenshot();
-      return page.evaluate(async (source) => {
-        const image = new Image();
-        image.src = source;
-        await image.decode();
-        const canvas = document.createElement("canvas");
-        canvas.width = image.width;
-        canvas.height = image.height;
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        if (!context) return false;
-        context.drawImage(image, 0, 0);
-        const pixels = context.getImageData(
-          0,
-          0,
-          canvas.width,
-          canvas.height,
-        ).data;
-        for (let offset = 0; offset < pixels.length; offset += 4) {
-          if (
-            Math.abs(pixels[offset]! - 40) < 12 &&
-            Math.abs(pixels[offset + 1]! - 120) < 12 &&
-            Math.abs(pixels[offset + 2]! - 181) < 12
-          ) {
-            return true;
+      return page.evaluate(
+        async (source) => {
+          const image = new Image();
+          image.src = source;
+          await image.decode();
+          const canvas = document.createElement("canvas");
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const context = canvas.getContext("2d", { willReadFrequently: true });
+          if (!context) return false;
+          context.drawImage(image, 0, 0);
+          const pixels = context.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height,
+          ).data;
+          for (let offset = 0; offset < pixels.length; offset += 4) {
+            if (
+              Math.abs(pixels[offset]! - 40) < 12 &&
+              Math.abs(pixels[offset + 1]! - 120) < 12 &&
+              Math.abs(pixels[offset + 2]! - 181) < 12
+            ) {
+              return true;
+            }
           }
-        }
-        return false;
-      }, `data:image/png;base64,${screenshot.toString("base64")}`);
+          return false;
+        },
+        `data:image/png;base64,${screenshot.toString("base64")}`,
+      );
     })
     .toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });

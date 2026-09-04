@@ -54,46 +54,7 @@ export function initialBrowserSnapshot(
     },
     revision: 0,
     selected_cell_id: null,
-    cells:
-      path === "browser-demo.ipynb"
-        ? [
-            {
-              id: "browser-intro",
-              cell_type: "markdown",
-              source:
-                "# Python in your browser\n\nRun cells with **Shift+Enter**. No gateway or Jupyter Server is used. Notebooks are saved in this browser; reload/restart loses Python variables. Kernel file access is temporary and separate from notebook storage.",
-              metadata: {},
-              execution_count: null,
-              outputs: [],
-            },
-            {
-              id: "browser-example",
-              cell_type: "code",
-              source: "value = 40 + 2\nvalue",
-              metadata: {},
-              execution_count: null,
-              outputs: [],
-            },
-            {
-              id: "browser-plot",
-              cell_type: "code",
-              source:
-                "import matplotlib.pyplot as plt\nplt.bar(['a', 'b'], [2, 4])\nplt.show()",
-              metadata: {},
-              execution_count: null,
-              outputs: [],
-            },
-            {
-              id: "browser-stream",
-              cell_type: "code",
-              source:
-                "import asyncio\nfrom IPython.display import display, clear_output\nfor step in range(5):\n    clear_output(wait=True)\n    display(f'Progress: {step + 1}/5')\n    await asyncio.sleep(0.5)",
-              metadata: {},
-              execution_count: null,
-              outputs: [],
-            },
-          ]
-        : [],
+    cells: [],
   };
 }
 

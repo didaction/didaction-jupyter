@@ -14,8 +14,8 @@ test("microscope metadata, sidecar, agent navigation and human delete persist in
     "WebMCP ready",
   );
   const scope = {
-    notebook_path: "browser-demo.ipynb",
-    cell_id: "browser-intro",
+    notebook_path: "didaction-runtime-tour.ipynb",
+    cell_id: "73d55a01-2b43-4662-a753-b7f82c7ba582",
   };
   const first = await microscopeCall(page, "create_microscope", {
     ...scope,

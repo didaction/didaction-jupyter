@@ -7,8 +7,16 @@ import {
   ENTRY_LIMIT,
   ZIP_LIMIT,
   COUNT_LIMIT,
+  readWorkspaceZip,
   type WorkspaceEntry,
 } from "./workspace-zip";
+
+const DEMO_ARCHIVES = [
+  "demos/didaction-runtime-tour.zip",
+  "demos/ieee-9-bus-power-flow.zip",
+] as const;
+
+export const DEFAULT_DEMO_NOTEBOOK = "didaction-runtime-tour.ipynb";
 
 export function importNotebook(path: string, bytes: Uint8Array) {
   const raw = JSON.parse(
@@ -122,17 +130,16 @@ export class BrowserArtifactTransport implements ArtifactTransport {
     ]);
   }
   async demo(): Promise<string> {
-    const path = "browser-demo.ipynb";
-    if (!(await this.store.read(path))) {
-      await this.store.importEntries([
-        {
-          path,
-          directory: false,
-          bytes: new Uint8Array(),
-          snapshot: initialBrowserSnapshot(path),
-        },
-      ]);
+    if (await this.store.read(DEFAULT_DEMO_NOTEBOOK))
+      return DEFAULT_DEMO_NOTEBOOK;
+    const entries: WorkspaceEntry[] = [];
+    for (const archive of DEMO_ARCHIVES) {
+      const response = await fetch(`${import.meta.env.BASE_URL}${archive}`);
+      if (!response.ok)
+        throw new Error(`Could not load bundled demo: ${archive}`);
+      entries.push(...(await readWorkspaceZip(await response.arrayBuffer())));
     }
-    return path;
+    await this.import(entries);
+    return DEFAULT_DEMO_NOTEBOOK;
   }
 }

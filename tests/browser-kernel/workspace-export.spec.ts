@@ -19,8 +19,8 @@ test("browser workspace export bundles notebooks and microscopes; explorer stays
     "WebMCP ready",
   );
   const scope = {
-    notebook_path: "browser-demo.ipynb",
-    cell_id: "browser-example",
+    notebook_path: "didaction-runtime-tour.ipynb",
+    cell_id: "614e0f26-970e-438f-85a4-68e4db687acc",
   };
   const result = await microscopeCall(page, "create_microscope", {
     ...scope,
@@ -46,8 +46,12 @@ test("browser workspace export bundles notebooks and microscopes; explorer stays
     },
   });
   expect(result.isError).toBe(false);
-  await expect(page.locator(".microscope-count")).toHaveText("1");
-  await expect(page.locator("#notebook-files li")).toHaveCount(1);
+  await expect(
+    page
+      .getByRole("button", { name: "didaction-runtime-tour.ipynb" })
+      .locator(".microscope-count"),
+  ).toHaveText("4");
+  await expect(page.locator("#notebook-files li")).toHaveCount(2);
   const downloadPromise = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "Export workspace", exact: true })
@@ -66,7 +70,9 @@ test("browser workspace export bundles notebooks and microscopes; explorer stays
   expect(graphics!.path).toContain(
     `${result.structuredContent.microscope_id}.waves.ts`,
   );
-  await expect(page.locator("#notebook-name")).toHaveText("browser-demo.ipynb");
+  await expect(page.locator("#notebook-name")).toHaveText(
+    "didaction-runtime-tour.ipynb",
+  );
   await expect(page.locator("#browser-home")).toBeVisible();
   expect(
     entries.some((e) =>

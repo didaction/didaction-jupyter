@@ -15,7 +15,10 @@ test("walkthrough authoring, navigation, annotation focus and persistence use re
   await expect(page.locator("#connection-status")).toContainText(
     "WebMCP ready",
   );
-  const cell = { notebook_path: "browser-demo.ipynb", cell_id: "browser-plot" };
+  const cell = {
+    notebook_path: "didaction-runtime-tour.ipynb",
+    cell_id: "61731e1d-ea5c-44a7-b946-c8a3cb3c8e89",
+  };
   const before = (await microscopeCall(page, "read_cell", cell))
     .structuredContent.cell;
   const created = await microscopeCall(page, "create_microscope", {
