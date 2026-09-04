@@ -41,6 +41,45 @@ are authoritative and may change before production.
 If WebMCP is unavailable or capture fails, report that limitation instead of
 claiming the visual design was verified through another path.
 
+## Notebook compatibility preflight
+
+Before teaching from or revising a notebook, inspect the relevant cells and their
+saved outputs through WebMCP. Separate three questions: whether the kernel can run
+the code, whether the frontend can render its output, and whether the result stays
+interactive. A successful import or execution does not prove frontend support.
+
+The current egui frontend works best with code, CommonMark, its bounded LaTeX
+subset, readable tables, text and error streams, and bounded PNG or SVG output.
+Treat these features as adaptation candidates rather than working presentation:
+
+- `ipywidgets`, widget comms, notebook extension views, and custom JavaScript UI;
+- interactive Plotly, Bokeh, Vega, or other HTML/JavaScript-backed charts;
+- arbitrary HTML/CSS or custom MIME renderers (safe HTML tables may become plain,
+  script-free table text, but arbitrary DOM behavior is unavailable);
+- `input()` and other interactive stdin prompts;
+- terminal, debugger, shell, package-install, trust/signing, and JupyterLab
+  extension workflows.
+
+When one of these is material to the lesson, tell the user which cells are affected,
+what behavior will be lost, and the smallest concrete adaptation you recommend.
+Ask for permission before changing the notebook. Permission must cover the proposed
+cell changes; permission to inspect, explain, or create a Microscope does not imply
+permission to rewrite source cells or outputs.
+
+With permission, preserve the notebook's teaching goal and data while translating
+presentation to supported primitives. Prefer static PNG/SVG plots or concise tables
+for interactive charts, explicit parameter cells for widgets or stdin, Markdown and
+math for explanatory HTML, and text/image fallbacks for custom MIME output. Keep
+the original approach visible in nearby Markdown when it matters pedagogically.
+Never silently substitute a different computation, install packages, execute
+untrusted cells, or claim functional equivalence when the adaptation is only a
+visual approximation.
+
+After adapting, execute only the user-approved cells, inspect their reconciled
+outputs through WebMCP, and capture the relevant notebook or Microscope view. The
+adaptation is complete only when the supported result is visible and the user can
+understand what changed and what interactivity remains unavailable.
+
 ## Teaching design
 
 Teach one clear concept per step. Make the step title state the idea plainly; the
