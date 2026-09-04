@@ -1040,7 +1040,6 @@ async function boot(): Promise<void> {
 boot().catch((error: unknown) => {
   status.textContent = "Disconnected";
   const listingStatus = document.querySelector("#explorer-status");
-  if (listingStatus) listingStatus.textContent = "Notebook startup failed";
   fatal.hidden = false;
   const title = document.querySelector<HTMLElement>("#fatal-title")!;
   const message = document.querySelector<HTMLElement>("#fatal-message")!;
@@ -1057,16 +1056,27 @@ boot().catch((error: unknown) => {
   };
   if (locked?.name === "NotebookLockedError") {
     title.textContent = "Notebook in use";
-    message.textContent = `${locked.path ?? "This notebook"} is owned by another live browser tab. Close it there or choose a different notebook.`;
+    message.textContent = `${locked.path ?? "This notebook"} is open in another tab. Close it there, or choose a different notebook. If you just closed the owner tab, wait 2 seconds and try again.`;
     const heartbeat = locked.liveness?.heartbeat_at;
+    if (listingStatus) {
+      listingStatus.textContent = heartbeat
+        ? `Open in another tab · owner active at ${new Date(heartbeat).toLocaleTimeString()}`
+        : "Open in another tab";
+    }
     liveness.hidden = false;
     liveness.textContent = heartbeat
       ? `Owner tab ${locked.liveness!.owner_id} active at ${new Date(heartbeat).toLocaleTimeString()} · ${heartbeat}`
       : "Another tab holds the notebook lock; its last heartbeat is unavailable.";
-    retry.textContent = "Try again";
+    retry.disabled = true;
+    retry.textContent = "Try again in 2s";
+    window.setTimeout(() => {
+      retry.disabled = false;
+      retry.textContent = "Try again";
+    }, 2_000);
     home.hidden = false;
     home.onclick = () => location.assign(location.pathname);
   } else {
+    if (listingStatus) listingStatus.textContent = "Notebook startup failed";
     message.textContent =
       error instanceof Error ? error.message : "Unknown startup failure";
   }

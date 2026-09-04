@@ -52,12 +52,20 @@ test("browser notebook lease reports a live owner and recovers after release", a
   await expect(observer.locator("#notebook-lock-liveness")).toContainText(
     /Owner tab .+ active/,
   );
+  await expect(observer.locator("#explorer-status")).toContainText(
+    "Open in another tab",
+  );
+  await expect(observer.locator("#fatal-message")).toContainText(
+    "wait 2 seconds",
+  );
   await expect(
     observer.getByRole("button", { name: "Choose another workspace" }),
   ).toBeVisible();
 
   await page.close();
-  await observer.getByRole("button", { name: "Try again" }).click();
+  const retry = observer.getByRole("button", { name: "Try again" });
+  await expect(retry).toBeEnabled({ timeout: 3_000 });
+  await retry.click();
   await expect(observer.locator("#connection-status")).toContainText(
     "Browser kernel",
   );
