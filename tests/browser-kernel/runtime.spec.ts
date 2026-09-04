@@ -133,8 +133,10 @@ test("real JupyterLite worker through egui/WebMCP: execute, plot, persist and re
   expect(consoleMessages.join("\n")).not.toContain("browser_value =");
 
   const other = await context.newPage();
-  await other.goto("/");
-  await expect(other.locator("#fatal-error")).toContainText("another tab");
+  await other.goto(page.url());
+  await expect(
+    other.getByRole("heading", { name: "Notebook in use" }),
+  ).toBeVisible();
   await other.close();
 
   await page.reload();

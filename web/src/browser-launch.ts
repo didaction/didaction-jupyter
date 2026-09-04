@@ -29,6 +29,7 @@ export async function chooseBrowserWorkspace(
   const message = document.querySelector<HTMLElement>(
     "#browser-launch-status",
   )!;
+  const empty = document.querySelector<HTMLButtonElement>("#browser-empty")!;
   const demo = document.querySelector<HTMLButtonElement>("#browser-demo")!;
   const resume = document.querySelector<HTMLButtonElement>("#browser-resume")!;
   const file = document.querySelector<HTMLInputElement>("#browser-zip")!;
@@ -72,13 +73,13 @@ export async function chooseBrowserWorkspace(
     !saved.length;
   panel.hidden = false;
   layout.hidden = true;
-  demo.focus();
+  empty.focus();
   return new Promise((resolve) => {
     let busy = false;
     async function run(action: () => Promise<string>) {
       if (busy) return;
       busy = true;
-      demo.disabled = resume.disabled = file.disabled = true;
+      empty.disabled = demo.disabled = resume.disabled = file.disabled = true;
       message.textContent = "Preparing browser workspace…";
       try {
         if (!isBrowserKernelName(kernel.value))
@@ -95,14 +96,32 @@ export async function chooseBrowserWorkspace(
             : "Import failed. No files were replaced.";
       } finally {
         busy = false;
-        demo.disabled = resume.disabled = file.disabled = false;
+        empty.disabled =
+          demo.disabled =
+          resume.disabled =
+          file.disabled =
+            false;
         file.value = "";
       }
     }
     async function select(id: string) {
-      await workspace.store.selectWorkspace(id);
+      await workspace.selectWorkspace(id);
       workspaceId = id;
     }
+    empty.onclick = () =>
+      void run(async () => {
+        const id = crypto.randomUUID();
+        const names = new Set((await savedWorkspaces()).map((w) => w.name));
+        const baseName = "Untitled workspace";
+        let name = baseName;
+        for (let suffix = 2; names.has(name); suffix++)
+          name = `${baseName} (${suffix})`;
+        await rememberWorkspace({ id, name });
+        await select(id);
+        const path = "Untitled.ipynb";
+        await workspace.artifacts.create({ kind: "notebook", path });
+        return path;
+      });
     demo.onclick = () =>
       void run(async () => {
         await rememberWorkspace({ id: "demo", name: "Demo workspace" });

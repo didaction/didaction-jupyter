@@ -72,7 +72,16 @@
       <div class="browser-launch-choices">
         <fieldset class="browser-workspace-choice">
           <legend>Notebook workspace</legend>
-          <p>Open the example, import a folder, or continue saved work.</p>
+          <p>
+            Start empty, open the example, import a folder, or continue saved
+            work.
+          </p>
+          <button id="browser-empty" type="button">
+            Create empty workspace
+          </button>
+          <p class="browser-choice-note">
+            Creates one blank notebook named Untitled.ipynb.
+          </p>
           <button id="browser-demo" type="button">Open demo workspace</button>
           <label for="browser-zip">Import a ZIP workspace</label>
           <input id="browser-zip" type="file" accept=".zip,application/zip" />
@@ -92,6 +101,15 @@
               Continue saved workspace
             </button>
           </div>
+          <p class="browser-choice-note browser-skills-guide">
+            Using WebMCP with an agent? Give it the microscope design guide.
+            <a
+              id="browser-skills-download"
+              href="/SKILLS.md"
+              download="SKILLS.md"
+              >Download SKILLS.md</a
+            >
+          </p>
         </fieldset>
         <fieldset class="browser-kernel-choice">
           <legend>Kernel</legend>
@@ -188,9 +206,15 @@
           hidden
           aria-live="assertive"
         >
-          <h1>The notebook could not start</h1>
-          <p></p>
-          <button type="button" onclick="location.reload()">Retry</button>
+          <h1 id="fatal-title">The notebook could not start</h1>
+          <p id="fatal-message"></p>
+          <output id="notebook-lock-liveness" role="status" hidden></output>
+          <div class="fatal-actions">
+            <button id="fatal-retry" type="button">Retry</button>
+            <button id="fatal-home" type="button" hidden>
+              Choose another workspace
+            </button>
+          </div>
         </section>
       </main>
       <aside id="diagnostics-panel" aria-label="Diagnostics" hidden>

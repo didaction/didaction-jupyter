@@ -1,7 +1,30 @@
 import { defineConfig } from "vite";
+import { readFileSync } from "node:fs";
+
+const browserSkills = (): import("vite").Plugin => ({
+  name: "browser-skills-guide",
+  configureServer(server: import("vite").ViteDevServer) {
+    server.middlewares.use("/SKILLS.md", (_request, response) => {
+      response.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      response.setHeader(
+        "Content-Disposition",
+        'attachment; filename="SKILLS.md"',
+      );
+      response.end(readFileSync("SKILLS.md", "utf8"));
+    });
+  },
+  generateBundle() {
+    this.emitFile({
+      type: "asset",
+      fileName: "SKILLS.md",
+      source: readFileSync("SKILLS.md", "utf8"),
+    });
+  },
+});
 
 export const runtimeConfig = (mode: string) => ({
   root: "web",
+  plugins: mode === "browser" ? [browserSkills()] : [],
   // Only browser builds ship Python assets. Server deployment cannot opt into
   // browser kernels by URL or runtime environment variables.
   publicDir: mode === "browser" ? "public" : (false as const),

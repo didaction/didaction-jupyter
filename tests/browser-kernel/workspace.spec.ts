@@ -1,5 +1,68 @@
 import { expect, test } from "@playwright/test";
 
+test("offers a blank workspace first and a downloadable WebMCP skills guide", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const actions = page.locator(".browser-workspace-choice button");
+  await expect(actions.first()).toHaveText("Create empty workspace");
+  const guide = page.locator("#browser-skills-download");
+  await expect(guide).toHaveAttribute("download", "SKILLS.md");
+  const response = await page.request.get(
+    new URL("/SKILLS.md", page.url()).href,
+  );
+  expect(response.ok()).toBeTruthy();
+  expect(await response.text()).toContain("# Designing Microscopes");
+
+  await actions.first().click();
+  await expect(page).toHaveURL(/notebook=Untitled\.ipynb/);
+  await expect(page.locator("#connection-status")).toContainText(
+    "Browser kernel",
+  );
+  await expect(page.locator("#notebook-files")).toContainText("Untitled.ipynb");
+});
+
+test("browser notebook lease reports a live owner and recovers after release", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open demo workspace" }).click();
+  await expect(page.locator("#connection-status")).toContainText(
+    "Browser kernel",
+  );
+
+  await page.locator("#artifact-name").fill("second.ipynb");
+  await page.locator("#artifact-create button[type=submit]").click();
+  await expect(page.locator("#notebook-files")).toContainText("second.ipynb");
+  const independent = await context.newPage();
+  const independentUrl = new URL(page.url());
+  independentUrl.searchParams.set("notebook", "second.ipynb");
+  await independent.goto(independentUrl.href);
+  await expect(independent.locator("#connection-status")).toContainText(
+    "Browser kernel",
+  );
+  await independent.close();
+
+  const observer = await context.newPage();
+  await observer.goto(page.url());
+  await expect(
+    observer.getByRole("heading", { name: "Notebook in use" }),
+  ).toBeVisible();
+  await expect(observer.locator("#notebook-lock-liveness")).toContainText(
+    /Owner tab .+ active/,
+  );
+  await expect(
+    observer.getByRole("button", { name: "Choose another workspace" }),
+  ).toBeVisible();
+
+  await page.close();
+  await observer.getByRole("button", { name: "Try again" }).click();
+  await expect(observer.locator("#connection-status")).toContainText(
+    "Browser kernel",
+  );
+});
+
 test("optional xeus assets may be absent without breaking Pyodide startup", async ({
   page,
 }) => {

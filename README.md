@@ -34,10 +34,12 @@ pnpm build:browser
 pnpm serve:browser
 ```
 
-Open <http://127.0.0.1:5175>. Choose a pinned Python runtime, then open the demo,
-import a bounded ZIP workspace, or continue a saved workspace. Imported notebooks
-never execute automatically. See [Browser-local runtime](docs/browser-runtime.md)
-for persistence, ZIP bounds, kernel versions, xeus setup, and static deployment.
+Open <http://127.0.0.1:5175>. Choose a pinned Python runtime, then create a blank
+workspace, open the demo, import a bounded ZIP workspace, or continue saved work.
+The chooser offers `SKILLS.md` for agents working through WebMCP. Imported
+notebooks never execute automatically. See
+[Browser-local runtime](docs/browser-runtime.md) for per-notebook tab locks,
+persistence, ZIP bounds, kernel versions, xeus setup, and static deployment.
 
 ### Jupyter server
 

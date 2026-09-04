@@ -90,6 +90,9 @@ async function createContext(
   startup: { path: string; kernel: string },
   create = false,
 ): Promise<NotebookContext> {
+  const notebookLease = browserWorkspace
+    ? await browserWorkspace.acquire(startup.path)
+    : undefined;
   const collaboration =
     import.meta.env.VITE_NOTEBOOK_RUNTIME === "browser"
       ? new (await import("./browser-workspace")).LocalNotebookConnection(
@@ -126,6 +129,7 @@ async function createContext(
         );
   if (setup.error || !setup.snapshot) {
     await collaboration.close();
+    notebookLease?.release();
     throw new Error(
       setup.error?.message ?? "Gateway returned no notebook snapshot",
     );
@@ -717,6 +721,7 @@ async function createContext(
       wasm.dispose();
       void transport.close();
       void collaboration.close();
+      notebookLease?.release();
     },
   };
   openContexts.add(context);
@@ -731,10 +736,10 @@ async function boot(): Promise<void> {
     JSON.parse(wasmBuildInfo()),
   );
   let startup: { path: string; kernel: string };
+  let ownerLivenessListener: ((event: Event) => void) | undefined;
   if (import.meta.env.VITE_NOTEBOOK_RUNTIME === "browser") {
     const { BrowserWorkspace } = await import("./browser-workspace");
     browserWorkspace = new BrowserWorkspace();
-    await browserWorkspace.acquire();
     const { chooseBrowserWorkspace } = await import("./browser-launch");
     const chosen = await chooseBrowserWorkspace(
       browserWorkspace,
@@ -752,8 +757,16 @@ async function boot(): Promise<void> {
     browserUrl.searchParams.delete("runtime");
     history.replaceState(null, "", browserUrl);
     startup = chosen;
-    document.querySelector<HTMLOutputElement>("#driver-status")!.textContent =
-      "Local";
+    const owner = document.querySelector<HTMLOutputElement>("#driver-status")!;
+    owner.textContent = "Owner · live";
+    owner.title =
+      "This tab owns the selected notebook and announces liveness every 30 seconds.";
+    ownerLivenessListener = (event) => {
+      const state = (event as CustomEvent<{ heartbeat_at: string }>).detail;
+      owner.textContent = "Owner · live";
+      owner.title = `This tab owns the selected notebook. Last liveness announcement: ${state.heartbeat_at}`;
+    };
+    window.addEventListener("browser-notebook-liveness", ownerLivenessListener);
   } else {
     const response = await fetch("/api/v1/config");
     if (!response.ok) throw new Error("Gateway configuration unavailable");
@@ -797,6 +810,11 @@ async function boot(): Promise<void> {
         return;
       workspace.dispose();
       browserWorkspace?.close();
+      if (ownerLivenessListener)
+        window.removeEventListener(
+          "browser-notebook-liveness",
+          ownerLivenessListener,
+        );
       location.assign(location.pathname);
     } catch (error) {
       followStatus.textContent =
@@ -1009,6 +1027,11 @@ async function boot(): Promise<void> {
       diagnostics.dispose();
       workspace.dispose();
       browserWorkspace?.close();
+      if (ownerLivenessListener)
+        window.removeEventListener(
+          "browser-notebook-liveness",
+          ownerLivenessListener,
+        );
     },
     { once: true },
   );
@@ -1019,6 +1042,32 @@ boot().catch((error: unknown) => {
   const listingStatus = document.querySelector("#explorer-status");
   if (listingStatus) listingStatus.textContent = "Notebook startup failed";
   fatal.hidden = false;
-  fatal.querySelector("p")!.textContent =
-    error instanceof Error ? error.message : "Unknown startup failure";
+  const title = document.querySelector<HTMLElement>("#fatal-title")!;
+  const message = document.querySelector<HTMLElement>("#fatal-message")!;
+  const liveness = document.querySelector<HTMLOutputElement>(
+    "#notebook-lock-liveness",
+  )!;
+  const retry = document.querySelector<HTMLButtonElement>("#fatal-retry")!;
+  const home = document.querySelector<HTMLButtonElement>("#fatal-home")!;
+  retry.onclick = () => location.reload();
+  const locked = error as {
+    name?: string;
+    path?: string;
+    liveness?: { owner_id: string; heartbeat_at: string } | null;
+  };
+  if (locked?.name === "NotebookLockedError") {
+    title.textContent = "Notebook in use";
+    message.textContent = `${locked.path ?? "This notebook"} is owned by another live browser tab. Close it there or choose a different notebook.`;
+    const heartbeat = locked.liveness?.heartbeat_at;
+    liveness.hidden = false;
+    liveness.textContent = heartbeat
+      ? `Owner tab ${locked.liveness!.owner_id} active at ${new Date(heartbeat).toLocaleTimeString()} · ${heartbeat}`
+      : "Another tab holds the notebook lock; its last heartbeat is unavailable.";
+    retry.textContent = "Try again";
+    home.hidden = false;
+    home.onclick = () => location.assign(location.pathname);
+  } else {
+    message.textContent =
+      error instanceof Error ? error.message : "Unknown startup failure";
+  }
 });

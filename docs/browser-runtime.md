@@ -15,8 +15,10 @@ pnpm serve:browser
 Open `http://127.0.0.1:5175/`. Stop the foreground process with
 Ctrl+C. Existing Docker notebooks on ports 5173/5174 are unaffected. The starter
 notebook includes arithmetic, Matplotlib, and intermediate output replacement
-examples. Choose **Open demo workspace** to load it, or **Import ZIP workspace**
-to load your own notebooks and files. Use the normal cell play button or Shift+Enter.
+examples. Choose **Create empty workspace** for a blank `Untitled.ipynb`, open
+the demo, or import a ZIP containing your own notebooks and files. The chooser
+also downloads the repository's `SKILLS.md` guide for agents using WebMCP. Use
+the normal cell play button or Shift+Enter.
 
 Select the versioned workspace kernel before opening it. **Pyodide 314.0.5 ·
 Python 3.14** is the default; **Pyodide 0.27.7 · Python 3.12** is the broad
@@ -135,6 +137,12 @@ regression tests pass.
   URL parameter preserves the selected database across reloads and notebook switches.
   Old URLs without it still address the existing storage. Reloading a valid notebook URL
   reopens it directly; opening the demo never replaces an existing demo.
+- Browser tabs take an exclusive Web Lock for each workspace/notebook pair, not
+  for the whole workspace. Different notebooks can run concurrently in separate
+  tabs. An owning tab writes a timestamped liveness record immediately and every
+  30 seconds. A competing tab checks that record before its atomic lock attempt,
+  reports the owner and last heartbeat, and offers retry or workspace selection.
+  Closing the owner releases the lock; stale liveness never overrides Web Locks.
 - A ZIP must contain at least one nbformat 4 notebook. Subfolders, empty folders
   and binary/text artifacts are imported together. Notebooks are normalized to
   the bounded runtime schema and validated by Rust/WASM; unsupported notebook
