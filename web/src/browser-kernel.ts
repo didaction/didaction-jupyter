@@ -41,7 +41,7 @@ export class WorkerKernel implements BrowserKernel {
     if (this.ready) return this.ready;
     this.worker =
       this.kernelName === "xeus-python-019"
-        ? new Worker("/xeus/worker.js")
+        ? new Worker(`${import.meta.env.BASE_URL}xeus/worker.js`)
         : this.kernelName === "pyodide-027"
           ? new Worker(
               new URL("./browser-kernel-py312.worker.ts", import.meta.url),

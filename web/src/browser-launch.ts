@@ -36,7 +36,9 @@ export async function chooseBrowserWorkspace(
   const picker = document.querySelector<HTMLSelectElement>("#browser-saved")!;
   const kernel = document.querySelector<HTMLSelectElement>("#browser-kernel")!;
   // Experimental runtime is offered only when its separately prepared bundle exists.
-  const xeusAvailable = await fetch("/xeus/didaction-xeus/xpython/kernel.json")
+  const xeusAvailable = await fetch(
+    `${import.meta.env.BASE_URL}xeus/didaction-xeus/xpython/kernel.json`,
+  )
     .then(
       async (response) =>
         response.ok && (await response.json()).language === "python",

@@ -55,7 +55,10 @@ self.onmessage = (message: MessageEvent) => {
       let result: unknown;
       if (method === "initialize") {
         kernel.interrupt = buffer ? new Uint8Array(buffer) : undefined;
-        const base = new URL("/browser-kernel/py314/", self.location.href).href;
+        const base = new URL(
+          `${import.meta.env.BASE_URL}browser-kernel/py314/`,
+          self.location.origin,
+        ).href;
         await kernel.initialize({
           baseUrl: base,
           indexUrl: base,

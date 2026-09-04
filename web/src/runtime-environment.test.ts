@@ -25,3 +25,14 @@ test("runtime environments are fixed at build time, with isolated outputs and as
   expect(server.server.proxy).toHaveProperty("/api");
   expect(runtimeConfig("production").define).toEqual(server.define);
 });
+
+test("browser builds accept a project Pages base path", () => {
+  const previous = process.env.VITE_BASE_PATH;
+  process.env.VITE_BASE_PATH = "/didaction-jupyter/";
+  try {
+    expect(runtimeConfig("browser").base).toBe("/didaction-jupyter/");
+  } finally {
+    if (previous === undefined) delete process.env.VITE_BASE_PATH;
+    else process.env.VITE_BASE_PATH = previous;
+  }
+});

@@ -6,6 +6,9 @@ interface. It opens real `.ipynb` files, runs standard Jupyter kernels, renders
 Markdown, math and rich outputs, and gives browser agents the same validated
 notebook command path through optional WebMCP tools.
 
+Try the browser-local build at
+[didaction.github.io/didaction-jupyter](https://didaction.github.io/didaction-jupyter/).
+
 ![didaction Jupyter notebook interface](docs/assets/notebook-ui.png)
 
 The project has two deliberately separate distributions:

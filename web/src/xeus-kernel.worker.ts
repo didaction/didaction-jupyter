@@ -100,7 +100,8 @@ self.onmessage = ({ data }) => {
     const { id, method, code, cursor, workspace } = data;
     try {
       if (method === "initialize") {
-        const baseUrl = new URL("/", self.location.href).href;
+        const baseUrl = new URL(import.meta.env.BASE_URL, self.location.origin)
+          .href;
         const root = `${baseUrl}xeus/didaction-xeus`;
         const response = await fetch(`${root}/xpython/kernel.json`);
         if (!response.ok) throw new Error("Missing xeus assets");

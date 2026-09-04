@@ -24,6 +24,7 @@ const browserSkills = (): import("vite").Plugin => ({
 
 export const runtimeConfig = (mode: string) => ({
   root: "web",
+  base: process.env.VITE_BASE_PATH ?? "/",
   plugins: mode === "browser" ? [browserSkills()] : [],
   // Only browser builds ship Python assets. Server deployment cannot opt into
   // browser kernels by URL or runtime environment variables.
