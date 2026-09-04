@@ -12,17 +12,25 @@ are authoritative and may change before production.
 
 1. Inspect the available WebMCP tools and their current input schemas.
 2. Call `get_active_context`, then `list_microscopes` for the selected cell.
-3. Call `read_microscope` before revising an existing Microscope. Updates replace
+3. Write a short portrayal brief in plain language before choosing coordinates or
+   writing graphics code. State what the learner should understand, which objects
+   participate, what relationship or change must become visible, and what should
+   attract attention first. The brief is a design aid, not canvas text.
+4. Derive the graphics regions from that brief. Give each region one visual job,
+   identify any shared background or overlap, and name the annotation targets.
+   Use one region when one responsive composition is clearer; add regions only
+   for elements that benefit from independent placement, animation, or layering.
+5. Call `read_microscope` before revising an existing Microscope. Updates replace
    the complete walkthrough, so preserve every deliberate step and field.
-4. Use `create_microscope` or `update_microscope` with the full walkthrough.
-5. Use `open_microscope` or `focus_microscope_step` to display the intended step.
-6. Use `focus_microscope_annotation` for every important annotation and verify
+6. Use `create_microscope` or `update_microscope` with the full walkthrough.
+7. Use `open_microscope` or `focus_microscope_step` to display the intended step.
+8. Use `focus_microscope_annotation` for every important annotation and verify
    that its highlight or callout lands on the intended target.
-7. Call `capture_microscope_step` after every meaningful visual revision. Inspect
+9. Call `capture_microscope_step` after every meaningful visual revision. Inspect
    the returned PNG, not just the JSON. Iterate until the composition is clear at
    the current viewport size.
-8. Accept a step only when every graphics region reports `error: null` and
-   `frames > 0`, with no clipping, overlap, unreadable text, or accidental boxes.
+10. Accept a step only when every graphics region reports `error: null` and
+    `frames > 0`, with no clipping, overlap, unreadable text, or accidental boxes.
 
 If WebMCP is unavailable or capture fails, report that limitation instead of
 claiming the visual design was verified through another path.
