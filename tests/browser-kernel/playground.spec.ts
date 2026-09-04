@@ -36,7 +36,7 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
         code: "setup_value",
         annotations: [],
         description: "Explore a fresh kernel.",
-        playground_code: "setup_value = 40 + 2\nprint(setup_value)",
+        playground_code: `${Array.from({ length: 40 }, (_, index) => `# explanation line ${index + 1}`).join("\n")}\nsetup_value = 40 + 2\nprint(setup_value)`,
       },
     ],
   };
@@ -127,11 +127,24 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
   expect((await read()).cells[0]!.source).toBe(
     walkthrough.steps[0]!.playground_code,
   );
-  const run = await microscopeCall(page, "execute_playground", {
-    notebook_path: cell.notebook_path,
-  });
-  expect(run, JSON.stringify(run)).toMatchObject({ isError: false });
-  expect(JSON.stringify((await read()).cells[0]!.outputs)).toContain("42");
+  const playgroundCanvas = (await page
+    .locator("#playground-canvas")
+    .boundingBox())!;
+  await page.mouse.click(playgroundCanvas.x + 120, playgroundCanvas.y + 18);
+  await expect
+    .poll(async () => JSON.stringify((await read()).cells[0]!.outputs))
+    .toContain("42");
+  await expect
+    .poll(
+      async () =>
+        (
+          (await microscopeCall(page, "get_active_context")).structuredContent
+            .context as {
+            playground: { scroll_fraction: number };
+          }
+        ).playground.scroll_fraction,
+    )
+    .toBeGreaterThan(0);
   await page.setViewportSize({ width: 1280, height: 900 });
   // egui needs a frame to resize and another to measure wrapped panels.
   await page.waitForTimeout(300);

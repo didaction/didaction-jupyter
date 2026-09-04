@@ -187,6 +187,7 @@ pub struct NotebookEguiApp {
     pending_inspections: BTreeMap<Uuid, String>,
     pending_execution_cells: BTreeMap<Uuid, String>,
     pending_execution_sources: BTreeMap<Uuid, String>,
+    scroll_to_output: Option<String>,
     inspections: HashMap<String, String>,
     caret_byte_positions: HashMap<String, usize>,
     completion_due: HashMap<String, f64>,
@@ -334,6 +335,7 @@ impl NotebookEguiApp {
             pending_inspections: BTreeMap::new(),
             pending_execution_cells: BTreeMap::new(),
             pending_execution_sources: BTreeMap::new(),
+            scroll_to_output: None,
             inspections: HashMap::new(),
             caret_byte_positions: HashMap::new(),
             completion_due: HashMap::new(),
@@ -448,9 +450,23 @@ impl NotebookEguiApp {
                 SyncState::Dirty | SyncState::Executing
             )
     }
-    pub fn finish_command(&mut self, command_id: Uuid) {
-        self.pending_execution_cells.remove(&command_id);
+    pub fn finish_command(&mut self, command_id: Uuid) -> Option<String> {
+        let cell_id = self.pending_execution_cells.remove(&command_id);
         self.pending_execution_sources.remove(&command_id);
+        cell_id
+    }
+    pub fn reveal_output(&mut self, cell_id: &str) {
+        if self.state.snapshot.notebook.workspace == "temporary"
+            && self
+                .state
+                .snapshot
+                .cells
+                .iter()
+                .any(|cell| cell.id == cell_id && !cell.outputs.is_empty())
+        {
+            self.output_views.remove(cell_id);
+            self.scroll_to_output = Some(cell_id.to_owned());
+        }
     }
     pub fn replace_state(&mut self, state: NotebookState) {
         let previous_markdown: HashSet<_> = self
@@ -2097,6 +2113,12 @@ impl NotebookEguiApp {
                     output_start,
                     egui::pos2(ui.max_rect().right(), ui.min_rect().bottom()),
                 );
+                if self.scroll_to_output.as_deref() == Some(cell.id.as_str())
+                    && !cell.outputs.is_empty()
+                {
+                    ui.scroll_to_rect(output_rect, Some(egui::Align::Min));
+                    self.scroll_to_output = None;
+                }
                 // Observe rather than capture the click: output links, text selection,
                 // and scrollbars keep their own interaction behavior.
                 if !cell.outputs.is_empty()
@@ -4619,6 +4641,19 @@ mod tests {
 
         app.finish_command(command.command_id);
         assert!(app.pending_execution_cells.is_empty());
+    }
+
+    #[test]
+    fn completed_output_follow_is_scoped_to_temporary_playgrounds() {
+        let mut app = app();
+        app.state.snapshot.cells[0].outputs = vec![CellOutput::Text { text: "42".into() }];
+
+        app.reveal_output("code");
+        assert!(app.scroll_to_output.is_none());
+
+        app.state.snapshot.notebook.workspace = "temporary".into();
+        app.reveal_output("code");
+        assert_eq!(app.scroll_to_output.as_deref(), Some("code"));
     }
 
     #[test]

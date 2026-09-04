@@ -160,6 +160,7 @@ export class PlaygroundController {
           (running ? (cell.source ?? "") : null),
         execution_count: cell.execution_count ?? null,
       },
+      scroll_fraction: this.mounted?.scrollFraction() ?? 0,
       outputs: cell.outputs ?? [],
     };
   }
@@ -529,9 +530,11 @@ export class PlaygroundController {
       );
     this.executingSource = code;
     try {
-      return await send(
+      const result = await send(
         command("execute_cell", { cell_id: "playground", timeout_ms: 120000 }),
       );
+      this.mounted?.revealCellOutput("playground");
+      return result;
     } finally {
       this.executingSource = undefined;
     }

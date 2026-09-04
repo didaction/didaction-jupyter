@@ -320,7 +320,8 @@ impl eframe::App for MountedApp {
                     );
                     return;
                 };
-                app.lock()
+                let completed_cell = app
+                    .lock()
                     .expect("notebook app mutex poisoned")
                     .finish_command(result.command_id);
                 if let Some(completion) = result.completion.clone() {
@@ -346,9 +347,13 @@ impl eframe::App for MountedApp {
                         .state
                         .clone();
                     if let Ok(next) = current.replace_snapshot(snapshot) {
-                        app.lock()
-                            .expect("notebook app mutex poisoned")
-                            .replace_state(next);
+                        {
+                            let mut locked = app.lock().expect("notebook app mutex poisoned");
+                            locked.replace_state(next);
+                            if let Some(cell_id) = completed_cell.as_deref() {
+                                locked.reveal_output(cell_id);
+                            }
+                        }
                         if let Some(doc) = result.microscope {
                             app.lock().expect("app mutex").accept_microscope(doc);
                         }
@@ -648,6 +653,17 @@ impl MountedNotebook {
     #[wasm_bindgen(js_name = scrollFraction)]
     pub fn scroll_fraction(&self) -> f32 {
         self.app.lock().expect("app mutex").scroll_fraction
+    }
+    #[wasm_bindgen(js_name = revealCellOutput)]
+    pub fn reveal_cell_output(&self, cell_id: String) -> Result<(), JsError> {
+        if cell_id.is_empty() || cell_id.len() > 128 {
+            return Err(JsError::new("Invalid cell ID"));
+        }
+        self.app.lock().expect("app mutex").reveal_output(&cell_id);
+        if let Some(ctx) = self.repaint.lock().expect("repaint mutex").as_ref() {
+            ctx.request_repaint();
+        }
+        Ok(())
     }
     #[wasm_bindgen(js_name = setFollowScroll)]
     pub fn set_follow_scroll(&self, fraction: Option<f32>) -> Result<(), JsError> {
