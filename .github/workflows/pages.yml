@@ -43,7 +43,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build for the organization project URL
         env:
-          VITE_BASE_PATH: /didaction-jupyter/
+          VITE_BASE_PATH: /
         run: pnpm build:browser
       - name: Disable Jekyll processing
         run: touch dist-browser/.nojekyll
