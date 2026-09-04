@@ -9,6 +9,7 @@ pnpm run build:wasm
 pnpm run format
 pnpm run typecheck
 pnpm test
+pnpm audit:licenses
 uv run ruff format --check services scripts tests deploy
 uv run ruff check services scripts tests deploy
 uv run mypy

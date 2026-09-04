@@ -22,7 +22,8 @@
     "format:write": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "audit:licenses": "node scripts/audit-licenses.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.55.0",

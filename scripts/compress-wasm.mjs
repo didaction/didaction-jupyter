@@ -26,7 +26,9 @@ const compressedFetch = `module_or_path = fetch(module_or_path).then(async (resp
 if (bindings.includes(wasmUrl) && bindings.includes(plainFetch)) {
   await writeFile(
     bindingsPath,
-    bindings.replace(wasmUrl, compressedUrl).replace(plainFetch, compressedFetch),
+    bindings
+      .replace(wasmUrl, compressedUrl)
+      .replace(plainFetch, compressedFetch),
   );
 } else if (!bindings.includes(compressedUrl)) {
   throw new Error("Unable to locate wasm-bindgen loader markers");
