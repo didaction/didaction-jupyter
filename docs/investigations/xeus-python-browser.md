@@ -188,7 +188,7 @@ notebooks in IndexedDB. Do not mount the full environment over `/workspace` or
 let workspace paths overwrite Python's root libraries.
 [Filesystem APIs](https://github.com/jupyterlite/xeus/blob/v5.0.0/packages/xeus-core/src/worker.base.ts),
 [upstream mount](https://github.com/jupyterlite/xeus/blob/v5.0.0/packages/xeus/src/comlink.worker.ts),
-[local filesystem contract](browser-runtime.md).
+[local filesystem contract](../browser-runtime.md).
 
 The remote API is `await remote.processMessage({msg})`. Underneath it calls
 `xserver.notify_listener(msg)`. Both execution and completion/inspection use
@@ -245,7 +245,7 @@ Test top-level await and errors explicitly. This completion policy is an
 integration recommendation grounded in the async request implementation and
 the existing protocol contract.
 [Await handling](https://github.com/jupyterlite/xeus/blob/v5.0.0/packages/xeus-core/src/worker.base.ts),
-[local invariants](../AGENTS.md).
+[local invariants](../../AGENTS.md).
 
 Worker startup/package-manager logs may arrive as `{_stream: ...}` without a
 Jupyter header. Handle these separately from correlated kernel output; do not
@@ -266,4 +266,4 @@ artifact reads, restart, and static same-origin asset loading before marking the
 new choice supported. An npm build alone does not establish CPython environment
 or Emscripten ABI compatibility.
 [Worker disposal](https://github.com/jupyterlite/xeus/blob/v5.0.0/packages/xeus-core/src/kernel.base.ts),
-[browser verification contract](browser-runtime.md).
+[browser verification contract](../browser-runtime.md).

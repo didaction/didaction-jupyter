@@ -76,7 +76,7 @@ To upgrade, solve `environment.yml` into a **new** emscripten-wasm32 prefix,
 export exact package URLs/checksums into `explicit.lock`, update the npm and uv
 locks, rebuild, and rerun both browser suites. Recheck the HTTP exclusion and
 disabled installer against upstream. Never silently re-solve at deployment time.
-See [source investigation](xeus-python-browser-investigation.md).
+See [source investigation](investigations/xeus-python-browser.md).
 
 ### Numba and Qrisp
 
@@ -90,7 +90,7 @@ Qrisp is **not installed or supported in this browser bundle**. Qrisp 0.9.7
 requires unavailable WASM `jaxlib==0.7.1`. The older 0.5.4 release avoids JAX,
 but its Qiskit dependency also failed the target-platform solve. Keep using
 the native kernel for the quantum-school notebooks. See the exact candidates,
-commands and primary-source evidence in [Qrisp compatibility](qrisp-wasm-compatibility.md).
+commands and primary-source evidence in [Qrisp compatibility](investigations/qrisp-wasm-compatibility.md).
 
 To test an environment without replacing the working assets, use
 `pnpm prepare:xeus --lock /absolute/candidate.lock --output /absolute/candidate/xeus`.
@@ -182,7 +182,7 @@ Human egui actions and WebMCP tools retain `CommandGateway` and WASM validation.
 `notebook-runtime` Rust module to prepare authoritative cell-change proposals and
 reduce kernel output; JavaScript does not implement those transitions separately.
 Storage commits precede acknowledgement. The frontend optimistic replica remains
-separate. See [migration status](rust-runtime-migration.md) for the native host work.
+separate. See [migration history](investigations/rust-runtime-migration.md) for the native host work.
 
 `WorkerKernel` owns JavaScript message correlation, worker lifetime and deadlines.
 The worker subclasses JupyterLite's `PyodideRemoteKernel`; JupyterLite/IPython
@@ -297,4 +297,4 @@ They now preserve the prior sync state, keeping run controls and tool reads usab
 
 Review `web/src/browser-transport.ts`, `browser-kernel.worker.ts`,
 `browser-kernel.ts`, `browser-store.ts`, and `browser-outputs.ts` first. See also
-the [design investigation](jupyterlite-browser-runtime-investigation.md).
+the [design investigation](investigations/jupyterlite-browser-runtime.md).

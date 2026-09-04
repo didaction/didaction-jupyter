@@ -48,7 +48,7 @@ behavior. See the [primary-source parity reference](jupyter-frontend-parity-refe
 
 ## Intentionally deferred
 
-Widgets/comms, debugger, terminal, file browser, multi-user Yjs collaboration,
+Widgets/comms, debugger, terminal, full artifact preview/delete/replace workflows, multi-user Yjs collaboration,
 JupyterLab extensions, arbitrary HTML/JavaScript, package installation, notebook
 trust/signing UI, slideshow tooling, and full JupyterLab workbench parity. Each
 requires a separate security and protocol design; none falls through to generic

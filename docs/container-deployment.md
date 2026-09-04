@@ -9,7 +9,7 @@ The gateway is now the native Rust host. The kernel runtime still uses the
 configured Jupyter Server image. For an explicit Python gateway rollback, use
 `docker compose -f docker-compose.yml -f deploy/compose.python.yml up --build -d`.
 Rust-specific verification and conservative retry behavior are documented in
-[the migration guide](rust-runtime-migration.md).
+[the migration history](investigations/rust-runtime-migration.md).
 
 ## Managed launch
 

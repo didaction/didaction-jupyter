@@ -18,8 +18,8 @@ channels WebSocket into internal snapshots.
 `notebook-runtime` owns validated authoritative proposals and atomic output
 reduction and workspace-wide collaboration policy, compiled natively and to WASM.
 The default `notebook-gateway` Rust host uses it; Python remains an explicit rollback.
-For native gateway migration or shared execution
-semantics, read `docs/rust-runtime-migration.md`. Keep the optimistic UI replica
+For native gateway migration history or shared execution semantics, read
+`docs/investigations/rust-runtime-migration.md`. Keep the optimistic UI replica
 separate from authoritative proposals and acknowledge only durable host commits.
 
 Human egui and WebMCP calls both enter `web/src/command-gateway.ts`. Never add a

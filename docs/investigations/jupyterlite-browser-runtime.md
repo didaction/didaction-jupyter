@@ -6,7 +6,7 @@ Research date: 2026-09-03. Scope: design evidence, not a migration decision or i
 
 **Recommendation:** keep the native gateway/Jupyter deployment and browser-only execution as two hosts of a shared, transport-independent notebook runtime. Use separate kernel and notebook-storage adapters. JupyterLite provides useful browser-kernel machinery, but it is not a replacement for this application's command validation, authoritative notebook state, collaboration authority, or egui output rendering.
 
-This is consistent with the repository's separation of bounded protocol, optimistic frontend state, egui rendering, TypeScript browser APIs, and gateway-owned Jupyter access. The current invariants also prohibit raw Jupyter data in egui, direct Rust/WASM I/O, widgets/comms, and a second mutation path. Those remain constraints unless deliberately revised. [Local architecture and invariants](../AGENTS.md).
+This is consistent with the repository's separation of bounded protocol, optimistic frontend state, egui rendering, TypeScript browser APIs, and gateway-owned Jupyter access. The current invariants also prohibit raw Jupyter data in egui, direct Rust/WASM I/O, widgets/comms, and a second mutation path. Those remain constraints unless deliberately revised. [Local architecture and invariants](../../AGENTS.md).
 
 ## What is established
 
@@ -61,7 +61,7 @@ The official Julia web-platform page characterizes browser/WASM work as early su
 
 JupyterLab renders custom MIME output through frontend renderer plugins. Interactive widgets have both kernel-side state and frontend models/views linked by comm messages. Installing or reusing a Python kernel does not provide those frontend components to egui. [JupyterLab renderer architecture](https://jupyterlab.readthedocs.io/en/stable/extension/extension_dev.html#mime-renderer-plugins), [widget architecture](https://ipywidgets.readthedocs.io/en/stable/examples/Widget%20Low%20Level.html).
 
-**Recommendation:** keep rendering as a separate capability. Preserve supported MIME data and replacement semantics in shared reducers; render only explicitly supported, bounded output in egui. A future DOM renderer bridge or widget manager would be a distinct feature and security decision, not an incidental consequence of browser execution. Widgets/comms are currently explicitly out of scope. [Local invariants](../AGENTS.md).
+**Recommendation:** keep rendering as a separate capability. Preserve supported MIME data and replacement semantics in shared reducers; render only explicitly supported, bounded output in egui. A future DOM renderer bridge or widget manager would be a distinct feature and security decision, not an incidental consequence of browser execution. Widgets/comms are currently explicitly out of scope. [Local invariants](../../AGENTS.md).
 
 ## Proposed shared boundary, not a committed implementation plan
 
