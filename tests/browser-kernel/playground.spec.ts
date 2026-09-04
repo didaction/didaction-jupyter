@@ -36,7 +36,7 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
         code: "setup_value",
         annotations: [],
         description: "Explore a fresh kernel.",
-        playground_code: `${Array.from({ length: 40 }, (_, index) => `# explanation line ${index + 1}`).join("\n")}\nsetup_value = 40 + 2\nprint(setup_value)`,
+        playground_code: `${Array.from({ length: 40 }, (_, index) => `# explanation line ${index + 1}`).join("\n")}\nclass PlaygroundPlot:\n    def _repr_svg_(self):\n        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420"><rect width="720" height="420" fill="#edf6ff"/><circle cx="360" cy="210" r="150" fill="#2878b5"/></svg>'\nPlaygroundPlot()`,
       },
     ],
   };
@@ -133,18 +133,39 @@ test("complete microscopes launch disposable isolated playgrounds with separate 
   await page.mouse.click(playgroundCanvas.x + 120, playgroundCanvas.y + 18);
   await expect
     .poll(async () => JSON.stringify((await read()).cells[0]!.outputs))
-    .toContain("42");
+    .toContain("image/svg+xml");
   await expect
-    .poll(
-      async () =>
-        (
-          (await microscopeCall(page, "get_active_context")).structuredContent
-            .context as {
-            playground: { scroll_fraction: number };
+    .poll(async () => {
+      const screenshot = await page.locator("#playground-canvas").screenshot();
+      return page.evaluate(async (source) => {
+        const image = new Image();
+        image.src = source;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        if (!context) return false;
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        ).data;
+        for (let offset = 0; offset < pixels.length; offset += 4) {
+          if (
+            Math.abs(pixels[offset]! - 40) < 12 &&
+            Math.abs(pixels[offset + 1]! - 120) < 12 &&
+            Math.abs(pixels[offset + 2]! - 181) < 12
+          ) {
+            return true;
           }
-        ).playground.scroll_fraction,
-    )
-    .toBeGreaterThan(0);
+        }
+        return false;
+      }, `data:image/png;base64,${screenshot.toString("base64")}`);
+    })
+    .toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
   // egui needs a frame to resize and another to measure wrapped panels.
   await page.waitForTimeout(300);

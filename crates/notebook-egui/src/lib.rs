@@ -128,6 +128,53 @@ fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     (width > 0 && height > 0 && width <= 16_384 && height <= 16_384).then_some((width, height))
 }
 
+fn svg_dimensions(bytes: &[u8]) -> Option<(f32, f32)> {
+    let source = std::str::from_utf8(bytes).ok()?;
+    let svg_start = source.find("<svg")?;
+    let svg_end = source[svg_start..].find('>')? + svg_start;
+    let tag = &source[svg_start..=svg_end];
+
+    let numeric_attribute = |name: &str| {
+        svg_attribute(tag, name).and_then(|value| {
+            let number = value.trim().trim_end_matches("px").parse::<f32>().ok()?;
+            number.is_finite().then_some(number)
+        })
+    };
+    let dimensions = numeric_attribute("width").zip(numeric_attribute("height"));
+    let dimensions = dimensions.or_else(|| {
+        let view_box = svg_attribute(tag, "viewBox")?;
+        let values = view_box
+            .split(|character: char| character.is_ascii_whitespace() || character == ',')
+            .filter(|value| !value.is_empty())
+            .map(str::parse::<f32>)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        (values.len() == 4).then_some((values[2], values[3]))
+    })?;
+    (dimensions.0 > 0.0
+        && dimensions.1 > 0.0
+        && dimensions.0 <= 16_384.0
+        && dimensions.1 <= 16_384.0)
+        .then_some(dimensions)
+}
+
+fn svg_attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let mut rest = tag;
+    while let Some(index) = rest.find(name) {
+        let before = rest[..index].chars().next_back();
+        let after_name = &rest[index + name.len()..];
+        if before.is_none_or(char::is_whitespace) {
+            let after_equals = after_name.trim_start().strip_prefix('=')?.trim_start();
+            let quote = after_equals.chars().next()?;
+            if matches!(quote, '\'' | '"') {
+                return after_equals[1..].split_once(quote).map(|(value, _)| value);
+            }
+        }
+        rest = &after_name[after_name.len().min(1)..];
+    }
+    None
+}
+
 fn cell_has_completed_execution(cell: &Cell) -> bool {
     cell.cell_type == CellType::Code && cell.execution_count.is_some()
 }
@@ -2661,14 +2708,15 @@ fn render_output(ui: &mut egui::Ui, output: &CellOutput) {
             .inner_margin(Margin::same(8))
             .show(ui, |ui| match decode_rich_image(mime, data) {
                 Ok(bytes) => {
-                    let dimensions = (mime == "image/png")
-                        .then(|| png_dimensions(&bytes))
-                        .flatten();
+                    let dimensions = match mime.as_str() {
+                        "image/png" => png_dimensions(&bytes)
+                            .map(|(width, height)| (width as f32, height as f32)),
+                        "image/svg+xml" => svg_dimensions(&bytes),
+                        _ => None,
+                    };
                     let mut image = egui::Image::from_bytes(rich_image_uri(mime, data), bytes)
                         .alt_text("Notebook graph output");
                     if let Some((width, height)) = dimensions {
-                        let width = width as f32;
-                        let height = height as f32;
                         let scale = (ui.available_width() / width).min(1.0);
                         image = image.fit_to_exact_size(egui::vec2(width * scale, height * scale));
                     }
@@ -4550,6 +4598,20 @@ mod tests {
         png.extend_from_slice(&397_u32.to_be_bytes());
 
         assert_eq!(png_dimensions(&png), Some((715, 397)));
+    }
+
+    #[test]
+    fn svg_view_box_reserves_plot_space_before_texture_loading() {
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 720 420"><circle r="10"/></svg>"#;
+
+        assert_eq!(svg_dimensions(svg), Some((720.0, 420.0)));
+    }
+
+    #[test]
+    fn svg_numeric_dimensions_take_precedence_over_view_box() {
+        let svg = br#"<svg height='240px' viewBox='0 0 720 420' width='320px'></svg>"#;
+
+        assert_eq!(svg_dimensions(svg), Some((320.0, 240.0)));
     }
 
     #[test]
