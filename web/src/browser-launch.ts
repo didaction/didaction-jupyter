@@ -126,8 +126,8 @@ export async function chooseBrowserWorkspace(
       });
     demo.onclick = () =>
       void run(async () => {
-        await rememberWorkspace({ id: "demo", name: "Demo workspace" });
-        await select("demo");
+        await rememberWorkspace({ id: "demo-v2", name: "Demo workspace" });
+        await select("demo-v2");
         return workspace.artifacts.demo();
       });
     resume.onclick = () =>

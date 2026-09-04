@@ -169,7 +169,7 @@ export class IndexedNotebookStore implements NotebookStore {
     (await this.db).close();
   }
   private open(id: string): Promise<IDBDatabase> {
-    if (!/^(legacy|demo|[a-f0-9-]{36})$/.test(id))
+    if (!/^(legacy|demo|demo-v2|[a-f0-9-]{36})$/.test(id))
       throw new Error("Invalid browser workspace identity");
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(
